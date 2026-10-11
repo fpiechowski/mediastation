@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "MediaStation spike probe (variant C)",
+  "version": "0.1.0",
+  "description": "Throwaway spike: injects the MediaStation probe into Netflix (and the local smoke page on 127.0.0.1:9350) and relays it to the harness on ws://127.0.0.1:9330.",
+  "permissions": [
+    "alarms",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://*.netflix.com/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.netflix.com/*",
+        "http://127.0.0.1:9350/*"
+      ],
+      "js": [
+        "main-bridge.js",
+        "probe.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "*://*.netflix.com/*",
+        "http://127.0.0.1:9350/*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

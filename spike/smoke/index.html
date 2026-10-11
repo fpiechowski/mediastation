@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>MediaStation smoke page</title>
+<style>
+  body { margin: 0; font: 16px system-ui, sans-serif; background: #141414; color: #eee; }
+  header { display: flex; gap: 16px; padding: 16px; align-items: center; }
+  a, button, input { color: inherit; }
+  a:focus, button:focus, input:focus { outline: 3px solid #e50914; }
+  .rowContainer { position: relative; margin: 24px 0; }
+  .rowContainer h2 { margin: 0 16px 8px; font-size: 18px; }
+  .slider { overflow: hidden; margin: 0 48px; }
+  .slider.clip { overflow: clip; } /* cannot be scrolled by focus(): forces the row-arrow fallback */
+  .sliderContent { display: flex; gap: 8px; transition: transform .3s; }
+  .tile { flex: 0 0 220px; height: 124px; background: #333; display: grid; place-items: center; text-decoration: none; }
+  .handle { position: absolute; top: 30px; bottom: 0; width: 40px; background: #0008; border: 0; font-size: 24px; }
+  .handlePrev { left: 0; }
+  .handleNext { right: 0; }
+  #results { margin: 0 16px; }
+</style>
+</head>
+<body>
+<header>
+  <a href="#home">Strona główna</a>
+  <a href="#series">Seriale</a>
+  <input id="search" type="search" placeholder="Szukaj" aria-label="Szukaj">
+</header>
+<video id="v" width="320" height="180" muted playsinline></video>
+<div id="results"></div>
+<main id="rows"></main>
+<script>
+  // Rows like Netflix: transform paging with .handleNext/.handlePrev; row 2 uses overflow: clip.
+  const rows = document.getElementById('rows');
+  for (let r = 1; r <= 6; r++) {
+    const row = document.createElement('div');
+    row.className = 'rowContainer';
+    row.innerHTML = `<h2>Wiersz ${r}</h2><div class="slider${r === 2 ? ' clip' : ''}"><div class="sliderContent"></div></div>` +
+      '<button class="handle handlePrev" aria-label="Poprzednie">‹</button><button class="handle handleNext" aria-label="Następne">›</button>';
+    const content = row.querySelector('.sliderContent');
+    for (let i = 1; i <= 14; i++) {
+      const a = document.createElement('a');
+      a.className = 'tile';
+      a.href = `#tile-${r}-${i}`;
+      a.textContent = `${r}.${i}`;
+      content.appendChild(a);
+    }
+    let page = 0;
+    const move = (d) => {
+      page = Math.max(0, page + d);
+      content.style.transform = `translateX(${-page * row.querySelector('.slider').clientWidth}px)`;
+    };
+    row.querySelector('.handleNext').onclick = () => move(1);
+    row.querySelector('.handlePrev').onclick = () => move(-1);
+    rows.appendChild(row);
+  }
+
+  // Search updates the URL like Netflix's /search?q=
+  document.getElementById('search').addEventListener('input', (e) => {
+    const q = e.target.value;
+    history.replaceState(null, '', q ? `?q=${encodeURIComponent(q)}` : location.pathname);
+    document.getElementById('results').textContent = q ? `Wyniki dla: ${q}` : '';
+  });
+
+  // DRM-free <video>: a canvas stream, enough for play/pause/video-sample events.
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 360;
+  const ctx = canvas.getContext('2d');
+  setInterval(() => {
+    ctx.fillStyle = `hsl(${(Date.now() / 20) % 360} 60% 40%)`;
+    ctx.fillRect(0, 0, 640, 360);
+    ctx.fillStyle = '#fff';
+    ctx.font = '48px sans-serif';
+    ctx.fillText(new Date().toLocaleTimeString(), 40, 200);
+  }, 100);
+  const v = document.getElementById('v');
+  v.srcObject = canvas.captureStream(25);
+  v.play().catch(() => {});
+
+  // ?audio=1: near-silent tone so the browser opens a Windows audio session (S9 smoke). Autoplay policy
+  // needs a user activation; a trusted CDP key (cmd "key Space") counts.
+  if (new URLSearchParams(location.search).has('audio')) {
+    const start = () => {
+      const ac = new AudioContext();
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      gain.gain.value = 0.001;
+      osc.connect(gain).connect(ac.destination);
+      osc.start();
+      document.title = 'audio on';
+    };
+    addEventListener('keydown', start, { once: true });
+  }
+</script>
+</body>
+</html>

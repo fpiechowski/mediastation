@@ -1,0 +1,16 @@
+{
+  "name": "mediastation-spike",
+  "private": true,
+  "type": "module",
+  "description": "Throwaway harness for the browser-control spike S1–S11 (Netflix)",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "ms": "node harness/ms.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.55.0",
+    "ws": "^8.18.0"
+  }
+}

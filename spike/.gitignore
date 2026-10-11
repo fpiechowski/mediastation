@@ -1,0 +1,4 @@
+node_modules/
+# browser profiles hold Netflix sessions and cookies
+profiles/
+logs/
