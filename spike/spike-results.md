@@ -14,6 +14,8 @@ Legenda werdyktu: ✅ zaliczony · ❌ niezaliczony · ⚠️ częściowo lub ni
 
 **Konwencja komend.** Testy prowadzi agent przez `serve` (w tle) i `cmd` (README, „Dla agenta”). Zapis `cmd "key Space"` oznacza `node harness/ms.mjs cmd "key Space"`. Przed każdym krokiem agent wstawia znacznik `cmd "mark S6 player Space"`, żeby log JSONL dało się pociąć na kroki. Krok **fizyczny** wykonuje człowiek pilotem lub klawiaturą na prośbę agenta, a agent odczytuje wynik z logu (`cmd "wait key 30"` albo `cmd "events 10"`).
 
+**Dowody.** Zrzut strony: `cmd "screenshot S1 edge overlay"`. Zrzut całego ekranu, gdy na wierzchu nie ma strony (S10, S11): `win\screenshot.ps1 -Name S10-edge-home`. Wideo z DRM na zrzutach zwykle wychodzi czarne, ale nakładka statystyk jest czytelna. Zrzuty i logi trafiają do `logs/` (w `.gitignore`, bo mogą pokazywać profil i konto). W tabelach podawaj ich ścieżki. Jeśli dowód ma trafić do repo, skopiuj wybrany plik do `spike/evidence/` i sprawdź, czy nie zawiera danych konta.
+
 ## Środowisko
 
 | Pole | Wartość |
@@ -454,6 +456,7 @@ Bez Netflixa, na stronie `smoke/index.html`, Windows 11 build 26300 (26H2), Edge
 | S9 `audio-mute.ps1` | ✅ po poprawce: na build 26300 sesje nie udostępniają `ISimpleAudioVolume` (`E_NOINTERFACE`), więc działa fallback `via=channel` (`IChannelAudioVolume`). Sesję audio Edge ma proces potomny, a nie korzeń, więc `-NoTree` niczego nie wycisza, a drzewo tak. `monitor`, `-Watch`, `-DurationSec` i plik stop działają |
 | S10 `home-logger.ps1` | ✅ rejestracja LL, Raw Input (klawiatura, consumer, system) i shell hook; Raw Input i `SetForegroundWindow` (logger wrócił na wierzch); `-DurationSec`. ⚠️ Klawisze wstrzyknięte z powłoki agenta docierają do Raw Input, ale nie do hooka LL; przy wstrzyknięciu z procesu loggera LL działa (`flags=0x10`). Fizyczny pilot nie jest wejściem wstrzykniętym, ale na UM760 sprawdź, czy linie `LL` się pojawiają |
 | `window.ps1` | ✅ list, min, restore, hide, show |
+| `screenshot` (cmd) i `screenshot.ps1` | ✅ PNG w trybach raw, pw i ext (`captureVisibleTab`, rozszerzenie 0.1.1) oraz zrzut całego ekranu |
 | `moonlight.ps1` | ⚠️ tylko ścieżki błędów (brak Moonlighta na tej maszynie): czytelny komunikat i kod 1 |
 
 # Otwarte pytania po spike'u

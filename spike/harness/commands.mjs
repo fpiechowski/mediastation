@@ -1,4 +1,7 @@
 // Command set shared by `serve` (and through it by `cmd` and `repl`). Every command returns plain JSON.
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (msg) => {
   throw new Error(msg);
@@ -19,6 +22,8 @@ export const HELP = `Komendy (serve/cmd/repl):
   pause video|api, play video|api
   win minimized|normal|maximized|fullscreen
   front                         przeglądarka na pierwszy plan (CDP Page.bringToFront, w C chrome.windows.update)
+  screenshot [NAZWA]            PNG widoku strony do logs/ (CDP Page.captureScreenshot, w C captureVisibleTab);
+                                obraz wideo z DRM zwykle wychodzi czarny, nakładka statystyk jest widoczna
   s8 MINUTY [video|api] [minimized|none]   S8 w tle procesu serve; wynik trafia do logu JSONL
   drm                           requestMediaKeySystemAccess (S4)
   nav URL | eval JS (nie w C) | mark TEKST
@@ -26,7 +31,7 @@ export const HELP = `Komendy (serve/cmd/repl):
   wait TYP [TEKST] [SEKUNDY]    czeka na zdarzenie probe danego typu (opcjonalnie zawierające TEKST)
   quit                          zatrzymuje serve (przeglądarka zostaje, poza trybem pwlaunch)`;
 
-// hub: { info(msg), record(obj), recent(n), waitFor(pred, ms) }
+// hub: { info(msg), record(obj), recent(n), waitFor(pred, ms), logsDir }
 export function createCommands(d, hub) {
   const state = () => d.probe('state');
   const brief = (s) =>
@@ -99,6 +104,18 @@ export function createCommands(d, hub) {
       if (!['minimized', 'normal', 'maximized', 'fullscreen'].includes(windowState)) fail('win minimized|normal|maximized|fullscreen');
       await d.setWindow(windowState);
       return windowState;
+    },
+    screenshot: async (...words) => {
+      const name = text(words) || 'screenshot';
+      const p = (n) => String(n).padStart(2, '0');
+      const t = new Date();
+      const stamp = `${t.getFullYear()}${p(t.getMonth() + 1)}${p(t.getDate())}-${p(t.getHours())}${p(t.getMinutes())}${p(t.getSeconds())}`;
+      const file = join(hub.logsDir, `${stamp}-${name.replace(/[^\w.-]+/g, '_')}.png`);
+      const png = Buffer.from(await d.screenshot(), 'base64');
+      mkdirSync(hub.logsDir, { recursive: true });
+      writeFileSync(file, png);
+      hub.record({ kind: 'screenshot', file, bytes: png.length });
+      return { file, bytes: png.length };
     },
     front: async () => {
       await d.bringToFront();

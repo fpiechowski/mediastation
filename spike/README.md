@@ -16,6 +16,7 @@ Jednorazowy harness do spike'u z raportu [research-browser-control-for-streaming
 | `win/home-logger.ps1` | logger pilota: LL hook + Raw Input (klawiatura, Consumer Control) + `WM_APPCOMMAND`, próba `SetForegroundWindow` | S10 |
 | `win/moonlight.ps1` | `stream`/`list`/`quit` z CLI, ukrycie lub minimalizacja na N minut | S11 |
 | `win/window.ps1` | ukrycie, pokazanie, minimalizacja okien dowolnego procesu | S8 (wariant hide), S11 |
+| `win/screenshot.ps1` | zrzut całego ekranu do `logs/` (dowód, gdy na wierzchu nie ma strony) | S10, S11, dowody |
 
 ## Wymagania na UM760
 
@@ -79,6 +80,7 @@ Komendy (te same w `cmd` i `repl`):
 | `pause video\|api`, `play video\|api` | `<video>` albo wewnętrzne API playera Netfliksa |
 | `win minimized\|normal\|maximized\|fullscreen`, `front` | stan okna; `front` wysuwa przeglądarkę na pierwszy plan |
 | `s8 30 api minimized` | S8 w tle procesu serve; koniec w logu jako `kind=s8, phase=end` |
+| `screenshot [nazwa]` | PNG widoku strony do `logs/<data>-<nazwa>.png`; wynik zawiera ścieżkę `file`, a log zdarzenie `kind=screenshot`. Raw i pw używają CDP `Page.captureScreenshot`, C używa `chrome.tabs.captureVisibleTab` (karta musi być widoczna). Obraz wideo z DRM zwykle wychodzi czarny, ale nakładka statystyk i interfejs Netfliksa są widoczne |
 | `drm`, `nav URL`, `eval JS` (nie w C), `mark tekst`, `events N`, `wait TYP [TEKST] [S]`, `quit` | |
 
 **Dla człowieka:** `node harness/ms.mjs repl` to interaktywny klient tego samego `serve`, przez który przechodzi ten sam mechanizm. `exit` wychodzi z REPL, `quit` zatrzymuje serve. Konsola `serve` (bez `--quiet`) pokazuje zdarzenia na żywo.
@@ -100,6 +102,7 @@ New-Item -ItemType File logs\home-logger.stop      # wcześniejsze zatrzymanie
 | `audio-mute.ps1` | `-Action monitor`, `mute`/`unmute -Watch` | `-IntervalSec`; `list`, `mute` i `unmute` bez `-Watch` kończą się od razu |
 | `moonlight.ps1` | `-Action hide-test` | niczego nie pyta; po przywróceniu loguje „SPRAWDŹ”, a wynik ocenia człowiek |
 | `window.ps1` | — | krótkie akcje |
+| `screenshot.ps1` | — | `-Name S10-edge-home -DelaySec 3`; wypisuje `FILE=`. Zrzut całego ekranu; treści DRM i HDR mogą wyjść czarne lub wyblakłe |
 
 - **audio-mute:** korzeniem jest proces, którego linia poleceń zawiera ścieżkę profilu i nie ma `--type=`. Wyciszane są sesje wszystkich potomków. Z `-NoTree` tylko korzeń, jako kontrola negatywna (sesję audio ma proces potomny). Metoda `via=mute` to `ISimpleAudioVolume::SetMute`. `via=channel` to fallback `IChannelAudioVolume` (wszystkie kanały 0 lub 1,0), użyty, gdy sesja nie udostępnia `ISimpleAudioVolume`.
 - **home-logger:** każda linia ma źródło (`LL`, `RAW-KBD`, `RAW-HID`, `WM_APPCOMMAND`, `HSHELL_APPCOMMAND`) i proces na pierwszym planie (`fg=nazwa:PID "tytuł"`). Przy pierwszym zdarzeniu z urządzenia log zawiera jego nazwę, VID/PID oraz usage page i usage. AC Home to zwykle consumer usage 0x0223, często bez kodu VK.
@@ -129,7 +132,7 @@ node harness/ms.mjs cmd state
 
 - Service worker łączy się sam: przy starcie, przy każdym zdarzeniu z karty oraz co 20–30 s. Zdarzenia sprzed połączenia są kolejkowane. Linia `rozszerzenie połączone` w logu zawiera `swStats` (odebrane, zakolejkowane, wysłane).
 - `driver=extension`, `trusted=false`: `key` działa jak `jskey`. Kombinacje (`Ctrl+…`) i `eval` zwracają błąd. `win` i `front` używają `chrome.windows.update`, a `nav` używa `chrome.tabs.update`.
-- Rozszerzenie działa tylko na `*.netflix.com` i stronie smoke (`127.0.0.1:9350`). Przed S12 trzeba dopisać domeny w `manifest.json`.
+- Content scripty działają tylko na `*.netflix.com` i stronie smoke (`127.0.0.1:9350`); przed S12 trzeba dopisać domeny w `content_scripts.matches`. `host_permissions` to `<all_urls>`, bo wymaga tego `captureVisibleTab` (komenda `screenshot`). Przy instalacji przeglądarka pokaże ostrzeżenie o dostępie do wszystkich stron.
 
 ## Smoke test harnessu (bez Netflixa)
 

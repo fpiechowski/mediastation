@@ -74,6 +74,8 @@ async function handle(cmd) {
     } else if (cmd.op === 'window') {
       await chrome.windows.update(tab.windowId, { state: cmd.state });
       value = cmd.state;
+    } else if (cmd.op === 'screenshot') {
+      value = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
     } else if (cmd.op === 'front') {
       await chrome.windows.update(tab.windowId, { focused: true, state: 'normal' });
       await chrome.tabs.update(tab.id, { active: true });

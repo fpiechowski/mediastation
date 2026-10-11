@@ -131,6 +131,7 @@ function createHub(file, echo) {
   };
   return {
     file,
+    logsDir: LOGS,
     record,
     info: (msg) => record({ kind: 'info', msg }),
     event: (payload) => {

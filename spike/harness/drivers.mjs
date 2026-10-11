@@ -1,6 +1,7 @@
 // Transports for the spike: raw CDP over WebSocket (no Runtime.enable), Playwright (connectOverCDP / launch)
 // and the variant C extension (WebSocket server the extension's service worker connects to).
-// Every driver exposes the same shape: { name, trusted, probe, evaluate, key, insertText, navigate, bringToFront, setWindow, close }.
+// Every driver exposes the same shape: { name, trusted, probe, evaluate, key, insertText, navigate, bringToFront, screenshot, setWindow, close }.
+// screenshot() returns a base64 PNG of the page viewport.
 import { readFileSync } from 'node:fs';
 import WebSocket, { WebSocketServer } from 'ws';
 
@@ -158,6 +159,7 @@ export async function rawDriver(port, log) {
     insertText: (text) => send('Input.insertText', { text }),
     navigate: (url) => send('Page.navigate', { url }),
     bringToFront: () => send('Page.bringToFront'),
+    screenshot: async () => (await send('Page.captureScreenshot', { format: 'png' })).data,
     setWindow: async (windowState) => {
       // Browser domain lives on the browser target, so open a short second connection.
       const browser = await Cdp.open((await getJson(port, '/json/version')).webSocketDebuggerUrl);
@@ -191,6 +193,7 @@ async function wrapPlaywrightPage(name, context, page, log, close) {
     insertText: (text) => send('Input.insertText', { text }),
     navigate: (url) => page.goto(url, { waitUntil: 'commit' }),
     bringToFront: () => page.bringToFront(),
+    screenshot: async () => (await send('Page.captureScreenshot', { format: 'png' })).data,
     setWindow: async (windowState) => {
       const { windowId } = await send('Browser.getWindowForTarget');
       await send('Browser.setWindowBounds', { windowId, bounds: { windowState } });
@@ -288,6 +291,7 @@ export async function extServer(port, log) {
     insertText: (text) => probe('insertText', text, 'exec'),
     navigate: (url) => call({ op: 'navigate', url }),
     bringToFront: () => call({ op: 'front' }),
+    screenshot: async () => (await call({ op: 'screenshot' })).replace(/^data:image\/png;base64,/, ''),
     setWindow: (state) => call({ op: 'window', state }),
     close: async () => wss.close(),
   };
