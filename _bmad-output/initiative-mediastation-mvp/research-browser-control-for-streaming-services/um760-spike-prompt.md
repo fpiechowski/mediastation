@@ -15,6 +15,8 @@ Przeczytaj najpierw:
   _bmad-output/initiative-mediastation-mvp/research-browser-control-for-streaming-services/research-browser-control-for-streaming-services.md
   (dlaczego te testy i co rozstrzygają). spike-results.md jest nowszy i ma pierwszeństwo, np. S6
   został przebudowany, a C1–C3 dodane.
+Jeśli ten prompt i spike-results.md lub README są sprzeczne, pierwszeństwo ma ten prompt (np. przy
+bramce zatrzymujesz się i pytasz, zamiast od razu przechodzić na C).
 
 Zasady:
 1. Środowisko: najpierw sprawdź według README wersje Node, Chrome, Edge i Moonlight, sprawdź, czy dongle
@@ -26,8 +28,10 @@ Zasady:
    - logowanie do Netflixa w każdym dedykowanym profilu (hasło wpisuję sam w oknie przeglądarki, nie
      podaję go tobie),
    - ręczne „Load unpacked” rozszerzenia w profilach edge-ext i chrome-ext, kiedy przyjdzie pora na C,
-   - fizyczne naciśnięcia na pilocie („naciśnij teraz Home”), zawsze z informacją, co jest teraz na wierzchu,
-   - fizyczne Ctrl+Alt+Shift+D (nakładka statystyk) w wariancie C, gdzie nie masz zaufanego wejścia,
+   - fizyczne naciśnięcia na pilocie lub klawiaturze („naciśnij teraz Home”), zawsze z informacją, co jest
+     teraz na wierzchu; w tym Ctrl+Alt+Shift+D (nakładka statystyk) w S1, gdzie celowo nie ma
+     podłączonego harnessu, i w C1, gdzie nie masz zaufanego wejścia, oraz klawisze bazowe w S6 A1
+     (Space, strzałki, f, m, Escape, Enter),
    - ocenę wzrokową lub słuchową, gdy pomiar nie wystarcza: jedno konkretne pytanie z odpowiedzią tak/nie.
    Używaj mojego profilu Netflixa, nie profilu żony.
 3. Kolejność:
