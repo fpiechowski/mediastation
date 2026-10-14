@@ -137,7 +137,12 @@ export async function rawDriver(port, log) {
   });
 
   // Deliberately no Runtime.enable: it is the detectable CDP leak [37]. bindingCalled arrives without it.
+  // But without Runtime.enable the binding is not carried over to new documents (UM760, Edge 155), so it is
+  // re-added on every main-frame navigation; probe.js queues events until the binding shows up.
   await cdp.send('Runtime.addBinding', { name: BINDING });
+  cdp.on('Page.frameNavigated', (p) => {
+    if (!p.frame.parentId) cdp.send('Runtime.addBinding', { name: BINDING }).catch((e) => log.info(`addBinding po nawigacji: ${e.message}`));
+  });
   await cdp.send('Page.enable');
   await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: PROBE });
   log.info('CDP: Runtime.addBinding, Page.enable, Page.addScriptToEvaluateOnNewDocument; bez Runtime.enable');

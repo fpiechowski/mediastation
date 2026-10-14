@@ -17,6 +17,7 @@ Jednorazowy harness do spike'u z raportu [research-browser-control-for-streaming
 | `win/moonlight.ps1` | `stream`/`list`/`quit` z CLI, ukrycie lub minimalizacja na N minut | S11 |
 | `win/window.ps1` | ukrycie, pokazanie, minimalizacja okien dowolnego procesu | S8 (wariant hide), S11 |
 | `win/screenshot.ps1` | zrzut całego ekranu do `logs/` (dowód, gdy na wierzchu nie ma strony) | S10, S11, dowody |
+| `helpers/` | skrypty pomocnicze dopisane na UM760: przebiegi bez udziału człowieka w oknie rozmowy (`s10-run.ps1`, `s9-run.ps1`), sekwencje komend ze stanem przed i po (`s6-seq.mjs`, `focus-seq.mjs`, `c-seq.mjs`, `s7.mjs`, `c3.mjs`), pomiary (`player-poll.mjs`, `modewatch.ps1`, `endpoint.ps1`, `binding-test.mjs`), `keep-awake.ps1` (blokada Modern Standby na czas S8) | S6–S11 |
 
 ## Wymagania na UM760
 

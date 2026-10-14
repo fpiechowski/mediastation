@@ -72,6 +72,7 @@ public class MsHomeLogger : Form
         deadline = durationSec > 0 ? DateTime.Now.AddSeconds(durationSec) : DateTime.MaxValue;
         this.stopFile = stopFile;
         this.homeVk = homeVk;
+        homeVkStatic = homeVk;
         this.homeAppCommand = homeAppCommand;
         this.homeHidUsage = homeHidUsage;
         this.swallow = swallow;
@@ -149,7 +150,7 @@ public class MsHomeLogger : Form
             int message = wParam.ToInt32();
             bool down = message == 0x0100 || message == 0x0104; // WM_KEYDOWN, WM_SYSKEYDOWN
             bool isHome = k.VkCode == homeVk;
-            Log(string.Format("LL      {0,-4} vk=0x{1:X2} scan=0x{2:X2} flags=0x{3:X2} extra=0x{4:X} fg={5}{6}",
+            if (RemoteLikeVk((int)k.VkCode)) Log(string.Format("LL      {0,-4} vk=0x{1:X2} scan=0x{2:X2} flags=0x{3:X2} extra=0x{4:X} fg={5}{6}",
                 down ? "down" : "up", k.VkCode, k.ScanCode, k.Flags, k.Extra.ToInt64(), Describe(GetForegroundWindow()),
                 isHome ? "  <== HOME" : ""));
             if (isHome)
@@ -197,7 +198,7 @@ public class MsHomeLogger : Form
                 RAWKEYBOARD k = (RAWKEYBOARD)Marshal.PtrToStructure(body, typeof(RAWKEYBOARD));
                 bool down = (k.Flags & 1) == 0; // RI_KEY_BREAK
                 bool isHome = k.VKey == homeVk;
-                Log(string.Format("RAW-KBD {0,-4} vk=0x{1:X2} make=0x{2:X2} flags=0x{3:X} msg=0x{4:X} {5} fg={6}{7}",
+                if (RemoteLikeVk(k.VKey)) Log(string.Format("RAW-KBD {0,-4} vk=0x{1:X2} make=0x{2:X2} flags=0x{3:X} msg=0x{4:X} {5} fg={6}{7}",
                     down ? "down" : "up", k.VKey, k.MakeCode, k.Flags, k.Message, device, Describe(GetForegroundWindow()),
                     isHome ? "  <== HOME" : ""));
                 if (isHome && down) OnHome("raw-keyboard");
@@ -221,6 +222,16 @@ public class MsHomeLogger : Form
             Marshal.FreeHGlobal(buffer);
         }
     }
+
+    // Privacy (UM760): the hooks see every keyboard, including the person typing elsewhere. Only keys a remote can
+    // send are logged; letters, digits and space never reach the log file.
+    static bool RemoteLikeVk(int vk)
+    {
+        return vk == 0x08 || vk == 0x0D || vk == 0x1B || (vk >= 0x21 && vk <= 0x28) || vk == 0x5D
+            || (vk >= 0xA6 && vk <= 0xB7) || vk == homeVkStatic;
+    }
+
+    static int homeVkStatic = 0xAC;
 
     string DeviceTag(IntPtr device)
     {

@@ -44,17 +44,28 @@ function Invoke-MoonlightCli([string[]]$CliArgs) {
     $p
 }
 
+# Moonlight is a GUI-subsystem app: list/quit print to stdout only when it is redirected (UM760, Moonlight 6.2.0).
+function Invoke-MoonlightCliWait([string[]]$CliArgs) {
+    if (-not (Test-Path $Exe)) { throw "Nie znaleziono $Exe; podaj -Exe" }
+    $out = [IO.Path]::GetTempFileName()
+    $p = Start-Process -FilePath $Exe -ArgumentList $CliArgs -PassThru -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError "$out.err"
+    Write-MsLog "pid=$($p.Id): `"$Exe`" $($CliArgs -join ' ')"
+    # `quit` while a stream is open does its job (host answers status 200) but the process never exits (UM760).
+    if (-not $p.WaitForExit(30000)) { Write-MsLog 'proces nie zakończył się w 30 s; zamykam go'; Stop-Process -Id $p.Id -Force }
+    Get-Content -LiteralPath $out, "$out.err" -Encoding UTF8 | Where-Object { $_ } | ForEach-Object { Write-MsLog "  $_" }
+    Remove-Item -LiteralPath $out, "$out.err" -ErrorAction SilentlyContinue
+    $p
+}
+
 switch ($Action) {
     'list' {
         if (-not $HostName) { throw 'Podaj -HostName' }
-        $p = Invoke-MoonlightCli @('list', $HostName)
-        $p.WaitForExit()
+        $p = Invoke-MoonlightCliWait @('list', $HostName)
         Write-MsLog "list exit=$($p.ExitCode)"
     }
     'quit' {
         if (-not $HostName) { throw 'Podaj -HostName' }
-        $p = Invoke-MoonlightCli @('quit', $HostName)
-        $p.WaitForExit()
+        $p = Invoke-MoonlightCliWait @('quit', $HostName)
         Write-MsLog "quit exit=$($p.ExitCode)"
     }
     'start' {

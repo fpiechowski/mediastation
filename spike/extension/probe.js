@@ -5,12 +5,22 @@
 (() => {
   if (window.top !== window || window.__msProbe) return;
 
-  const send = (type, data = {}) => {
-    try {
-      window.__msBridge(JSON.stringify({ type, url: location.href, ...data }));
-    } catch (e) {
-      // bridge not installed yet or detached: drop the event
+  // Raw CDP re-adds the binding only after the new document has started, so early events wait in a queue.
+  const queue = [];
+  const flush = () => {
+    while (queue.length && typeof window.__msBridge === 'function') {
+      try {
+        window.__msBridge(queue[0]);
+        queue.shift();
+      } catch (e) {
+        return; // bridge detached: keep the event
+      }
     }
+  };
+  const send = (type, data = {}) => {
+    queue.push(JSON.stringify({ type, url: location.href, ...data }));
+    if (queue.length > 200) queue.shift();
+    flush();
   };
 
   const describe = (el) => {
@@ -33,7 +43,7 @@
       (el.tagName === 'INPUT' && !/^(button|checkbox|radio|submit|range|file|image|reset|color)$/i.test(el.type)));
 
   // Candidate selectors; the logs show which one matched so the focus map can be pinned down later.
-  const PROFILE_SEL = ['.profiles-gate-container', '[data-uia="profile-choices-page"]', '.list-profiles', '[data-uia="profile-link"]'];
+  const PROFILE_SEL = ['[data-uia="profile-gate-screen"]', '[data-uia="profile-selector"]', '.profiles-gate-container', '[data-uia="profile-choices-page"]', '.list-profiles', '[data-uia="profile-link"]'];
   const MODAL_SEL = ['.previewModal--detail', '[data-uia="previewModal--container"]', '.detail-modal'];
   const MODAL_CLOSE_SEL = ['[data-uia="previewModal-closebtn"]', '.previewModal-close', 'button[aria-label="close"]', '[data-uia*="close"]'];
   const ERROR_SEL = '.nfp-fatal-error-view, .error-page, [data-uia*="error"], [class*="ErrorView"]';
@@ -112,6 +122,7 @@
   let lastError = null;
   let lastSample = 0;
   setInterval(() => {
+    flush();
     const r = route();
     const routeKey = location.href + '|' + r.name + '|' + r.modalSel;
     if (routeKey !== lastRoute) {
@@ -131,12 +142,15 @@
   // S6 part B: what variant C would use instead of synthetic keys. Programmatic focus is a crude
   // geometric spatial navigation; when nothing is on screen in the requested direction it falls back to
   // DOM order inside the row, then to clicking the row's paging arrow. The result names the fallback used.
+  const MODAL_ROOT_SEL = '[role="dialog"].previewModal--container, [data-uia^="modal-motion-container"]';
   const FOCUSABLE = 'a[href], button, input, textarea, select, [tabindex]:not([tabindex="-1"]), [role="button"], [role="link"]';
-  const ROW_SEL = ['.lolomoRow', '.rowContainer', '.slider', '[data-list-context]', '[role="list"]'];
-  const ROW_NEXT_SEL = ['.handle.handleNext', '.handleNext', 'button[aria-label*="next" i]', '[aria-label*="następ" i]'];
-  const ROW_PREV_SEL = ['.handle.handlePrev', '.handlePrev', 'button[aria-label*="previous" i]', '[aria-label*="poprzed" i]'];
+  const ROW_SEL = ['[data-uia^="carousel-row-section"]', '.lolomoRow', '.rowContainer', '.slider', '[data-list-context]', '[role="list"]'];
+  const ROW_NEXT_SEL = ['[data-uia="carousel-hawkins-right-button"]', '.handle.handleNext', '.handleNext', 'button[aria-label*="next" i]', '[aria-label*="następ" i]'];
+  const ROW_PREV_SEL = ['[data-uia="carousel-hawkins-left-button"]', '.handle.handlePrev', '.handlePrev', 'button[aria-label*="previous" i]', '[aria-label*="poprzed" i]'];
   const ROW_ARROWS = ROW_NEXT_SEL.concat(ROW_PREV_SEL).join(',');
   const rendered = (el) => {
+    // visibility:hidden and inert elements have a box but cannot take focus (Netflix notifications menu, UM760)
+    if ((el.checkVisibility && !el.checkVisibility({ visibilityProperty: true })) || el.closest('[inert]')) return null;
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0 ? r : null;
   };
@@ -185,15 +199,18 @@
   };
 
   const focusNext = async (dir) => {
-    const cur = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    // Netflix does not make the page behind the detail modal inert, so focus stays inside an open modal (UM760).
+    const scope = document.querySelector(MODAL_ROOT_SEL) || document;
+    const active = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    const cur = active && scope.contains(active) ? active : null; // focus left behind the modal: start from its top-left
     const from = cur && cur.getBoundingClientRect();
     const vertical = dir === 'up' || dir === 'down';
     const r = cur && !vertical ? rowOf(cur) : null;
-    const best = nearest(dir, from, cur, onScreen, r ? r.row : document);
+    const best = nearest(dir, from, cur, onScreen, r ? r.row : scope);
     if (best) return focusEl(best, 'none', r ? { row: r.sel } : {});
     if (!cur) return { el: null, fallback: 'none', reason: 'nothing focusable on screen' };
     if (vertical) {
-      const off = nearest(dir, from, cur, rendered);
+      const off = nearest(dir, from, cur, rendered, scope);
       return off ? focusEl(off, 'offscreen-geometric') : { el: null, fallback: 'none-found' };
     }
 
