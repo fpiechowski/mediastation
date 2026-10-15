@@ -1,5 +1,4 @@
-<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sterowanie przeglądarką — briefing</title><style>
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sterowanie przeglądarką — briefing</title><style>
 :root{--bg:#fafaf9;--fg:#1c1917;--mut:#57534e;--acc:#2563eb;--card:#fff;--bd:#e7e5e4;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--mid:#a16207;--low:#9f1239}
 @media (prefers-color-scheme:dark){:root{--bg:#1c1917;--fg:#f5f5f4;--mut:#a8a29e;--acc:#60a5fa;--card:#292524;--bd:#44403c;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--mid:#facc15;--low:#fb7185}}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -12,35 +11,133 @@ blockquote{border-left:4px solid var(--warn);margin:0;padding:4px 12px;backgroun
 .cite{color:var(--acc);text-decoration:none;font-size:.8em;vertical-align:super}.b{display:inline-block;border-radius:4px;padding:0 6px;font-size:.78em;font-weight:600;border:1px solid currentColor}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.mid{color:var(--mid)}.low{color:var(--low)}
 details{margin-top:2em}summary{cursor:pointer;font-weight:600;font-size:1.2rem}tr:target{background:color-mix(in srgb,var(--acc) 20%,transparent)}
-</style></head><body><header><h1>Sterowanie serwisami streamingowymi w przeglądarce</h1>
-<div class="meta">Technical / select · 2026-10-11 · preset standard · walidacja normal · twierdzenia: 9 zweryfikowane, <span class="b warn">3 niezweryfikowane</span></div>
-<p><strong>Decyzja:</strong> Wybór mechanizmu sterowania przeglądarką dla Netflixa i kolejnych serwisów (A Playwright, B CDP, C rozszerzenie, D inne)</p></header>
-<nav><a href="#s0">Executive summary</a><a href="#s1">1. DRM i jakość obrazu</a><a href="#s2">2. Wykrywanie automatyzacji</a><a href="#s3">3. Mechanika sterowania a wersje Chrome i Edge</a><a href="#s4">4. Nawigacja D-padem i Back</a><a href="#s5">5. Pauza, wykrywanie odtwarzania i klawiatura ekranowa</a><a href="#s6">6. Ryzyka Windows i Moonlight</a><a href="#s7">Macierz kandydatów</a><a href="#s8">Wnioski międzywymiarowe</a><a href="#s9">Rekomendacja</a><a href="#s10">Spike na Netfliksie: konkretne testy</a><a href="#s11">Otwarte pytania</a><a href="#sources">Źródła</a><a href="#stale">Staleness</a></nav><main><p><strong>Decyzja, której służy research:</strong> jak MediaStation ma sterować serwisami streamingowymi w przeglądarce (nawigacja D-padem, Back, pauza, wykrywanie odtwarzania, klawiatura ekranowa). Netflix jest pierwszym serwisem i wzorcem dla kolejnych.</p>
+
+</style></head><body><header><h1>Technical research: sterowanie serwisami streamingowymi w przeglądarce</h1><div class="meta">Technical / select · utworzono 2026-10-11 · zaktualizowano 2026-10-15 (deepen: spike UM760) · preset standard · walidacja normal · twierdzenia: 15 zweryfikowane, <span class="b warn">3 niezweryfikowane</span>, <span class="b bad">1 sporne</span>, <span class="b bad">2 obalone</span></div><p><strong>Decyzja:</strong> Wybór mechanizmu sterowania przeglądarką dla Netflixa i kolejnych serwisów (A Playwright, B CDP, C rozszerzenie, D inne)</p><p class="meta">Źródło: native run (2026-10-11) + deepen: import spike S1–S11, C1–C3 na UM760 (imports/spike-results-um760.md)</p></header><nav><a href="#s0">Executive summary</a><a href="#s1">Co zmienił spike (deepen 2026-10-15)</a><a href="#s2">1. DRM i jakość obrazu</a><a href="#s3">2. Wykrywanie automatyzacji</a><a href="#s4">3. Mechanika sterowania a wersje Chrome i Edge</a><a href="#s5">4. Nawigacja D-padem i Back</a><a href="#s6">5. Pauza, wykrywanie odtwarzania i klawiatura ekranowa</a><a href="#s7">6. Ryzyka Windows i Moonlight</a><a href="#s8">Macierz kandydatów</a><a href="#s9">Wnioski międzywymiarowe</a><a href="#s10">Rekomendacja</a><a href="#s11">Spike na Netfliksie: testy i wyniki</a><a href="#s12">Otwarte pytania</a><a href="#sources">Źródła</a><a href="#stale">Staleness map</a></nav><main><h1>Technical research: sterowanie serwisami streamingowymi w przeglądarce</h1>
+<p><strong>Decyzja, której służy research:</strong> jak MediaStation ma sterować serwisami streamingowymi w przeglądarce (nawigacja D-padem, Back, pauza, wykrywanie odtwarzania, klawiatura ekranowa). Netflix jest pierwszym serwisem i wzorcem dla kolejnych.</p>
 <blockquote>
-<p>Staleness: to porównanie technologii, które szybko się zmieniają (Chrome wydaje nową wersję co 4 tygodnie). Przed decyzją podjętą później niż w Q1 2027 trzeba je odświeżyć.</p>
+<p>Staleness: to porównanie technologii, które szybko się zmieniają (Chrome wydaje nową wersję co 4 tygodnie). Pomiary ze spike'u dotyczą Edge i Chrome 155 i UI Netflixa z października 2026. Najbliższy re-check: 2026-11-12. Przed decyzją podjętą później niż w Q1 2027 trzeba raport odświeżyć.</p>
 </blockquote>
 <h2 id="s0">Executive summary</h2>
-<p><strong>Rekomendacja: wariant B jako hybryda D3.</strong> MediaStation sama uruchamia Chrome lub Edge z <strong>konkretnym</strong> <code>--remote-debugging-port</code>, dedykowanym <code>--user-data-dir</code> i bez flag automatyzacji. Następnie podłącza się przez <strong>surowe CDP</strong> albo <code>connectOverCDP</code>. Logika serwisu żyje w <strong>adapterze JS per serwis</strong>, który nie zależy od transportu: ten sam bundle da się wstrzyknąć przez CDP albo załadować jako content script rozszerzenia. Pewność: <strong>średnia</strong>. Mechanika jest potwierdzona w kodzie źródłowym, a zachowanie Netflixa wymaga spike'u.</p>
+<p><strong>Rekomendacja: wariant B jako hybryda D3, potwierdzona spike'iem.</strong> MediaStation sama uruchamia Edge (dla Netflixa) lub Chrome z <strong>konkretnym</strong> <code>--remote-debugging-port</code>, dedykowanym <code>--user-data-dir</code>, flagą <code>--autoplay-policy=no-user-gesture-required</code> i bez flag automatyzacji. Steruje stroną przez <strong>surowe CDP</strong> bez <code>Runtime.enable</code>. Logika serwisu żyje w <strong>adapterze JS per serwis</strong>, niezależnym od transportu. W spike'u ten sam <code>probe.js</code> działał bez zmian przez CDP i jako content script rozszerzenia <a class="cite" href="#src-44">[44]</a><a class="cite" href="#src-46">[46]</a>. Pewność dla Netflixa: <strong>wysoka</strong>, bo mechanika jest potwierdzona w kodzie źródłowym <a class="cite" href="#src-7">[7]</a><a class="cite" href="#src-10">[10]</a> i zmierzona na docelowym HTPC <a class="cite" href="#src-44">[44]</a><a class="cite" href="#src-45">[45]</a>. Dla innych serwisów pewność pozostaje <strong>niska</strong> do czasu S12.</p>
 <p>Trzy ustalenia przesądzają o wyborze:</p>
 <ol>
-<li><strong>DRM nie różnicuje kandydatów, dopóki nie psujemy flag.</strong> Netflix oficjalnie gra w Chrome 117+ i Edge 118+ do 2160p na Windows <a class="cite" href="#src-1">[1]</a><a class="cite" href="#src-2">[2]</a>. Full HD SDR jest więc spełnione w obu przeglądarkach. HDR i Atmos nadal ma tylko Edge <a class="cite" href="#src-3">[3]</a>. Zagrożeniem są wyłącznie domyślne flagi Playwrighta, np. <code>--disable-component-update</code> blokuje aktualizację Widevine <a class="cite" href="#src-9">[9]</a><a class="cite" href="#src-14">[14]</a><a class="cite" href="#src-15">[15]</a>.</li>
-<li><strong><code>navigator.webdriver</code> zależy od transportu, nie od samego CDP.</strong> Kod Chromium włącza <code>AutomationControlled</code> dla <code>--enable-automation</code>, <code>--headless</code>, <code>--remote-debugging-pipe</code> i <code>--remote-debugging-port=0</code>. Celowo <strong>nie</strong> włącza go dla konkretnego numeru portu <a class="cite" href="#src-7">[7]</a>. <code>playwright.launch()</code> zawsze używa pipe <a class="cite" href="#src-10">[10]</a>, więc zawsze daje <code>webdriver=true</code>. Przeglądarka uruchomiona przez nas z portem <code>9xxx</code> wygląda dla strony jak zwykła.</li>
-<li><strong>Rozszerzenie (C) jest najczystsze, ale najdroższe w dystrybucji.</strong> Chrome 137 usunął <code>--load-extension</code> z buildów branded <a class="cite" href="#src-11">[11]</a>. Instalacja i aktualizacje w dedykowanym profilu stają się ręczne albo idą przez Web Store lub Edge Add-ons. Zdarzenia generowane przez rozszerzenie mają <code>isTrusted=false</code> <a class="cite" href="#src-38">[38]</a>, podczas gdy CDP potrafi wysłać zaufane wejście.</li>
+<li><strong>Netflix nie reaguje na automatyzację.</strong> Ani podłączony klient CDP (raw i <code>connectOverCDP</code> z <code>Runtime.enable</code>), ani <code>playwright.launch()</code> z <code>webdriver=true</code> i pełnymi flagami nie zmieniają jakości, DRM ani błędów <a class="cite" href="#src-44">[44]</a>. Kryterium G2 przestaje różnicować kandydatów. B zostaje bez Playwrighta jako margines bezpieczeństwa, a nie z konieczności.</li>
+<li><strong>DRM i jakość: Edge jest domyślną przeglądarką dla Netflixa, i to nie tylko z powodu HDR.</strong> Obie przeglądarki grają 1080p, ale Edge używa H.264 przez PlayReady SL3000 z bitrate ok. 7 Mb/s, a Chrome AV1 przez Widevine L3 z bitrate ok. 0,8 Mb/s <a class="cite" href="#src-44">[44]</a>. Obawa z researchu, że flagi Playwrighta lub nowy profil zablokują Widevine, okazała się nietrafna na Windows: CDM leży w katalogu instalacji, a pusty profil gra od razu <a class="cite" href="#src-44">[44]</a>.</li>
+<li><strong>Różnica między B a C jest mniejsza, niż zakładał research.</strong> Netflix obsługuje większość niezaufanych klawiszy, a rozszerzenie odtworzyło całą obsługę Netflixa z tą samą jakością i bez ostrzeżeń przeglądarki <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-46">[46]</a>. B wygrywa zaufanym wejściem (pełny ekran klawiszem, widoczny fokus po klawiszu z CDP) i brakiem ręcznej instalacji. C wygrywa brakiem otwartego portu.</li>
 </ol>
-<p><strong>Największe zastrzeżenie:</strong> nie znaleziono <strong>żadnego</strong> publicznego doniesienia, że Netflix blokuje lub degraduje przeglądarki sterowane z zewnątrz, ale nie znaleziono też dowodu, że tego nie robi. Wykrywalne są subtelniejsze sygnały CDP, np. wyciek <code>Runtime.enable</code> <a class="cite" href="#src-37">[37]</a>. Odpowiedź da dopiero spike (lista testów niżej).</p>
-<h2 id="s1">1. DRM i jakość obrazu</h2>
+<p><strong>Spike zmienił kształt B:</strong> odpada <code>--enable-spatial-navigation</code>, bo więzi fokus na <code>/browse</code> i psuje OK w playerze <a class="cite" href="#src-45">[45]</a>. Back i Home z pilota trzeba przechwytywać w Windows, bo przeglądarka obsługuje je sama, zanim zobaczy je strona <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-48">[48]</a>. Okno przeglądarki w tle minimalizujemy, a nie ukrywamy <a class="cite" href="#src-47">[47]</a>.</p>
+<p><strong>Największe zastrzeżenie:</strong> pomiary pochodzą z jednego konta na planie Standard, monitora FHD i pilota podłączonego przez dongle USB. Nie wiadomo, jak zachowają się TV (HDR, Atmos, 4K), pilot przez Bluetooth i serwisy inne niż Netflix (S12). Netflix może też zmienić politykę wobec automatyzacji bez zapowiedzi.</p>
+<h2 id="s1">Co zmienił spike (deepen 2026-10-15)</h2>
+<p>Źródło: spike S1–S11 i C1–C3 na UM760, 2026-10-12–14 <a class="cite" href="#src-44">[44]</a>–<a class="cite" href="#src-48">[48]</a>. S12 i test na TV są odłożone.</p>
+<table>
+<thead>
+<tr>
+<th>Twierdzenie researchu</th>
+<th>Status po spike'u</th>
+<th>Dowód</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Netflix gra 1080p w Edge i Chrome <a class="cite" href="#src-1">[1]</a></td>
+<td>✅ potwierdzone; jakość różna między przeglądarkami</td>
+<td><a class="cite" href="#src-44">[44]</a> S1, S2</td>
+</tr>
+<tr>
+<td>HDR i Atmos tylko w Edge <a class="cite" href="#src-3">[3]</a></td>
+<td><span class="b warn">⚠️ częściowo</span>: Edge zgłasza wsparcie HDR, Chrome nie; HDR, Atmos i TV niezmierzone</td>
+<td><a class="cite" href="#src-44">[44]</a> S1, <a class="cite" href="#src-46">[46]</a> C1</td>
+</tr>
+<tr>
+<td>Brak doniesień o blokadzie automatyzacji</td>
+<td>✅ potwierdzone pomiarem: brak reakcji na CDP, <code>Runtime.enable</code>, <code>webdriver=true</code></td>
+<td><a class="cite" href="#src-44">[44]</a> S2, S3</td>
+</tr>
+<tr>
+<td>Stały port nie ustawia <code>webdriver</code> <a class="cite" href="#src-7">[7]</a></td>
+<td>✅ potwierdzone: <code>false</code> przy porcie, <code>true</code> przy pipe</td>
+<td><a class="cite" href="#src-44">[44]</a> S2, S3</td>
+</tr>
+<tr>
+<td>Widevine pobierany do profilu, flagi Playwrighta go blokują <a class="cite" href="#src-14">[14]</a></td>
+<td><span class="b bad">❌ <span class="b bad">obalone</span> na Windows</span>: CDM w katalogu instalacji</td>
+<td><a class="cite" href="#src-44">[44]</a> S3, S4</td>
+</tr>
+<tr>
+<td>Spatial navigation jako baza nawigacji <a class="cite" href="#src-21">[21]</a><a class="cite" href="#src-27">[27]</a></td>
+<td><span class="b bad">❌ obalone</span>: działa tylko na ekranie profili</td>
+<td><a class="cite" href="#src-45">[45]</a> S5</td>
+</tr>
+<tr>
+<td>CDP daje zaufane wejście, rozszerzenie nie <a class="cite" href="#src-38">[38]</a></td>
+<td>✅ potwierdzone; Netflix i tak obsługuje większość niezaufanych klawiszy</td>
+<td><a class="cite" href="#src-45">[45]</a> S6, <a class="cite" href="#src-46">[46]</a> C2</td>
+</tr>
+<tr>
+<td>Reguła Back „cofnij lub wyjdź” (wniosek projektowy)</td>
+<td>✅ deterministyczna; Back pilota trzeba przechwycić w Windows</td>
+<td><a class="cite" href="#src-45">[45]</a> S7, <a class="cite" href="#src-46">[46]</a> C3</td>
+</tr>
+<tr>
+<td>Wyciszanie przez <code>ISimpleAudioVolume</code> <a class="cite" href="#src-32">[32]</a></td>
+<td><span class="b warn">⚠️ sporne</span>: na build 26300 <code>E_NOINTERFACE</code>, działa <code>IChannelAudioVolume</code></td>
+<td><a class="cite" href="#src-48">[48]</a> S9</td>
+</tr>
+<tr>
+<td>Home z G20S Pro: kod nieznany <a class="cite" href="#src-35">[35]</a></td>
+<td>✅ zmierzone dla dongla USB; Bluetooth otwarty</td>
+<td><a class="cite" href="#src-48">[48]</a> S10</td>
+</tr>
+<tr>
+<td>Moonlight po ukryciu okna: brak danych</td>
+<td>✅ sesja przeżywa minimalizację i ukrycie</td>
+<td><a class="cite" href="#src-48">[48]</a> S11</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Rekomendacja się nie zmieniła.</strong> Zmieniły się pewność (ze średniej na wysoką dla Netflixa), flagi uruchomienia, sposób nawigacji i warstwa Windows.</p>
+<h2 id="s2">1. DRM i jakość obrazu</h2>
 <ul>
-<li><strong>Netflix na Windows:</strong> Chrome 117+ i Edge 118+ grają do Ultra HD (2160p), a Firefox i Opera do 1080p <a class="cite" href="#src-1">[1]</a>. 4K w Chrome na Windows 11 pojawiło się w lipcu–sierpniu 2026. Wymaga planu Premium, GTX 1050+ lub RX 400+, często HEVC Video Extensions i HDCP 2.2. Przy niespełnieniu warunków jakość spada do 1080p <a class="cite" href="#src-2">[2]</a>. Dawny limit 720p dla Chrome <a class="cite" href="#src-40">[40]</a> jest historią. <strong>G1 (Full HD SDR) spełniają obie przeglądarki.</strong> Pewność wysoka, dwa niezależne źródła.</li>
-<li><strong>HDR i Atmos:</strong> według doniesień z 2026 r. nadal tylko Edge (PlayReady) <a class="cite" href="#src-3">[3]</a>. HDR w Windows wymaga GPU ze sprzętowym PlayReady i kodeków HEVC 10-bit <a class="cite" href="#src-4">[4]</a>. <span class="b mid">Pewność średnia</span>, bo potwierdza to jedno źródło branżowe. Jedno doniesienie mówi, że Chrome dostał PlayReady zamiast Widevine. Pozostaje sprzeczne i nierozstrzygnięte (zapisane w digest).</li>
-<li><strong>Widevine w dedykowanym profilu:</strong> Chromium pobiera Widevine przez component updater przy pierwszym kontakcie z DRM <a class="cite" href="#src-14">[14]</a>. Wyłączenie aktualizacji komponentów kończy się błędem M7701-1003 <a class="cite" href="#src-15">[15]</a>. Nowy profil może przez pewien czas czekać na pobranie CDM. NetflixHD kopiuje go z istniejącego profilu, żeby tego uniknąć <a class="cite" href="#src-21">[21]</a>.</li>
-<li><strong>Serwer licencji widzi status VMP</strong> (PLATFORM_VERIFIED, TAMPERED lub UNVERIFIED) <a class="cite" href="#src-16">[16]</a>. Branded Chrome i Edge są podpisane. Buildy niebrandowane, w tym Chrome for Testing polecany przez Google do automatyzacji <a class="cite" href="#src-5">[5]</a>, to ryzyko braku CDM lub weryfikacji. <span class="b low">Pewność niska</span>, wniosek nie został potwierdzony dla CfT.</li>
-<li><strong>Odrzucone z powodu DRM (D):</strong></li>
-<li>WebView2 nie ma Widevine (issue otwarte od 2024-09 <a class="cite" href="#src-17">[17]</a>), a Fixed Runtime nie ma PlayReady <a class="cite" href="#src-18">[18]</a>.</li>
-<li>Electron wymaga forka castLabs i podpisu VMP przez EVS <a class="cite" href="#src-19">[19]</a>.</li>
-<li>Netflix ze Store to od lipca 2024 aplikacja webowa na Edge <a class="cite" href="#src-20">[20]</a>. Nie jest osobną ścieżką sterowania, tylko trybem uruchomienia Edge.</li>
-<li><strong>Pozostałe serwisy:</strong> brak wiarygodnych danych z lat 2025–2026 o rozdzielczości Disney+, Prime Video i Max w przeglądarkach. Stare wątki mówią o 1080p tylko w Edge <a class="cite" href="#src-41">[41]</a>. <span class="b low">Pewność niska</span>, do zmierzenia w spike'u per serwis.</li>
+<li><strong>Netflix na Windows:</strong> Chrome 117+ i Edge 118+ grają do Ultra HD (2160p), a Firefox i Opera do 1080p <a class="cite" href="#src-1">[1]</a>. 4K w Chrome na Windows 11 pojawiło się w lipcu–sierpniu 2026. Wymaga planu Premium, GTX 1050+ lub RX 400+, często HEVC Video Extensions i HDCP 2.2. Przy niespełnieniu warunków jakość spada do 1080p <a class="cite" href="#src-2">[2]</a>. Dawny limit 720p dla Chrome <a class="cite" href="#src-40">[40]</a> jest historią. <strong>G1 (Full HD SDR) spełniają obie przeglądarki.</strong> <span class="b ok">Pewność wysoka</span>: dwa niezależne źródła i pomiar <a class="cite" href="#src-44">[44]</a>.</li>
+<li><strong>Pomiar na UM760 (plan Standard, Edge i Chrome 155):</strong> obie przeglądarki uruchomione przez MediaStation z portem CDP grają 1920x1080, bez błędów i prawie bez zgubionych klatek <a class="cite" href="#src-44">[44]</a>. Różnią się drogą:</li>
 </ul>
-<h2 id="s2">2. Wykrywanie automatyzacji</h2>
+<table>
+<thead>
+<tr>
+<th>Przeglądarka</th>
+<th>DRM</th>
+<th>Kodek</th>
+<th>Bitrate wideo</th>
+<th>HDR w nakładce</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Edge 155</td>
+<td>PlayReady SL3000 (sprzętowe)</td>
+<td>H.264 <code>avc1.640028</code></td>
+<td>~7139 kb/s</td>
+<td><code>HDR support: true</code></td>
+</tr>
+<tr>
+<td>Chrome 155</td>
+<td>Widevine L3 (<code>SW_SECURE_DECODE</code>)</td>
+<td>AV1 (<code>av1-hd-bitrate-capped</code>)</td>
+<td>~842 kb/s</td>
+<td><code>HDR support: false</code></td>
+</tr>
+</tbody>
+</table>
+<p>Chrome ma dostęp do PlayReady 3000 (<code>requestMediaKeySystemAccess</code>), a mimo to Netflix wybiera w nim Widevine L3 <a class="cite" href="#src-44">[44]</a>. <strong>Edge jest domyślną przeglądarką dla Netflixa</strong> z powodu bitrate, a HDR jest dodatkowym argumentem. <span class="b ok">Pewność wysoka</span> dla 1080p na planie Standard.
+- <strong>HDR i Atmos:</strong> według doniesień z 2026 r. nadal tylko Edge (PlayReady) <a class="cite" href="#src-3">[3]</a>. HDR w Windows wymaga GPU ze sprzętowym PlayReady i kodeków HEVC 10-bit <a class="cite" href="#src-4">[4]</a>. Spike daje tylko częściowe potwierdzenie: Edge zgłasza wsparcie HDR, Chrome nie, ale strumień był SDR, bo plan Standard nie daje HDR <a class="cite" href="#src-44">[44]</a>. Atmos i TV nie zostały zmierzone. <span class="b mid">Pewność średnia</span>, status <span class="b warn">unverified</span>.
+- <strong>Widevine w dedykowanym profilu (skorygowane):</strong> research zakładał, że Chromium pobiera Widevine do profilu przez component updater <a class="cite" href="#src-14">[14]</a>, więc <code>--disable-component-update</code> grozi błędem M7701-1003 <a class="cite" href="#src-15">[15]</a>, a nowy profil czeka na CDM. <strong>Na Windows z Chrome i Edge 155 to nie zachodzi.</strong> CDM leży w katalogu instalacji (<code>Application\155.0.8059.40\WidevineCdm</code>). Pusty profil gra od razu, katalog <code>WidevineCdm</code> w profilu zostaje pusty, a Playwright z domyślnymi flagami gra bez błędów <a class="cite" href="#src-44">[44]</a>. Kopiowanie CDM jak w NetflixHD <a class="cite" href="#src-21">[21]</a> jest zbędne. Edge i tak gra przez PlayReady.
+- <strong>Serwer licencji widzi status VMP</strong> (PLATFORM_VERIFIED, TAMPERED lub UNVERIFIED) <a class="cite" href="#src-16">[16]</a>. Branded Chrome i Edge są podpisane. Buildy niebrandowane, w tym Chrome for Testing polecany przez Google do automatyzacji <a class="cite" href="#src-5">[5]</a>, to ryzyko braku CDM lub weryfikacji. <span class="b low">Pewność niska</span>, spike nie testował CfT.
+- <strong>Odrzucone z powodu DRM (D):</strong>
+  - WebView2 nie ma Widevine (issue otwarte od 2024-09 <a class="cite" href="#src-17">[17]</a>), a Fixed Runtime nie ma PlayReady <a class="cite" href="#src-18">[18]</a>.
+  - Electron wymaga forka castLabs i podpisu VMP przez EVS <a class="cite" href="#src-19">[19]</a>.
+  - Netflix ze Store to od lipca 2024 aplikacja webowa na Edge <a class="cite" href="#src-20">[20]</a>. Nie jest osobną ścieżką sterowania, tylko trybem uruchomienia Edge.
+- <strong>Pozostałe serwisy:</strong> brak wiarygodnych danych z lat 2025–2026 o rozdzielczości Disney+, Prime Video i Max w przeglądarkach. Stare wątki mówią o 1080p tylko w Edge <a class="cite" href="#src-41">[41]</a>. <span class="b low">Pewność niska</span>. S12 odłożony.</p>
+<h2 id="s3">2. Wykrywanie automatyzacji</h2>
 <table>
 <thead>
 <tr>
@@ -55,16 +152,16 @@ details{margin-top:2em}summary{cursor:pointer;font-weight:600;font-size:1.2rem}t
 <tr>
 <td><code>navigator.webdriver=true</code></td>
 <td><code>--enable-automation</code>, <code>--headless</code>, <code>--remote-debugging-pipe</code>, port <code>0</code> <a class="cite" href="#src-7">[7]</a></td>
-<td><strong>zawsze</strong> (pipe <a class="cite" href="#src-10">[10]</a>); maskowalne <code>--disable-blink-features=AutomationControlled</code></td>
-<td><strong>nie</strong> (konkretny port <a class="cite" href="#src-7">[7]</a>)</td>
-<td>nie</td>
+<td><strong>zawsze</strong> (pipe <a class="cite" href="#src-10">[10]</a>, zmierzone <a class="cite" href="#src-44">[44]</a>); maskowalne <code>--disable-blink-features=AutomationControlled</code></td>
+<td><strong>nie</strong> (konkretny port <a class="cite" href="#src-7">[7]</a>, zmierzone <a class="cite" href="#src-44">[44]</a>)</td>
+<td>nie (zmierzone <a class="cite" href="#src-46">[46]</a>)</td>
 </tr>
 <tr>
 <td>Infobar „sterowana przez oprogramowanie testowe”</td>
 <td><code>--enable-automation</code> <a class="cite" href="#src-8">[8]</a></td>
-<td>domyślnie tak, usuwalne przez <code>ignoreDefaultArgs</code></td>
+<td>w Edge 155 nie pojawił się nawet z domyślnymi flagami; pojawia się pasek o <code>--no-sandbox</code> <a class="cite" href="#src-44">[44]</a></td>
 <td>nie</td>
-<td>nie (ale <code>chrome.debugger</code> pokazuje własny infobar <a class="cite" href="#src-38">[38]</a>)</td>
+<td>nie; po ręcznym „Load unpacked” brak ostrzeżeń o trybie dewelopera <a class="cite" href="#src-46">[46]</a></td>
 </tr>
 <tr>
 <td>Wyciek <code>Runtime.enable</code></td>
@@ -83,48 +180,64 @@ details{margin-top:2em}summary{cursor:pointer;font-weight:600;font-size:1.2rem}t
 </tbody>
 </table>
 <ul>
-<li><strong>Netflix i automatyzacja:</strong> wyszukiwania standardowe i rozszerzone (Netflix, Selenium, Playwright, webdriver, „controlled by automated test software”) nie dały żadnego doniesienia o blokadzie lub degradacji z lat 2023–2026. Netflix nie dokumentuje mechanizmów anty-automatyzacji. Materiały anty-bot dotyczą scrapingu, nie DRM. <strong>Brak dowodu jest tu ustaleniem, a nie potwierdzeniem.</strong> <span class="b mid">Pewność średnia</span>.</li>
+<li><strong>Netflix i automatyzacja (zmierzone):</strong> na Edge i Chrome 155 Netflix gra identycznie bez klienta CDP, z klientem raw, z <code>connectOverCDP</code> (który woła <code>Runtime.enable</code>) i w przeglądarce uruchomionej przez <code>playwright.launch()</code> z <code>webdriver=true</code>. Logowanie z 2FA przeszło bez captchy i bez dodatkowej weryfikacji <a class="cite" href="#src-44">[44]</a>. Wcześniejsze wyszukiwania nie dały żadnego doniesienia o blokadzie z lat 2023–2026. Pomiar i brak doniesień są niezależnymi liniami dowodu. <span class="b ok">Pewność wysoka</span> na dzień 2026-10-12. To stan bieżący, a nie gwarancja: Netflix nie dokumentuje swojej polityki wobec automatyzacji.</li>
+<li><strong>Wykrywalność <code>Runtime.enable</code> przez skrypty anty-bot</strong> <a class="cite" href="#src-37">[37]</a> pozostaje <span class="b warn">unverified</span>. Dla Netflixa nie ma znaczenia <a class="cite" href="#src-44">[44]</a>, ale może mieć dla innych serwisów (S12).</li>
 <li><strong>Port na localhost:</strong> Chrome 142 wprowadził Local Network Access, czyli zgodę na dostęp publicznych stron do zasobów lokalnych <a class="cite" href="#src-39">[39]</a>. To ogranicza sondowanie portu przez strony. Pozostaje ryzyko lokalne: każdy proces użytkownika może przejąć profil zalogowany do Netflixa. Na domowym HTPC jednego użytkownika to ryzyko jest akceptowalne, ale trzeba je odnotować.</li>
 </ul>
-<h2 id="s3">3. Mechanika sterowania a wersje Chrome i Edge</h2>
+<h2 id="s4">3. Mechanika sterowania a wersje Chrome i Edge</h2>
 <ul>
-<li><strong>Chrome 136+</strong> (zmiana z marca 2025): <code>--remote-debugging-port</code> i <code>--remote-debugging-pipe</code> są ignorowane na domyślnym <code>user-data-dir</code>. Trzeba wskazać własny katalog <a class="cite" href="#src-5">[5]</a>. Potwierdzone na Chrome 151 <a class="cite" href="#src-6">[6]</a>. Dedykowany profil i tak jest celem MediaStation, więc <strong>ograniczenie nie przeszkadza</strong>. Google kieruje jednak automatyzację do Chrome for Testing <a class="cite" href="#src-5">[5]</a>, co sygnalizuje, że branded Chrome może być dalej zaostrzany. To ryzyko strategiczne dla A i B. Microsoft dla Edge nadal dokumentuje <code>--remote-debugging-port</code> + <code>--user-data-dir</code> <a class="cite" href="#src-42">[42]</a>, a zmiana 136 najpewniej obowiązuje też Edge (wniosek).</li>
-<li><strong>Playwright (A):</strong> domyślne przełączniki obejmują <code>--disable-component-update</code>, <code>--disable-extensions</code>, <code>--force-color-profile=srgb</code>, <code>--disable-backgrounding-occluded-windows</code> oraz wyłączenie <code>GlobalMediaControls</code> i <code>MediaRouter</code> <a class="cite" href="#src-9">[9]</a>. Każdy z nich trzeba świadomie usuwać przez <code>ignoreDefaultArgs</code>. Lista zmienia się między wersjami, np. Playwright dodał wpis dla Chromium 155 <a class="cite" href="#src-9">[9]</a>. Uruchomiona przeglądarka żyje i umiera razem z procesem Playwrighta (pipe).</li>
-<li><strong>Rozszerzenie (C):</strong> Chrome 137 usunął <code>--load-extension</code> z buildów branded <a class="cite" href="#src-11">[11]</a>. <code>Extensions.loadUnpacked</code> przez CDP działa tylko po pipe z <code>--enable-unsafe-extension-debugging</code> <a class="cite" href="#src-12">[12]</a>, czyli z <code>webdriver=true</code>. W MV3 otwarte <code>connectNative()</code> (od Chrome 105) lub aktywny WebSocket (od Chrome 116) utrzymują service worker przy życiu <a class="cite" href="#src-13">[13]</a>.</li>
+<li><strong>Chrome 136+</strong> (zmiana z marca 2025): <code>--remote-debugging-port</code> i <code>--remote-debugging-pipe</code> są ignorowane na domyślnym <code>user-data-dir</code>. Trzeba wskazać własny katalog <a class="cite" href="#src-5">[5]</a>. Potwierdzone na Chrome 151 <a class="cite" href="#src-6">[6]</a>. Spike potwierdza, że port z własnym profilem działa w Chrome i Edge 155 <a class="cite" href="#src-44">[44]</a>. Google kieruje automatyzację do Chrome for Testing <a class="cite" href="#src-5">[5]</a>, co sygnalizuje, że branded Chrome może być dalej zaostrzany. To ryzyko strategiczne dla A i B. Microsoft dla Edge nadal dokumentuje <code>--remote-debugging-port</code> + <code>--user-data-dir</code> <a class="cite" href="#src-42">[42]</a>.</li>
+<li><strong>Surowe CDP bez <code>Runtime.enable</code> (nowe ograniczenie):</strong> w Edge 155 <code>Runtime.addBinding</code> znika po nawigacji dokumentu, a skrypt z <code>Page.addScriptToEvaluateOnNewDocument</code> zostaje <a class="cite" href="#src-44">[44]</a>. BrowserHost musi ponawiać <code>addBinding</code> po każdym <code>Page.frameNavigated</code> głównej ramki, a adapter musi buforować komunikaty do czasu pojawienia się bindingu. Połączenie CDP zrywa się po wybudzeniu z Modern Standby i trzeba je odnawiać <a class="cite" href="#src-47">[47]</a>.</li>
+<li><strong>Playwright (A):</strong> domyślne przełączniki obejmują <code>--disable-component-update</code>, <code>--disable-extensions</code>, <code>--force-color-profile=srgb</code>, <code>--disable-backgrounding-occluded-windows</code> oraz wyłączenie <code>GlobalMediaControls</code> i <code>MediaRouter</code> <a class="cite" href="#src-9">[9]</a>. Lista zmienia się między wersjami <a class="cite" href="#src-9">[9]</a>. W spike'u nie zaszkodziły odtwarzaniu 1080p SDR, a <code>--disable-component-update</code> jest nieszkodliwy, bo CDM jest w katalogu instalacji <a class="cite" href="#src-44">[44]</a>. Wpływ <code>--force-color-profile=srgb</code> na HDR pozostaje niezmierzony. Przeglądarka żyje i umiera razem z procesem Playwrighta (pipe).</li>
+<li><strong>Rozszerzenie (C):</strong> Chrome 137 usunął <code>--load-extension</code> z buildów branded <a class="cite" href="#src-11">[11]</a>. <code>Extensions.loadUnpacked</code> przez CDP działa tylko po pipe z <code>--enable-unsafe-extension-debugging</code> <a class="cite" href="#src-12">[12]</a>, czyli z <code>webdriver=true</code>. Spike to potwierdza: <code>ext-temp</code> działa tylko na czas sesji i daje <code>webdriver=true</code> <a class="cite" href="#src-46">[46]</a>. Ręczne „Load unpacked” w dedykowanym profilu działa bez ostrzeżeń, ale po zmianie plików rozszerzenia Chrome uruchamiał stary service worker, więc każda aktualizacja wymaga ręcznego przeładowania <a class="cite" href="#src-46">[46]</a>. W MV3 otwarte <code>connectNative()</code> (od Chrome 105) lub aktywny WebSocket (od Chrome 116) utrzymują service worker przy życiu <a class="cite" href="#src-13">[13]</a>. Zdarzenia sprzed połączenia trzeba kolejkować w service workerze <a class="cite" href="#src-46">[46]</a>.</li>
 </ul>
-<h2 id="s4">4. Nawigacja D-padem i Back</h2>
+<h2 id="s5">4. Nawigacja D-padem i Back</h2>
 <ul>
-<li><strong>Natywnie:</strong> Netflix w przeglądarce ma skróty tylko w playerze: Enter/Space, F, Esc (wyjście z fullscreen), strzałki do przewijania i głośności, M, S <a class="cite" href="#src-28">[28]</a>. Nie ma nawigacji strzałkami po wierszach.</li>
-<li><strong>Flaga <code>--enable-spatial-navigation</code></strong> nadal istnieje w kodzie Chromium <a class="cite" href="#src-27">[27]</a>. NetflixHD (Linux, październik 2026) używa jej do chodzenia strzałkami po wierszach Netflixa i opisuje Esc/Backspace jako „back” serwisu <a class="cite" href="#src-21">[21]</a>. To jedyne świeże prior art. Projekt jest jednoosobowy i ma 0 gwiazdek, więc pewność jest średnia. Na Windows z Netflixem trzeba to sprawdzić w spike'u.</li>
+<li><strong>Natywnie:</strong> Netflix w przeglądarce ma skróty tylko w playerze: Enter/Space, F, Esc (wyjście z fullscreen), strzałki do przewijania i głośności, M, S <a class="cite" href="#src-28">[28]</a>. Spike to potwierdza: bez dodatkowej logiki strzałki pilota na <code>/browse</code> tylko przewijają stronę, a fokus zostaje na <code>body</code> <a class="cite" href="#src-45">[45]</a>.</li>
+<li><strong>Flaga <code>--enable-spatial-navigation</code> (<span class="b bad">obalone</span> jako baza):</strong> research proponował ją jako bazę na wzór NetflixHD <a class="cite" href="#src-21">[21]</a><a class="cite" href="#src-27">[27]</a>. W Edge i Chrome 155 na Windows działa tylko na ekranie profili. Na <code>/browse</code> i w wyszukiwarce fokus na kafelku otwiera podgląd (<code>previewModal--player_container</code>), który więzi fokus i z którego nie da się wyjść strzałkami ani Back. W playerze OK przełącza pauzę dwa razy, bo flaga dodatkowo „klika” element z fokusem <a class="cite" href="#src-45">[45]</a>. <strong>MediaStation nie używa tej flagi.</strong></li>
 <li><strong>Biblioteki:</strong></li>
 <li>polyfill WICG jest <strong>zarchiwizowany</strong> <a class="cite" href="#src-24">[24]</a>;</li>
 <li>js-spatial-navigation ostatnią zmianę dostał w 2024-05 <a class="cite" href="#src-25">[25]</a>;</li>
 <li>Norigin jest aktywny (2026-09), ale służy do budowy aplikacji React, a nie do wstrzykiwania w obcy DOM <a class="cite" href="#src-26">[26]</a>.</li>
-<li><strong>Istniejące rozszerzenia „Netflix z pada”</strong> są porzucone: netflix-navigator (2022-12) <a class="cite" href="#src-22">[22]</a>, NetflixController z wirtualną klawiaturą (2020-10) <a class="cite" href="#src-23">[23]</a>. <strong>Nie ma gotowca.</strong> Mapy fokusu per serwis trzeba napisać samodzielnie.</li>
-<li><strong>Wzorzec:</strong> flaga spatial navigation jako baza, a na niej cienka <strong>mapa fokusu per serwis</strong>: selektory wierszy, kafelków, profili, pola wyszukiwania i kontrolek playera. Dla playera najstabilniejsze jest wewnętrzne API Netflixa (<code>netflix.appContext.state.playerApp.getAPI().videoPlayer</code>), którego używa nawet Mozilla w wrapperze PiP <a class="cite" href="#src-29">[29]</a>. API jest nieudokumentowane i może zniknąć. Zapasowo pozostaje <code>HTMLVideoElement</code>.</li>
-<li><strong>Wykrywanie „ekranu głównego serwisu” dla Back:</strong> najtańszy sygnał to trasa URL SPA. W Netfliksie są to <code>/browse</code> (ekran główny), <code>/title/…</code>, <code>/search…</code> i <code>/watch/…</code>. Do tego stan DOM, np. otwarty modal szczegółów, oraz wykrywanie wyboru profilu. Adapter decyduje: „cofnij w serwisie” (Esc, <code>history.back()</code> albo zamknięcie modala) albo „wyjdź do MediaStation”. Jest to wniosek projektowy niepoparty źródłem i wymaga potwierdzenia w spike'u.</li>
-<li><strong>Zaufane wejście:</strong> zdarzenia z JS lub rozszerzenia mają <code>isTrusted=false</code>. Zdarzenia wysłane przez CDP <code>Input.*</code> przechodzą przez pipeline wejścia przeglądarki jak zdarzenia z OS <a class="cite" href="#src-38">[38]</a>. <span class="b mid">Pewność średnia</span>, bo dla zdarzeń klawiatury brak oficjalnego potwierdzenia. Jeśli Netflix ignoruje niezaufane zdarzenia, B i A mają przewagę nad C.</li>
+<li><strong>Istniejące rozszerzenia „Netflix z pada”</strong> są porzucone: netflix-navigator (2022-12) <a class="cite" href="#src-22">[22]</a>, NetflixController z wirtualną klawiaturą (2020-10) <a class="cite" href="#src-23">[23]</a>. <strong>Nie ma gotowca.</strong></li>
+<li><strong>Wzorzec potwierdzony w spike'u:</strong> adapter przechwytuje strzałki i OK, a sam przesuwa fokus według <strong>mapy fokusu per ekran</strong>. Na <code>/watch</code> przepuszcza klawisze do Netflixa <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-46">[46]</a>. Ustalenia dla mapy:</li>
+<li>selektory obecnego UI to <code>[data-uia^="carousel-row-section"]</code>, kafelki <code>standard-card</code>, <code>progress-card</code> i <code>episodic-card</code>, strzałka wiersza <code>carousel-hawkins-right-button</code> oraz odcinki <code>titleCard--container</code>. Żaden z selektorów znanych z wcześniejszych projektów (<code>.lolomoRow</code>, <code>.slider</code>, <code>.handleNext</code>) nie pasuje <a class="cite" href="#src-45">[45]</a>;</li>
+<li>zakres fokusu musi się zawężać do modala, gdy istnieje <code>[role="dialog"].previewModal--container</code>, bo tło nie jest <code>inert</code> <a class="cite" href="#src-45">[45]</a>;</li>
+<li>geometryczny fokus w modalu prowadzi przez linki obsady i oceny, a „Play” bywa osiągalny tylko w bok. Mapa musi więc priorytetyzować akcje, a nie geometrię <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-46">[46]</a>;</li>
+<li>obwódka Netflixa (<code>:focus-visible</code>) pojawia się tylko po zaufanym klawiszu i jest słabo widoczna. Adapter rysuje własne podświetlenie <a class="cite" href="#src-45">[45]</a>.</li>
+<li><strong>Player:</strong> wewnętrzne API Netflixa (<code>netflix.appContext.state.playerApp.getAPI().videoPlayer</code>) <a class="cite" href="#src-29">[29]</a> działa przy pauzie i przy starcie z zablokowanego autoodtwarzania, ale po 30 min pauzy nie wznawia, a <code>video.play()</code> tak <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-47">[47]</a>. API jest nieudokumentowane. Zasada: pauza przez API lub <code>HTMLVideoElement</code>, wznowienie przez <code>video.play()</code>.</li>
+<li><strong>Reguła Back (potwierdzona, deterministyczna w dwóch przebiegach i w wariancie C)</strong> <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-46">[46]</a>:</li>
 </ul>
-<h2 id="s5">5. Pauza, wykrywanie odtwarzania i klawiatura ekranowa</h2>
+<p><code>text
+  watch              -&gt; history.back(); gdy history.length == 1: nav /browse
+  browse-modal, title -&gt; klik [data-uia="previewModal-closebtn"] (albo Escape)
+  search             -&gt; nav /browse
+  browse, profiles   -&gt; wyjdź do MediaStation</code></p>
+<p>Rozpoznanie ekranu: trasa URL plus <code>[data-uia="profile-gate-screen"]</code> dla profili i <code>.detail-modal</code> dla modala. Modal na <code>/search?jbv=…</code> trzeba rozpoznawać osobno <a class="cite" href="#src-45">[45]</a>. Netflix pokazuje wybór profilu po każdej wizycie na <code>/ProfilesGate</code> i po wybudzeniu z Modern Standby, więc adapter musi go obsłużyć <a class="cite" href="#src-45">[45]</a>.
+- <strong>Back pilota trzeba przechwycić w Windows.</strong> Pilot wysyła <code>BrowserBack</code> (keyCode 166). Edge wykonuje wtedy <code>history.back()</code> sam, a strona nie może tego zablokować nawet <code>preventDefault()</code> w fazie capture. CDP <code>key BrowserBack</code> z kolei w ogóle nie cofa historii <a class="cite" href="#src-45">[45]</a>. Bez przechwycenia Back na <code>/browse</code> cofa się po historii Netflixa zamiast wyjść do MediaStation.
+- <strong>Zaufane wejście (zweryfikowane):</strong> <code>Input.dispatchKeyEvent</code> z CDP działa jak klawisz fizyczny we wszystkich badanych akcjach <a class="cite" href="#src-45">[45]</a>, zgodnie z <a class="cite" href="#src-38">[38]</a>. Niezaufane zdarzenia zawodzą tylko tam, gdzie przeglądarka wymaga aktywacji użytkownika (<code>f</code> → pełny ekran) albo wykonuje domyślną akcję (Escape z pełnego ekranu). Netflix ma własne handlery dla Space, Enter, strzałek, <code>m</code>, Enter na kafelkach i Escape w modalu, więc działają one także niezaufane <a class="cite" href="#src-45">[45]</a>. W C pełny ekran robi <code>chrome.windows.update</code> <a class="cite" href="#src-46">[46]</a>.</p>
+<h2 id="s6">5. Pauza, wykrywanie odtwarzania i klawiatura ekranowa</h2>
 <ul>
-<li><strong>Pauza:</strong> najpewniejsza droga to <code>video.pause()</code> albo API playera Netflixa, wywołane z wstrzykniętego adaptera. Działa jednakowo w A, B i C.</li>
-<li><strong>Wykrywanie odtwarzania:</strong> zdarzenia <code>play</code>, <code>pause</code> i <code>ended</code> na <code>&lt;video&gt;</code> przekazywane przez binding (<code>Runtime.addBinding</code> w B, port native messaging w C).</li>
-<li><strong>SMTC:</strong> Chrome ma <strong>jedną</strong> sesję SMTC dla wszystkich kart i okien, a osobną tylko dla zainstalowanych PWA <a class="cite" href="#src-30">[30]</a>. SMTC nadaje się więc jako sygnał zapasowy per przeglądarka, a nie per serwis. Playwright domyślnie wyłącza <code>GlobalMediaControls</code> <a class="cite" href="#src-9">[9]</a>.</li>
-<li><strong>Klawiatura ekranowa:</strong> adapter nasłuchuje <code>focusin</code> na <code>input</code>, <code>textarea</code> i <code>[contenteditable]</code>. Wtedy albo rysuje klawiaturę jako overlay w stronie, albo prosi MediaStation o natywną klawiaturę na wierzchu i wstawia tekst przez CDP <code>Input.insertText</code> (B) lub przez skrypt (C). Wszyscy kandydaci zapewniają to podobnie, więc kryterium mało ich różnicuje.</li>
+<li><strong>Pauza:</strong> <code>video.pause()</code> i API playera działają jednakowo w B i C <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-46">[46]</a>. Po 30 min pauzy w <strong>zminimalizowanym</strong> oknie strona, pozycja i licencja zostają, a odtwarzanie wznawia <code>video.play()</code>. Po 30 min w oknie <strong>ukrytym</strong> (SW_HIDE) Edge po pokazaniu okna zostawia stronę jako <code>hidden</code>, a wznowienie kończy się błędem D7361-1254. Ponowne otwarcie <code>/watch/&lt;id&gt;</code> odzyskuje pozycję <a class="cite" href="#src-47">[47]</a>. Jedna próba na wariant, status <span class="b warn">unverified</span>.</li>
+<li><strong>Autoodtwarzanie:</strong> na zimnym starcie Edge i Chrome blokują start odcinka bez gestu użytkownika. Space i OK nie wychodzą z tego stanu, a w C nie da się go obejść ze strony. Flaga <code>--autoplay-policy=no-user-gesture-required</code> rozwiązuje problem w obu wariantach <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-46">[46]</a>.</li>
+<li><strong>Wykrywanie odtwarzania:</strong> zdarzenia <code>play</code>, <code>pause</code>, <code>ended</code> i <code>error</code> na <code>&lt;video&gt;</code> przekazywane przez binding (<code>Runtime.addBinding</code> w B, WebSocket z service workera w C). Komplet zdarzeń dotarł w obu wariantach <a class="cite" href="#src-44">[44]</a><a class="cite" href="#src-46">[46]</a>. Ekran „Too many people are using your account” (<code>[data-uia="retryButton"]</code>) nie jest błędem <code>&lt;video&gt;</code>, więc adapter musi go rozpoznawać osobno <a class="cite" href="#src-44">[44]</a>.</li>
+<li><strong>SMTC:</strong> Chrome ma <strong>jedną</strong> sesję SMTC dla wszystkich kart i okien, a osobną tylko dla zainstalowanych PWA <a class="cite" href="#src-30">[30]</a>. SMTC nadaje się jako sygnał zapasowy per przeglądarka, a nie per serwis. Playwright domyślnie wyłącza <code>GlobalMediaControls</code> <a class="cite" href="#src-9">[9]</a>. Spike nie testował SMTC.</li>
+<li><strong>Klawiatura ekranowa (zweryfikowane w B i C):</strong> wstawianie tekstu działa trzema drogami: CDP <code>Input.insertText</code> (B), <code>execCommand</code> i setter <code>value</code> ze zdarzeniem <code>input</code> (C). Każda uruchamia wyszukiwanie <code>/search?q=</code> <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-46">[46]</a>. Adapter nasłuchuje <code>focusin</code> na polach tekstowych i albo rysuje klawiaturę w stronie, albo prosi MediaStation o natywną klawiaturę. Kryterium nie różnicuje kandydatów.</li>
 </ul>
-<h2 id="s6">6. Ryzyka Windows i Moonlight</h2>
+<h2 id="s7">6. Ryzyka Windows i Moonlight</h2>
 <ul>
-<li><strong>Globalny Home:</strong> <code>RegisterHotKey</code> jest prostszy, ale nie widzi zwolnienia klawisza. <code>WH_KEYBOARD_LL</code> widzi wszystko, ale wymaga pętli komunikatów <a class="cite" href="#src-34">[34]</a>. G20S Pro i G20S Pro BT raportują <strong>różne kody</strong>, a dla Windows nie ma publicznej mapy <a class="cite" href="#src-35">[35]</a>. Trzeba więc zmierzyć, co wysyła Home: zwykły VK, <code>VK_BROWSER_HOME</code> albo konsumencki HID lub <code>WM_APPCOMMAND</code>. W tym ostatnim przypadku przydaje się Raw Input. Uwaga: jeśli Home dociera jako <code>BROWSER_HOME</code>, przeglądarka sama go obsłuży, gdy MediaStation go nie przechwyci.</li>
-<li><strong>Foreground:</strong> proces może ustawić foreground m.in. wtedy, gdy <strong>otrzymał ostatnie zdarzenie wejściowe</strong> <a class="cite" href="#src-33">[33]</a>. Proces, który przechwycił Home hookiem lub Raw Inputem, ma więc najlepszą pozycję. Zapasowo można użyć <code>AllowSetForegroundWindow</code> i ostrożnie <code>AttachThreadInput</code> (ryzyko deadlocków <a class="cite" href="#src-43">[43]</a>). Dokumentacja zastrzega, że system może odmówić mimo spełnienia warunków <a class="cite" href="#src-33">[33]</a>.</li>
-<li><strong>Wyciszanie per aplikacja:</strong> wzorzec <code>IAudioSessionManager2</code> → <code>IAudioSessionControl2::GetProcessId</code> → <code>ISimpleAudioVolume::SetMute</code> <a class="cite" href="#src-32">[32]</a>. Chromium gra dźwięk z <strong>osobnego procesu audio service</strong> <a class="cite" href="#src-31">[31]</a>. Trzeba więc wyciszać sesje wszystkich PID w drzewie procesów danej przeglądarki, a nie tylko proces główny. Dwie przeglądarki tej samej marki z różnymi profilami to wciąż osobne drzewa procesów.</li>
+<li><strong>Globalny Home (zmierzony dla dongla USB 2.4G):</strong> G20S Pro przez dongle (<code>VID_1915&amp;PID_1025</code>) wysyła Home jako <strong>Raw Input HID Consumer, usage 0x0223</strong> (AC Home). Windows dorabia z tego wstrzyknięty <code>VK_BROWSER_HOME</code> (0xAC, <code>LLKHF_INJECTED</code>) i <code>WM_APPCOMMAND</code> 7. Nieobsłużony <code>WM_APPCOMMAND</code> każe powłoce otworzyć domyślną przeglądarkę, a Chrome na wierzchu sam otwiera nową kartę <a class="cite" href="#src-48">[48]</a>. Back to analogicznie HID 0x0224 → <code>VK_BROWSER_BACK</code> → <code>WM_APPCOMMAND</code> 1. OK i strzałki przychodzą jako zwykła klawiatura HID <a class="cite" href="#src-48">[48]</a>. G20S Pro i Pro BT raportują <strong>różne kody</strong> <a class="cite" href="#src-35">[35]</a>, więc wynik nie przenosi się na Bluetooth.</li>
+<li><strong>Przechwycenie i foreground:</strong> spike użył hooka <code>WH_KEYBOARD_LL</code>, który wymaga pętli komunikatów <a class="cite" href="#src-34">[34]</a>; <code>RegisterHotKey</code> nie był testowany. Hook musi połykać <code>VK_BROWSER_HOME</code> (zmierzone) i analogicznie <code>VK_BROWSER_BACK</code> (wniosek z S7, niezmierzony), bo inaczej reaguje przeglądarka lub powłoka. Musi też działać w <strong>osobnym wątku</strong>, bo w wątku UI zajętym obsługą <code>WM_INPUT</code> gubi zdarzenie „down” <a class="cite" href="#src-48">[48]</a>. Samo <code>SetForegroundWindow</code> zawodzi nad Chrome i Moonlightem, choć proces właśnie otrzymał wejście, zgodnie z zastrzeżeniem dokumentacji <a class="cite" href="#src-33">[33]</a>. Symulowany Alt albo <code>AttachThreadInput</code> przywróciły proces na wierzch 16/16 razy nad Edge, Chrome, Moonlightem i pulpitem <a class="cite" href="#src-48">[48]</a>. Ryzyko deadlocków przy <code>AttachThreadInput</code> <a class="cite" href="#src-43">[43]</a> nie wystąpiło w spike'u.</li>
+<li><strong>Wyciszanie per aplikacja:</strong> dźwięk Edge i Chrome wychodzi z procesu potomnego (audio service <a class="cite" href="#src-31">[31]</a>), a proces główny nie ma sesji audio. Wyciszenie całego drzewa procesów profilu ucisza jedną przeglądarkę, a druga gra dalej <a class="cite" href="#src-48">[48]</a>. Wzorzec z <code>ISimpleAudioVolume</code> <a class="cite" href="#src-32">[32]</a> jest <strong>sporny</strong>: na Windows 11 build 26300 sesje zwracają <code>E_NOINTERFACE</code>, a działa <code>IChannelAudioVolume</code> <a class="cite" href="#src-48">[48]</a>. Czy po zmianie odcinka powstaje nowa sesja audio, nie zostało sprawdzone.</li>
 <li><strong>Moonlight-qt v6.2.0 (2026-10-04):</strong></li>
-<li>CLI ma <code>stream &lt;host&gt; &lt;app&gt;</code>, <code>list</code>, <code>quit &lt;host&gt;</code> i <code>pair</code>;</li>
-<li>opcje <code>--mute-on-focus-loss</code> i <code>--background-gamepad</code> są istotne dla przełączania;</li>
-<li><code>--quit-after</code> decyduje, czy wyjście zamyka grę na hoście <a class="cite" href="#src-36">[36]</a>.</li>
+<li>CLI ma <code>stream &lt;host&gt; &lt;app&gt;</code>, <code>list</code>, <code>quit &lt;host&gt;</code> i <code>pair</code> <a class="cite" href="#src-36">[36]</a>. <code>stream</code> z CLI działa, a okno pojawia się po 1–2 s <a class="cite" href="#src-48">[48]</a>;</li>
+<li>sesja przeżywa 5 min minimalizacji i 2 min ukrycia (SW_HIDE) z powrotem obrazu, dźwięku i sterowania <a class="cite" href="#src-48">[48]</a>;</li>
+<li><code>--mute-on-focus-loss</code> wycisza Moonlight przy każdej utracie fokusu, więc nie trzeba go wyciszać osobno <a class="cite" href="#src-48">[48]</a>;</li>
+<li>wyłączny pełny ekran przełącza monitor między 59 a 120 Hz i gasi go na 1–2 s przy każdym przełączeniu. <code>--display-mode borderless</code> tego unika <a class="cite" href="#src-48">[48]</a>;</li>
+<li>po <code>quit</code> host kończy sesję, a programy na hoście działają dalej. Proces <code>Moonlight.exe quit</code> nie kończy się sam, a klient może zostać z oknem błędu, więc MediaStation zamyka go sama <a class="cite" href="#src-48">[48]</a>.</li>
 </ul>
-<p>Brak doniesień o zachowaniu sesji przy minimalizacji lub ukryciu okna na Windows, więc to idzie do spike'u. Wyjście wykrywamy przez uchwyt procesu, co jest zgodne z addendum.</p>
-<h2 id="s7">Macierz kandydatów</h2>
-<p>Skala ocen 1–5. Twarde progi: G1 = co najmniej 1080p SDR, G2 = brak blokady za automatyzację, G3 = przeglądarka per serwis.</p>
+<h2 id="s8">Macierz kandydatów</h2>
+<p>Skala ocen 1–5. Twarde progi: G1 = co najmniej 1080p SDR, G2 = brak blokady za automatyzację, G3 = przeglądarka per serwis. Oceny zaktualizowane po spike'u. Zmiany względem 2026-10-11 są oznaczone strzałką.</p>
 <table>
 <thead>
 <tr>
@@ -139,65 +252,65 @@ details{margin-top:2em}summary{cursor:pointer;font-weight:600;font-size:1.2rem}t
 <tbody>
 <tr>
 <td>G1 DRM 1080p</td>
-<td><span class="b ok">✓ spełnia</span> po usunięciu flag <a class="cite" href="#src-9">[9]</a><a class="cite" href="#src-15">[15]</a></td>
-<td><span class="b ok">✓ spełnia</span></td>
-<td><span class="b ok">✓ spełnia</span></td>
-<td><span class="b bad">✗ odpada</span> WebView2 <a class="cite" href="#src-17">[17]</a>, Electron wymaga castLabs <a class="cite" href="#src-19">[19]</a></td>
-<td><span class="b ok">✓ spełnia</span> (to Edge)</td>
+<td>✅ także z domyślnymi flagami <a class="cite" href="#src-44">[44]</a></td>
+<td>✅ <a class="cite" href="#src-44">[44]</a></td>
+<td>✅ <a class="cite" href="#src-46">[46]</a></td>
+<td>❌ WebView2 <a class="cite" href="#src-17">[17]</a>, Electron wymaga castLabs <a class="cite" href="#src-19">[19]</a></td>
+<td>✅ (to Edge)</td>
 </tr>
 <tr>
 <td>G2 automatyzacja</td>
-<td><span class="b warn">⚠ ryzyko</span> <code>webdriver</code> zawsze <a class="cite" href="#src-7">[7]</a><a class="cite" href="#src-10">[10]</a> + <code>Runtime.enable</code> <a class="cite" href="#src-37">[37]</a></td>
-<td><span class="b warn">⚠ ryzyko</span> tylko port i subtelne sygnały CDP</td>
-<td><span class="b ok">✓ spełnia</span> najczystszy</td>
+<td>✅ na Netfliksie mimo <code>webdriver=true</code> <a class="cite" href="#src-44">[44]</a>, ale zbędne sygnały (<code>webdriver</code>, pasek <code>--no-sandbox</code>)</td>
+<td>✅ zmierzone <a class="cite" href="#src-44">[44]</a> (było ⚠️)</td>
+<td>✅ <a class="cite" href="#src-46">[46]</a></td>
 <td>—</td>
 <td>zależy od sposobu sterowania</td>
 </tr>
 <tr>
 <td>G3 przeglądarka per serwis</td>
-<td><span class="b ok">✓ spełnia</span> <code>channel</code></td>
-<td><span class="b ok">✓ spełnia</span></td>
-<td><span class="b warn">⚠ ryzyko</span> osobna instalacja w każdej przeglądarce</td>
-<td><span class="b bad">✗ odpada</span></td>
-<td><span class="b bad">✗ odpada</span> tylko Edge</td>
+<td>✅ <code>channel</code></td>
+<td>✅</td>
+<td>⚠️ ręczna instalacja w każdym profilu <a class="cite" href="#src-46">[46]</a></td>
+<td>❌</td>
+<td>❌ tylko Edge</td>
 </tr>
 <tr>
 <td>D-pad (25%)</td>
 <td>4</td>
-<td>4</td>
-<td>4 (niezaufane zdarzenia)</td>
+<td>4 (zaufane wejście, widoczny fokus)</td>
+<td>4 (Netflix obsługuje niezaufane klawisze <a class="cite" href="#src-45">[45]</a>)</td>
 <td>—</td>
 <td>—</td>
 </tr>
 <tr>
 <td>Kruchość i utrzymanie (20%)</td>
 <td>3 (lista flag Playwrighta, lifecycle)</td>
-<td>4</td>
-<td>3 (dwa artefakty, ręczna instalacja <a class="cite" href="#src-11">[11]</a>)</td>
+<td>4 (ponawianie <code>addBinding</code>, reconnect po Standby <a class="cite" href="#src-44">[44]</a>)</td>
+<td>3 (ręczne „Load unpacked” <a class="cite" href="#src-11">[11]</a><a class="cite" href="#src-46">[46]</a>)</td>
 <td>—</td>
 <td>—</td>
 </tr>
 <tr>
 <td>Pauza i playback (15%)</td>
-<td>5</td>
-<td>5</td>
-<td>5</td>
+<td>4 ↓</td>
+<td>4 ↓ (API nie wznawia po 30 min, SW_HIDE psuje sesję <a class="cite" href="#src-47">[47]</a>)</td>
+<td>4 ↓</td>
 <td>—</td>
 <td>—</td>
 </tr>
 <tr>
 <td>Back zgodny z TV (15%)</td>
 <td>4</td>
-<td>4</td>
-<td>4</td>
+<td>4 (reguła deterministyczna, Back przez hook Windows <a class="cite" href="#src-45">[45]</a>)</td>
+<td>4 (identyczna <a class="cite" href="#src-46">[46]</a>)</td>
 <td>—</td>
 <td>—</td>
 </tr>
 <tr>
 <td>Klawiatura ekranowa (10%)</td>
-<td>4</td>
-<td>4</td>
-<td>4</td>
+<td>5 ↑</td>
+<td>5 ↑ (<code>insertText</code> <a class="cite" href="#src-45">[45]</a>)</td>
+<td>5 ↑ (<code>execCommand</code>, <code>value</code> <a class="cite" href="#src-46">[46]</a>)</td>
 <td>—</td>
 <td>—</td>
 </tr>
@@ -211,131 +324,169 @@ details{margin-top:2em}summary{cursor:pointer;font-weight:600;font-size:1.2rem}t
 </tr>
 <tr>
 <td>Jakość (bonus, 5%)</td>
-<td>3 (srgb i inne flagi do pilnowania)</td>
+<td>3 (<code>srgb</code> niezmierzony dla HDR)</td>
 <td>4</td>
-<td>4</td>
+<td>4 (jakość identyczna z B <a class="cite" href="#src-46">[46]</a>)</td>
 <td>—</td>
 <td>—</td>
 </tr>
 <tr>
 <td><strong>Wynik ważony</strong></td>
-<td><strong>3,80</strong></td>
-<td><strong>4,25</strong></td>
-<td><strong>3,95</strong></td>
+<td><strong>3,75</strong> (było 3,80)</td>
+<td><strong>4,20</strong> (było 4,25)</td>
+<td><strong>3,90</strong> (było 3,95)</td>
 <td>odpada (G1/G3)</td>
 <td>odpada jako mechanizm, zostaje jako tryb uruchomienia</td>
 </tr>
 </tbody>
 </table>
-<p>Wagi zostały zatwierdzone na plan gate. Wynik da się przeliczyć: przy wadze G2 jako kryterium rankingowym C zbliża się do B.</p>
-<h2 id="s8">Wnioski międzywymiarowe</h2>
+<p>Wagi zostały zatwierdzone na plan gate 2026-10-11. Kolejność kandydatów i różnica B–C (0,30) się nie zmieniły. Zmiany pauzy i klawiatury dotyczą wszystkich jednakowo. Przed spike'iem C zbliżało się do B, gdy G2 traktowało się jako kryterium rankingowe. Teraz G2 jest zmierzone i nie różnicuje kandydatów na Netfliksie, więc ten argument za C odpada. Przewaga B wynika z utrzymania i dopasowania do stosu.</p>
+<h2 id="s9">Wnioski międzywymiarowe</h2>
 <ul>
-<li><strong>Kryteria funkcjonalne (pauza, Back, klawiatura, D-pad) prawie nie różnicują kandydatów</strong>, bo we wszystkich realizuje je ten sam wstrzyknięty JS. Różnią się trzy rzeczy:</li>
-<li>transport i jego ślad automatyzacji,</li>
-<li>koszt dystrybucji kodu do przeglądarki,</li>
-<li>to, kto jest właścicielem życia procesu przeglądarki.</li>
+<li><strong>Kryteria funkcjonalne nie różnicują kandydatów.</strong> Spike to potwierdził: ten sam <code>probe.js</code> z mapą fokusu, regułą Back i obsługą playera działał bez zmian przez CDP i w rozszerzeniu <a class="cite" href="#src-44">[44]</a><a class="cite" href="#src-46">[46]</a>. Kandydaci różnią się trzema rzeczami:</li>
+<li>transportem i jego śladem automatyzacji, który na Netfliksie dziś nie ma znaczenia <a class="cite" href="#src-44">[44]</a>;</li>
+<li>kosztem dystrybucji kodu do przeglądarki;</li>
+<li>tym, kto jest właścicielem życia procesu przeglądarki.</li>
 </ul>
-<p>Stąd hedge: <strong>adapter serwisu jako bundle niezależny od transportu.</strong>
-- <strong>Dedykowany profil jest wymagany jednocześnie przez Chrome 136 <a class="cite" href="#src-5">[5]</a>, przez separację logowania i przez Widevine</strong> <a class="cite" href="#src-14">[14]</a><a class="cite" href="#src-21">[21]</a>. Ta decyzja jest więc wspólna dla wszystkich kandydatów i nie zależy od wyboru.
-- <strong>Edge jako przeglądarka dla Netflixa daje HDR i Atmos <a class="cite" href="#src-3">[3]</a></strong>, a mechanizm B działa identycznie w Edge <a class="cite" href="#src-42">[42]</a>. Wybór przeglądarki per serwis nie zmienia mechanizmu.</p>
-<h2 id="s9">Rekomendacja</h2>
+<p>Hedge „adapter jako bundle niezależny od transportu” jest więc tani i sprawdzony.
+- <strong>Najtrudniejsza część przeniosła się z przeglądarki do Windows.</strong> Back i Home pilota, powrót MediaStation na wierzch, wyciszanie, stan okna (minimalizacja zamiast ukrycia) i Moonlight wymagają warstwy natywnej, niezależnej od wyboru B lub C <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-47">[47]</a><a class="cite" href="#src-48">[48]</a>. Przeglądarka nie może sama poprawnie obsłużyć Back pilota <a class="cite" href="#src-45">[45]</a>. Dla architektury warstwa wejścia Windows jest więc równie ważnym komponentem co BrowserHost.
+- <strong>Dedykowany profil jest wymagany przez Chrome 136 <a class="cite" href="#src-5">[5]</a> i przez separację logowania</strong>, a nie, jak zakładał research, przez Widevine <a class="cite" href="#src-44">[44]</a>. Pusty profil per serwis działa od pierwszego uruchomienia.
+- <strong>Wybór przeglądarki per serwis jest decyzją o jakości, nie o mechanizmie.</strong> Dla Netflixa Edge daje ok. 8,5 raza wyższy bitrate i wsparcie HDR <a class="cite" href="#src-44">[44]</a>, a mechanizm B działa identycznie w obu przeglądarkach. Tabela „serwis → przeglądarka” czeka na S12.</p>
+<h2 id="s10">Rekomendacja</h2>
 <ol>
-<li><strong>Wybór: B w formie hybrydy D3</strong> (<span class="b mid">pewność średnia</span>: mechanika wysoka <a class="cite" href="#src-5">[5]</a><a class="cite" href="#src-7">[7]</a><a class="cite" href="#src-10">[10]</a>, zachowanie Netflixa <span class="b warn">niezweryfikowane</span>).</li>
-<li>MediaStation uruchamia <code>msedge.exe</code> albo <code>chrome.exe</code> z flagami <code>--user-data-dir=&lt;profil-serwisu&gt; --remote-debugging-port=&lt;stały, np. 92xx&gt; --app=&lt;url&gt; --start-fullscreen</code> lub <code>--kiosk</code>. Nie używa żadnej z flag Playwrighta.</li>
-<li>Sterowanie przez surowe CDP po WebSocket: <code>Page.addScriptToEvaluateOnNewDocument</code> (adapter), <code>Runtime.addBinding</code> (zdarzenia do MediaStation), <code>Input.dispatchKeyEvent</code> i <code>Input.insertText</code> (zaufane wejście). Bez <code>Runtime.enable</code>. <code>connectOverCDP</code> z Playwrighta jest dopuszczalny w prototypie, ale woła <code>Runtime.enable</code> <a class="cite" href="#src-37">[37]</a>.</li>
-<li><strong>Feeds:</strong> architecture spine. Komponenty „BrowserHost” (lifecycle, CDP) i „ServiceAdapter” (JS per serwis) oraz kontrakt komunikatów (<code>navigate</code>, <code>back</code>, <code>pause</code>, <code>playbackState</code>, <code>textFocus</code>).</li>
-<li><strong>Runner-up: C (rozszerzenie)</strong> wygrywa, gdy spike pokaże, że Netflix lub inny serwis reaguje na port debugowania albo sygnały CDP, albo gdy Google zablokuje remote debugging w branded Chrome. Koszt przejścia jest niski, jeśli adapter od początku jest transport-agnostic: zmienia się tylko most (native messaging zamiast <code>Runtime.addBinding</code>). Instalacja to jednorazowe „Load unpacked” w dedykowanym profilu albo publikacja unlisted w Edge Add-ons lub Chrome Web Store.</li>
-<li><strong>Odrzucone:</strong></li>
-<li><strong>A jako docelowe:</strong> <code>webdriver=true</code> jest nieusuwalne bez dodatkowego maskowania, do tego dochodzi lista szkodliwych flag i przeglądarka zależna od procesu Node.</li>
-<li><strong>WebView2 i Electron:</strong> DRM.</li>
-<li><strong>PWA ze Store jako mechanizm:</strong> to tylko Edge z <code>--app</code>. Jako <em>tryb uruchomienia</em> B pozostaje dobre, bo daje osobną sesję SMTC <a class="cite" href="#src-30">[30]</a>.</li>
-<li><strong>Najsilniejszy argument przeciw B:</strong> otwarty port CDP to łatwy cel lokalnego przejęcia sesji i sygnał, który Google aktywnie zawęża <a class="cite" href="#src-5">[5]</a>. Jeśli kolejna wersja Chrome zablokuje go także dla niestandardowych profili, B przestanie działać w Chrome z dnia na dzień. Edge może podążyć za nim.</li>
-<li><strong>Najtańszy hedge:</strong> adapter jako jeden bundle JS z interfejsem <code>bridge.send/receive</code> oraz test „smoke” po każdej aktualizacji przeglądarki (start, profil, odtworzenie, pauza, Back).</li>
+<li><strong>Wybór: B w formie hybrydy D3.</strong> <span class="b ok">Pewność wysoka</span> dla Netflixa: mechanika <a class="cite" href="#src-5">[5]</a><a class="cite" href="#src-7">[7]</a><a class="cite" href="#src-10">[10]</a> i pomiar na docelowym HTPC <a class="cite" href="#src-44">[44]</a>–<a class="cite" href="#src-48">[48]</a>. Dla innych serwisów pewność średnia, do potwierdzenia w S12.
+   - MediaStation uruchamia <code>msedge.exe</code> (Netflix) albo <code>chrome.exe</code> z flagami <code>--user-data-dir=&lt;profil-serwisu&gt; --remote-debugging-port=&lt;stały, np. 92xx&gt; --no-first-run --no-default-browser-check --autoplay-policy=no-user-gesture-required</code>. Nie używa <code>--enable-spatial-navigation</code> <a class="cite" href="#src-45">[45]</a> ani żadnej z flag Playwrighta. Tryb okna (<code>--app</code>, <code>--start-fullscreen</code> lub <code>--kiosk</code>) spike nie testował. Pełny ekran daje zaufany klawisz <code>f</code> wysłany przez CDP <a class="cite" href="#src-45">[45]</a>.
+   - Sterowanie przez surowe CDP po WebSocket: <code>Page.addScriptToEvaluateOnNewDocument</code> (adapter), <code>Runtime.addBinding</code> ponawiany po każdej nawigacji głównej ramki (zdarzenia do MediaStation), <code>Input.dispatchKeyEvent</code> i <code>Input.insertText</code> (zaufane wejście). Bez <code>Runtime.enable</code> <a class="cite" href="#src-44">[44]</a>. <code>connectOverCDP</code> jest dopuszczalny w prototypie, bo Netflix na niego nie reaguje <a class="cite" href="#src-44">[44]</a>.
+   - Adapter Netflixa: mapa fokusu per ekran z własnym podświetleniem, przepuszczanie klawiszy na <code>/watch</code>, reguła Back, obsługa ekranu profili i ekranu limitu ekranów, wznowienie przez <code>video.play()</code>, a przy błędzie przeładowanie <code>/watch/&lt;id&gt;</code> <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-47">[47]</a>.
+   - Warstwa Windows: hook LL w osobnym wątku, który połyka <code>VK_BROWSER_HOME</code> i <code>VK_BROWSER_BACK</code>. Do tego <code>SetForegroundWindow</code> z odblokowaniem (Alt lub <code>AttachThreadInput</code>), minimalizacja (nie ukrywanie) okna przeglądarki w tle i wyciszanie drzewa procesów przez <code>IChannelAudioVolume</code> <a class="cite" href="#src-47">[47]</a><a class="cite" href="#src-48">[48]</a>. Moonlight startuje w trybie <code>--display-mode borderless</code> z <code>--mute-on-focus-loss</code> <a class="cite" href="#src-48">[48]</a>.
+   - Higiena sesji: przed zamknięciem przeglądarki nawigacja na <code>/browse</code>, bo zamknięcie na <code>/watch</code> trzyma slot strumienia przez 1–2 min <a class="cite" href="#src-44">[44]</a>. Po wybudzeniu z Modern Standby trzeba odnowić CDP i stan Netflixa <a class="cite" href="#src-45">[45]</a><a class="cite" href="#src-47">[47]</a>.
+   - <strong>Feeds:</strong> architecture spine. Komponenty: „BrowserHost” (lifecycle, flagi, CDP, reconnect), „ServiceAdapter” (JS per serwis), „InputInterceptor” (hook Windows dla Home i Back, foreground), „AudioRouter” (wyciszanie drzew procesów), „MoonlightHost”. Kontrakt komunikatów: <code>navigate</code>, <code>back</code>, <code>pause</code>, <code>resume</code>, <code>playbackState</code>, <code>textFocus</code>, <code>screen</code> (profile, limit ekranów, błąd).</li>
+<li><strong>Runner-up: C (rozszerzenie).</strong> Spike pokazał, że C jest w pełni realne: ta sama jakość i DRM, brak ostrzeżeń, cała obsługa Netflixa przez zamienniki <a class="cite" href="#src-46">[46]</a>. Przejście na C ma sens, gdy Google lub Microsoft zablokują <code>--remote-debugging-port</code> dla profili niestandardowych albo gdy któryś serwis zacznie reagować na CDP. Koszt przejścia jest niski i zmierzony: zmienia się tylko most (WebSocket lub native messaging zamiast <code>Runtime.addBinding</code>) i pełny ekran (<code>chrome.windows.update</code>). Instalacja to jednorazowe „Load unpacked” w każdym dedykowanym profilu albo publikacja unlisted w Edge Add-ons lub Chrome Web Store.</li>
+<li><strong>Odrzucone:</strong>
+   - <strong>A jako docelowe:</strong> Netflix na nie nie reaguje <a class="cite" href="#src-44">[44]</a>, ale A dodaje zbędne sygnały (<code>webdriver=true</code>, pasek <code>--no-sandbox</code>), listę flag do pilnowania i przeglądarkę zależną od procesu Node.
+   - <strong>WebView2 i Electron:</strong> DRM.
+   - <strong>PWA ze Store jako mechanizm:</strong> to tylko Edge z <code>--app</code>. Jako <em>tryb uruchomienia</em> B pozostaje do rozważenia, bo daje osobną sesję SMTC <a class="cite" href="#src-30">[30]</a>. Spike tego nie testował.
+   - <strong><code>--enable-spatial-navigation</code>:</strong> więzi fokus i psuje OK w playerze <a class="cite" href="#src-45">[45]</a>.</li>
+<li><strong>Najsilniejszy argument przeciw B:</strong> otwarty port CDP to łatwy cel lokalnego przejęcia sesji i sygnał, który Google aktywnie zawęża <a class="cite" href="#src-5">[5]</a>. Jeśli kolejna wersja Chrome zablokuje go także dla niestandardowych profili, B przestanie działać w Chrome z dnia na dzień. Edge może podążyć za nim. Spike nie zmienił tego ryzyka, ale potwierdził, że C jest gotowym zapasem.</li>
+<li><strong>Najtańszy hedge:</strong> adapter jako jeden bundle JS z interfejsem <code>bridge.send/receive</code> oraz test „smoke” po każdej aktualizacji przeglądarki (start, profil, odtworzenie, pauza, Back). Harness spike'u (<code>spike/</code>) jest gotowym punktem wyjścia dla takiego testu.</li>
 </ol>
-<h2 id="s10">Spike na Netfliksie: konkretne testy</h2>
+<h2 id="s11">Spike na Netfliksie: testy i wyniki</h2>
+<p>Wyniki z UM760 (monitor FHD z HDR, pilot G20S Pro przez dongle USB 2.4G, plan Standard), 2026-10-12–14 <a class="cite" href="#src-44">[44]</a>–<a class="cite" href="#src-48">[48]</a>.</p>
 <table>
 <thead>
 <tr>
 <th>#</th>
 <th>Test</th>
 <th>Kryterium zaliczenia</th>
+<th>Wynik</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>S1</td>
-<td>Edge i Chrome uruchomione przez MediaStation z <code>--remote-debugging-port=9223 --user-data-dir=…</code>, odtworzenie odcinka, nakładka statystyk <code>Ctrl+Alt+Shift+D</code></td>
-<td>≥1080p, brak błędu DRM; zanotować rozdzielczość, kodek i HDR w Edge na TV</td>
+<td>Edge i Chrome uruchomione przez MediaStation z <code>--remote-debugging-port</code> i <code>--user-data-dir</code>, odtworzenie odcinka, nakładka statystyk</td>
+<td>≥1080p, brak błędu DRM</td>
+<td>✅ 1080p w obu; Edge H.264 ~7 Mb/s, Chrome AV1 ~0,8 Mb/s <a class="cite" href="#src-44">[44]</a></td>
 </tr>
 <tr>
 <td>S2</td>
-<td>To samo z podłączonym klientem CDP: (a) surowe CDP bez <code>Runtime.enable</code>, (b) <code>connectOverCDP</code></td>
-<td>brak różnicy w jakości i błędach względem S1; <code>navigator.webdriver === false</code></td>
+<td>To samo z klientem CDP: (a) raw bez <code>Runtime.enable</code>, (b) <code>connectOverCDP</code></td>
+<td>bez różnic względem S1; <code>webdriver === false</code></td>
+<td>✅ bez różnic, <code>webdriver=false</code> <a class="cite" href="#src-44">[44]</a></td>
 </tr>
 <tr>
 <td>S3</td>
-<td>Kontrola negatywna: <code>playwright.launch({channel:'msedge', ignoreDefaultArgs:[…]})</code></td>
-<td>czy Netflix gra; czy jakość lub błędy różnią się od S1 (pomiar ryzyka G2)</td>
+<td>Kontrola negatywna: <code>playwright.launch()</code> z <code>ignoreDefaultArgs</code> i z domyślnymi flagami</td>
+<td>pomiar ryzyka G2</td>
+<td>✅ gra 1080p mimo <code>webdriver=true</code> <a class="cite" href="#src-44">[44]</a></td>
 </tr>
 <tr>
 <td>S4</td>
-<td>Nowy pusty profil: czas do pobrania Widevine; wariant z CDM skopiowanym z innego profilu <a class="cite" href="#src-21">[21]</a></td>
-<td>profil gra przy pierwszym uruchomieniu albo znany jest czas oczekiwania</td>
+<td>Nowy pusty profil: czas do pobrania Widevine; wariant z kopią CDM</td>
+<td>profil gra przy pierwszym uruchomieniu</td>
+<td>✅ gra od razu; CDM w katalogu instalacji <a class="cite" href="#src-44">[44]</a></td>
 </tr>
 <tr>
 <td>S5</td>
-<td><code>--enable-spatial-navigation</code> w Chrome i Edge na <code>/browse</code>, profilach, wyszukiwaniu i w playerze</td>
-<td>które ekrany działają „za darmo”, a które wymagają mapy fokusu</td>
+<td><code>--enable-spatial-navigation</code> na profilach, <code>/browse</code>, wyszukiwaniu i w playerze</td>
+<td>które ekrany działają „za darmo”</td>
+<td>❌ tylko profile; flaga odrzucona <a class="cite" href="#src-45">[45]</a></td>
 </tr>
 <tr>
 <td>S6</td>
-<td><code>Input.dispatchKeyEvent</code> (Space, strzałki, Esc) kontra <code>dispatchEvent</code> z JS na playerze i na <code>/browse</code></td>
-<td>czy Netflix rozróżnia zaufane zdarzenia (przesądza B kontra C)</td>
+<td>Zaufane (CDP) i niezaufane (JS) wejście, zamienniki dla C, adapter z pilotem</td>
+<td>czy B i C obsłużą Netflixa pilotem</td>
+<td>✅ B; ✅ C z zastrzeżeniami (pełny ekran, UX fokusu) <a class="cite" href="#src-45">[45]</a></td>
 </tr>
 <tr>
 <td>S7</td>
-<td>Back: Esc, <code>history.back()</code> i zamykanie modala na <code>/title</code>, <code>/search</code>, <code>/watch</code>; wykrywanie <code>/browse</code> i ekranu profili</td>
-<td>deterministyczna reguła „cofnij lub wyjdź”</td>
+<td>Back: Esc, <code>history.back()</code>, zamykanie modala; rozpoznanie <code>/browse</code> i profili</td>
+<td>deterministyczna reguła</td>
+<td>✅ reguła deterministyczna; Back pilota do przechwycenia w Windows <a class="cite" href="#src-45">[45]</a></td>
+</tr>
+<tr>
+<td>C1–C3</td>
+<td>Wariant C: jakość, ślad automatyzacji, S6 i S7 w rozszerzeniu, okno</td>
+<td>jak S1, S6, S7</td>
+<td>✅ identycznie jak B; potrzebna flaga <code>--autoplay-policy</code> <a class="cite" href="#src-46">[46]</a></td>
 </tr>
 <tr>
 <td>S8</td>
-<td>Pauza przy przełączeniu: <code>video.pause()</code> kontra API playera <a class="cite" href="#src-29">[29]</a>; ukrycie lub minimalizacja okna na 30 min, potem wznowienie</td>
-<td>brak utraty sesji i błędu licencji po powrocie</td>
+<td>Pauza i 30 min w tle (minimalizacja, SW_HIDE)</td>
+<td>wznowienie bez błędu i przeładowania</td>
+<td>⚠️ minimalizacja tak; SW_HIDE kończy się D7361-1254 <a class="cite" href="#src-47">[47]</a></td>
 </tr>
 <tr>
 <td>S9</td>
-<td>Sesje audio w mikserze: PID-y Edge i Chrome, wyciszenie całego drzewa</td>
-<td>brak dźwięku z wyciszonej przeglądarki, pozostałe słyszalne</td>
+<td>Wyciszenie drzewa procesów Edge i Chrome</td>
+<td>wyciszona cicha, druga słyszalna</td>
+<td>✅ <a class="cite" href="#src-48">[48]</a></td>
 </tr>
 <tr>
 <td>S10</td>
-<td>G20S Pro BT: co raportuje Home (hook LL, Raw Input, <code>WM_APPCOMMAND</code>) przy fokusie w Edge, Chrome i Moonlight; <code>SetForegroundWindow</code> po Home</td>
+<td>G20S Pro (dongle): kody Home, foreground po Home nad Edge, Chrome, Moonlight</td>
 <td>Home zawsze przechwycony, MediaStation na wierzchu</td>
+<td>✅ 16/16 z połykaniem i odblokowaniem <a class="cite" href="#src-48">[48]</a></td>
 </tr>
 <tr>
 <td>S11</td>
-<td>Moonlight: <code>stream</code> z CLI, ukrycie lub minimalizacja okna na 5 min, przywrócenie; <code>--mute-on-focus-loss</code></td>
+<td>Moonlight: <code>stream</code> z CLI, minimalizacja i ukrycie, <code>--mute-on-focus-loss</code></td>
 <td>sesja trwa, obraz wraca</td>
+<td>✅ <a class="cite" href="#src-48">[48]</a></td>
 </tr>
 <tr>
 <td>S12</td>
 <td>Prime Video, Max i Disney+ w Edge i Chrome przez S1 i S2</td>
-<td>rozdzielczość per serwis i przeglądarka (wejście do tabeli „serwis → przeglądarka”)</td>
+<td>rozdzielczość per serwis i przeglądarka</td>
+<td>⏭️ odłożony</td>
+</tr>
+<tr>
+<td>—</td>
+<td>HDR i Atmos w Edge na TV</td>
+<td>HDR i Atmos działają</td>
+<td>⏭️ odłożony (brak TV)</td>
 </tr>
 </tbody>
 </table>
-<h2 id="s11">Otwarte pytania</h2>
+<h2 id="s12">Otwarte pytania</h2>
+<p><strong>Zamknięte przez spike:</strong></p>
 <ul>
-<li><strong>Czy Netflix lub inne serwisy reagują na port debugowania i sygnały CDP?</strong> Brak publicznych danych. Odpowiedź dadzą S2, S3 i S12.</li>
-<li><strong>Czy Netflix ignoruje niezaufane zdarzenia klawiatury?</strong> Odpowiedź da S6. Ten test przesądza między B a C.</li>
-<li><strong>Rozdzielczość Disney+, Prime Video i Max w przeglądarkach w 2026 r.</strong> Brak wiarygodnych źródeł <a class="cite" href="#src-41">[41]</a>. Odpowiedź da S12.</li>
-<li><strong>Atmos i HDR w Edge w 2026 r.</strong> Potwierdza to jedno źródło <a class="cite" href="#src-3">[3]</a>. Odpowiedź da S1 na TV.</li>
-<li><strong>Kod HID przycisku Home G20S Pro BT na Windows.</strong> Odpowiedź da S10.</li>
-<li><strong>Zachowanie Moonlight przy ukryciu okna.</strong> Odpowiedź da S11.</li>
-<li><strong>Kierunek Google wobec remote debugging w branded Chrome.</strong> Obserwować release notes. Odpowiedź przyniesie Refresh tego raportu.</li>
+<li>~~Czy Netflix reaguje na port debugowania i sygnały CDP?~~ Nie, ani na CDP, ani na Playwright <a class="cite" href="#src-44">[44]</a>. Dla innych serwisów pytanie przechodzi do S12.</li>
+<li>~~Czy Netflix ignoruje niezaufane zdarzenia klawiatury?~~ Nie, obsługuje większość z nich. Niezaufane zawodzą tylko przy akcjach wymagających aktywacji <a class="cite" href="#src-45">[45]</a>.</li>
+<li>~~Kod HID przycisku Home G20S Pro na Windows~~ dla dongla USB: HID Consumer 0x0223 <a class="cite" href="#src-48">[48]</a>. Bluetooth pozostaje otwarty.</li>
+<li>~~Zachowanie Moonlight przy ukryciu okna.~~ Sesja przeżywa minimalizację i ukrycie <a class="cite" href="#src-48">[48]</a>.</li>
 </ul>
-<details id="sources" open><summary>Źródła</summary><table class="sources"><thead><tr><th>#</th><th>Wspiera</th><th>Wydawca</th><th>Publikacja</th><th>Dostęp</th><th>Pewność</th></tr></thead><tbody><tr id="src-1"><td>[1]</td><td>Netflix: Chrome 117+ / Edge 118+ do 2160p na Windows</td><td><a href="https://help.netflix.com/en/node/23742" target="_blank" rel="noopener">Netflix Help Center</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-2"><td>[2]</td><td>4K w Chrome na Win11, wymagania, fallback 1080p</td><td><a href="https://chromeunboxed.com/netflix-finally-unlocks-4k-streaming-in-chrome-on-windows-11/" target="_blank" rel="noopener">Chrome Unboxed</a></td><td>2026-08-05</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-3"><td>[3]</td><td>HDR/Atmos nadal tylko Edge</td><td><a href="https://www.channelnews.com.au/microsoft-loses-another-edge-as-netflix-unlocks-4k-chrome-streaming/" target="_blank" rel="noopener">ChannelNews</a></td><td>2026-08</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-4"><td>[4]</td><td>HDR w Windows: sprzętowy PlayReady, HEVC</td><td><a href="https://support.microsoft.com/help/4040547" target="_blank" rel="noopener">Microsoft Support</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-5"><td>[5]</td><td>Chrome 136: remote debugging wymaga niestandardowego user-data-dir; CfT do automatyzacji</td><td><a href="https://developer.chrome.com/blog/remote-debugging-port" target="_blank" rel="noopener">Chrome for Developers</a></td><td>2025-03-17</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-6"><td>[6]</td><td>Potwierdzenie zachowania na Chrome 151</td><td><a href="https://github.com/trycua/cua/issues/2916" target="_blank" rel="noopener">GitHub trycua/cua #2916</a></td><td>2026</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-7"><td>[7]</td><td>Flagi włączające `navigator.webdriver`; konkretny port nie włącza</td><td><a href="https://github.com/chromium/chromium/blob/main/content/child/runtime_features.cc" target="_blank" rel="noopener">Chromium runtime_features.cc</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-8"><td>[8]</td><td>Infobar automatyzacji zależy od `--enable-automation`</td><td><a href="https://github.com/chromium/chromium/blob/main/chrome/browser/ui/startup/infobar_utils.cc" target="_blank" rel="noopener">Chromium infobar_utils.cc</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-9"><td>[9]</td><td>Domyślne przełączniki Playwrighta</td><td><a href="https://github.com/microsoft/playwright/blob/main/packages/playwright-core/src/server/chromium/chromiumSwitches.ts" target="_blank" rel="noopener">Playwright chromiumSwitches.ts</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-10"><td>[10]</td><td>Playwright launch zawsze używa `--remote-debugging-pipe`</td><td><a href="https://github.com/microsoft/playwright/blob/main/packages/playwright-core/src/server/chromium/chromium.ts" target="_blank" rel="noopener">Playwright chromium.ts</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-11"><td>[11]</td><td>Chrome 137 usuwa `--load-extension` w buildach branded</td><td><a href="https://groups.google.com/a/chromium.org/g/chromium-extensions/c/1-g8EFx2BBY/m/S0ET5wPjCAAJ" target="_blank" rel="noopener">Chromium Extensions group</a></td><td>2025-04</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-12"><td>[12]</td><td>CDP `Extensions.loadUnpacked` tylko przez pipe + unsafe flag</td><td><a href="https://chromium.googlesource.com/devtools/devtools-frontend/+/19aecbbf95fa88b359123795de16fda3ee847fbd/node_modules/devtools-protocol/pdl/domains/Extensions.pdl" target="_blank" rel="noopener">devtools-protocol Extensions.pdl</a></td><td>2025</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-13"><td>[13]</td><td>MV3: connectNative i WebSocket utrzymują service worker</td><td><a href="https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle" target="_blank" rel="noopener">Chrome for Developers</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-14"><td>[14]</td><td>Widevine pobierany przez component updater</td><td><a href="https://code.ornl.gov/nix/nixpkgs/-/commit/a701c5e8496ff433620fae2ecb13985976f48afc" target="_blank" rel="noopener">nixpkgs commit</a></td><td>~2024</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-15"><td>[15]</td><td>Błąd M7701-1003 = brak odtwarzania chronionych treści</td><td><a href="https://help.netflix.com/ar/node/27451" target="_blank" rel="noopener">Netflix Help Center</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-16"><td>[16]</td><td>Status VMP widoczny dla serwera licencji</td><td><a href="https://www.usenix.org/system/files/usenixsecurity25-roudot.pdf" target="_blank" rel="noopener">USENIX Security 2025</a></td><td>2025</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-17"><td>[17]</td><td>WebView2 bez Widevine (issue otwarte)</td><td><a href="https://github.com/MicrosoftEdge/WebView2Feedback/issues/4828" target="_blank" rel="noopener">WebView2Feedback #4828</a></td><td>2024-09</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-18"><td>[18]</td><td>WebView2 Fixed Runtime bez PlayReady</td><td><a href="https://github.com/MicrosoftEdge/WebView2Feedback/issues/4632" target="_blank" rel="noopener">WebView2Feedback #4632</a></td><td>2024-06</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-19"><td>[19]</td><td>Electron: Widevine tylko w forku castLabs + VMP</td><td><a href="https://newreleases.io/project/github/castlabs/electron-releases/release/v18.3.13%2Bwvcus" target="_blank" rel="noopener">castLabs electron-releases</a></td><td>2022</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-20"><td>[20]</td><td>Netflix ze Store = aplikacja webowa na Edge</td><td><a href="https://www.windowslatest.com/2024/07/25/windows-11s-netflix-loses-downloads-downgraded-to-microsoft-edge-based-web-app/" target="_blank" rel="noopener">Windows Latest</a></td><td>2024-07-25</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-21"><td>[21]</td><td>Prior art: kiosk Chromium, spatial navigation, kopiowanie Widevine</td><td><a href="https://github.com/FromChaosComesClarity/NetflixHD" target="_blank" rel="noopener">GitHub NetflixHD</a></td><td>2026-10-08</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-22"><td>[22]</td><td>netflix-navigator porzucony (2022-12)</td><td><a href="https://github.com/dutiyesh/netflix-navigator" target="_blank" rel="noopener">GitHub dutiyesh/netflix-navigator</a></td><td>2022-12</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-23"><td>[23]</td><td>NetflixController z wirtualną klawiaturą porzucony (2020-10)</td><td><a href="https://github.com/FThompson/NetflixController" target="_blank" rel="noopener">GitHub FThompson/NetflixController</a></td><td>2020-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-24"><td>[24]</td><td>Polyfill WICG zarchiwizowany</td><td><a href="https://github.com/WICG/spatial-navigation" target="_blank" rel="noopener">GitHub WICG/spatial-navigation</a></td><td>2026-03</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-25"><td>[25]</td><td>js-spatial-navigation: ostatni push 2024-05</td><td><a href="https://github.com/luke-chang/js-spatial-navigation" target="_blank" rel="noopener">GitHub luke-chang/js-spatial-navigation</a></td><td>2024-05</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-26"><td>[26]</td><td>Norigin aktywny, dla aplikacji React</td><td><a href="https://github.com/NoriginMedia/Norigin-Spatial-Navigation" target="_blank" rel="noopener">GitHub NoriginMedia</a></td><td>2026-09</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-27"><td>[27]</td><td>Switch `enable-spatial-navigation` nadal w Chromium</td><td><a href="https://github.com/chromium/chromium/blob/main/content/public/common/content_switches.cc" target="_blank" rel="noopener">Chromium content_switches.cc</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-28"><td>[28]</td><td>Skróty klawiszowe Netflixa w przeglądarce</td><td><a href="https://help.netflix.com/en/node/24855" target="_blank" rel="noopener">Netflix Help Center</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-29"><td>[29]</td><td>Wewnętrzne API playera Netflixa (wrapper PiP Mozilli)</td><td><a href="https://source-hub.etos-pro.ru/mozilla/gecko-dev/commit/2e684db116078bb8e0c82148cc1769ea60ee9c69" target="_blank" rel="noopener">Mozilla gecko-dev (mirror)</a></td><td>2022</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-30"><td>[30]</td><td>Jedna sesja SMTC na przeglądarkę, osobna dla PWA</td><td><a href="https://chromium.googlesource.com/chromium/src/+/lkgr/content/browser/media/system_media_controls" target="_blank" rel="noopener">Chromium system_media_controls</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-31"><td>[31]</td><td>Audio service w osobnym procesie na Windows</td><td><a href="https://chromium.googlesource.com/chromium/src/+/lkgr-android-internal/services/audio/README.md" target="_blank" rel="noopener">Chromium services/audio README</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-32"><td>[32]</td><td>Wyciszanie per sesja audio (ISimpleAudioVolume)</td><td><a href="https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nf-audiopolicy-iaudiosessionmanager-getsimpleaudiovolume" target="_blank" rel="noopener">Microsoft Learn</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-33"><td>[33]</td><td>Warunki SetForegroundWindow</td><td><a href="https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow" target="_blank" rel="noopener">Microsoft Learn</a></td><td>2025-10-06</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-34"><td>[34]</td><td>RegisterHotKey kontra WH_KEYBOARD_LL</td><td><a href="https://api.codeproject.com/Articles/1273010/Global-Hotkeys-within-Desktop-Applications" target="_blank" rel="noopener">CodeProject</a></td><td>2019</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-35"><td>[35]</td><td>G20S Pro i Pro BT mają różne kody przycisków</td><td><a href="https://alexelec.run.place/docs/alexelec/docs/hid-remote" target="_blank" rel="noopener">AlexELEC docs</a></td><td>undated</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-36"><td>[36]</td><td>Moonlight-qt CLI i opcje</td><td><a href="https://github.com/moonlight-stream/moonlight-qt/blob/master/app/cli/commandlineparser.cpp" target="_blank" rel="noopener">GitHub moonlight-qt</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-37"><td>[37]</td><td>Wyciek `Runtime.enable` wykrywalny przez anty-bot</td><td><a href="https://apiserpent.com/blog/puppeteer-stealth-still-works-2026" target="_blank" rel="noopener">apiserpent blog</a></td><td>2026</td><td>2026-10-11</td><td>niska</td></tr><tr id="src-38"><td>[38]</td><td>CDP `Input` daje `isTrusted=true`, `dispatchEvent` nie; infobar `chrome.debugger`</td><td><a href="https://v2ex.com/t/1236297" target="_blank" rel="noopener">V2EX</a></td><td>2026</td><td>2026-10-11</td><td>niska</td></tr><tr id="src-39"><td>[39]</td><td>Chrome 142 Local Network Access</td><td><a href="https://blog.openreplay.com/de/chrome-local-network-access-lna-berechtigung/" target="_blank" rel="noopener">OpenReplay blog</a></td><td>2025</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-40"><td>[40]</td><td>Historyczny limit 720p dla Chrome</td><td><a href="https://www.pcworld.com/article/415654/confirmed-only-microsoft-edge-will-play-netflix-content-at-1080p-on-your-pc.html" target="_blank" rel="noopener">PCWorld</a></td><td>2016</td><td>2026-10-11</td><td>wysoka (jako historia)</td></tr><tr id="src-41"><td>[41]</td><td>Disney+ 1080p tylko w Edge (stare doniesienia)</td><td><a href="https://www.resetera.com/threads/why-full-hd-4k-is-not-working-on-disney-via-browser.252273/" target="_blank" rel="noopener">ResetEra</a></td><td>~2021</td><td>2026-10-11</td><td>niska</td></tr><tr id="src-42"><td>[42]</td><td>Edge: `--remote-debugging-port` + `--user-data-dir`</td><td><a href="https://learn.microsoft.com/microsoft-edge/devtools/protocol" target="_blank" rel="noopener">Microsoft Learn</a></td><td>live</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-43"><td>[43]</td><td>AttachThreadInput i ryzyko deadlocków</td><td><a href="https://www.purebasic.fr/english/viewtopic.php?p=377886" target="_blank" rel="noopener">PureBasic forum</a></td><td>~2012</td><td>2026-10-11</td><td>niska</td></tr></tbody></table></details>
-<h2 id="stale">Staleness map</h2><p>Tabela pochodzi z <code>recon_kit.py staleness</code>. Okna świeżości z pakietu technicznego: wersje i kompatybilność 1 mies., ekosystem 6 mies., landscape 12 mies., wzorce 24 mies.</p>
+<p><strong>Nadal otwarte:</strong></p>
+<ul>
+<li><strong>TV: HDR, Atmos i 4K w Edge, przełączanie trybów obrazu.</strong> Na monitorze FHD i planie Standard dało się tylko zaobserwować, że Edge zgłasza wsparcie HDR, a Chrome nie <a class="cite" href="#src-44">[44]</a>. Odpowiedź da powtórzenie S1 z UM760 podłączonym do TV, na planie Premium. Trzeba też sprawdzić, jak MediaStation ma przełączać HDR i częstotliwość odświeżania (Moonlight odbierał z hosta 3840x2160 HDR, a w wyłącznym pełnym ekranie przełączał monitor na 120 Hz <a class="cite" href="#src-48">[48]</a>).</li>
+<li><strong>Pilot przez Bluetooth.</strong> G20S Pro BT wysyła inne kody niż dongle <a class="cite" href="#src-35">[35]</a>. Odpowiedź da powtórzenie S10 (Home, Back, OK, strzałki) przez Bluetooth i sprawdzenie, czy reguła połykania w hooku LL nadal działa.</li>
+<li><strong>S12: Prime Video, Max i Disney+.</strong> Rozdzielczość, DRM i kodek per przeglądarka, reakcja na CDP i <code>Runtime.enable</code> <a class="cite" href="#src-37">[37]</a>, selektory do mapy fokusu, reguła Back. Brak wiarygodnych źródeł <a class="cite" href="#src-41">[41]</a>. Odpowiedź da S12 z harnessem spike'u (wymaga rozszerzenia selektorów <code>probe.js</code> i domen rozszerzenia).</li>
+<li><strong>Dłuższa pauza.</strong> S8 sprawdził 30 min w jednej próbie <a class="cite" href="#src-47">[47]</a>. Co się dzieje po kilku godzinach, po nocy albo po wybudzeniu z Modern Standby? Trzeba też powtórzyć wariant B (pauza przez <code>video.pause()</code> i minimalizacja), żeby rozdzielić wpływ metody pauzy i metody chowania okna.</li>
+<li><strong>Hook w osobnym wątku.</strong> Potwierdzić w prototypie MediaStation, że hook LL w dedykowanym wątku zawsze dostaje „down” Home i Back, także gdy MediaStation jest na wierzchu <a class="cite" href="#src-48">[48]</a>.</li>
+<li><strong>Limit ekranów.</strong> Jak MediaStation ma komunikować ekran „Too many people are using your account” i czy ponawiać automatycznie <a class="cite" href="#src-44">[44]</a>.</li>
+<li><strong>Nowe sesje audio po zmianie odcinka.</strong> Tryb <code>-Watch</code> w S9 nie został sprawdzony na UM760 <a class="cite" href="#src-48">[48]</a>.</li>
+<li><strong>Kierunek Google wobec remote debugging w branded Chrome.</strong> Obserwować release notes. Odpowiedź przyniesie Refresh tego raportu.</li>
+</ul><details id="sources" open><summary>Źródła</summary><table class="sources"><tbody><tr id="src-1"><td>[1]</td><td>Netflix: Chrome 117+ / Edge 118+ do 2160p na Windows</td><td><a href="https://help.netflix.com/en/node/23742" target="_blank" rel="noopener">Netflix Help Center</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-2"><td>[2]</td><td>4K w Chrome na Win11, wymagania, fallback 1080p</td><td><a href="https://chromeunboxed.com/netflix-finally-unlocks-4k-streaming-in-chrome-on-windows-11/" target="_blank" rel="noopener">Chrome Unboxed</a></td><td>2026-08-05</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-3"><td>[3]</td><td>HDR/Atmos nadal tylko Edge</td><td><a href="https://www.channelnews.com.au/microsoft-loses-another-edge-as-netflix-unlocks-4k-chrome-streaming/" target="_blank" rel="noopener">ChannelNews</a></td><td>2026-08</td><td>2026-10-11</td><td>średnia (unverified; częściowo zgodne z [44])</td></tr><tr id="src-4"><td>[4]</td><td>HDR w Windows: sprzętowy PlayReady, HEVC</td><td><a href="https://support.microsoft.com/help/4040547" target="_blank" rel="noopener">Microsoft Support</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-5"><td>[5]</td><td>Chrome 136: remote debugging wymaga niestandardowego user-data-dir; CfT do automatyzacji</td><td><a href="https://developer.chrome.com/blog/remote-debugging-port" target="_blank" rel="noopener">Chrome for Developers</a></td><td>2025-03-17</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-6"><td>[6]</td><td>Potwierdzenie zachowania na Chrome 151</td><td><a href="https://github.com/trycua/cua/issues/2916" target="_blank" rel="noopener">GitHub trycua/cua #2916</a></td><td>2026</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-7"><td>[7]</td><td>Flagi włączające `navigator.webdriver`; konkretny port nie włącza</td><td><a href="https://github.com/chromium/chromium/blob/main/content/child/runtime_features.cc" target="_blank" rel="noopener">Chromium runtime_features.cc</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka (potwierdzone [44])</td></tr><tr id="src-8"><td>[8]</td><td>Infobar automatyzacji zależy od `--enable-automation`</td><td><a href="https://github.com/chromium/chromium/blob/main/chrome/browser/ui/startup/infobar_utils.cc" target="_blank" rel="noopener">Chromium infobar_utils.cc</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-9"><td>[9]</td><td>Domyślne przełączniki Playwrighta</td><td><a href="https://github.com/microsoft/playwright/blob/main/packages/playwright-core/src/server/chromium/chromiumSwitches.ts" target="_blank" rel="noopener">Playwright chromiumSwitches.ts</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-10"><td>[10]</td><td>Playwright launch zawsze używa `--remote-debugging-pipe`</td><td><a href="https://github.com/microsoft/playwright/blob/main/packages/playwright-core/src/server/chromium/chromium.ts" target="_blank" rel="noopener">Playwright chromium.ts</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-11"><td>[11]</td><td>Chrome 137 usuwa `--load-extension` w buildach branded</td><td><a href="https://groups.google.com/a/chromium.org/g/chromium-extensions/c/1-g8EFx2BBY/m/S0ET5wPjCAAJ" target="_blank" rel="noopener">Chromium Extensions group</a></td><td>2025-04</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-12"><td>[12]</td><td>CDP `Extensions.loadUnpacked` tylko przez pipe + unsafe flag</td><td><a href="https://chromium.googlesource.com/devtools/devtools-frontend/+/19aecbbf95fa88b359123795de16fda3ee847fbd/node_modules/devtools-protocol/pdl/domains/Extensions.pdl" target="_blank" rel="noopener">devtools-protocol Extensions.pdl</a></td><td>2025</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-13"><td>[13]</td><td>MV3: connectNative i WebSocket utrzymują service worker</td><td><a href="https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle" target="_blank" rel="noopener">Chrome for Developers</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-14"><td>[14]</td><td>Widevine pobierany przez component updater</td><td><a href="https://code.ornl.gov/nix/nixpkgs/-/commit/a701c5e8496ff433620fae2ecb13985976f48afc" target="_blank" rel="noopener">nixpkgs commit</a></td><td>~2024</td><td>2026-10-11</td><td>obalone dla Windows (Chrome/Edge 155) przez [44]</td></tr><tr id="src-15"><td>[15]</td><td>Błąd M7701-1003 = brak odtwarzania chronionych treści</td><td><a href="https://help.netflix.com/ar/node/27451" target="_blank" rel="noopener">Netflix Help Center</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-16"><td>[16]</td><td>Status VMP widoczny dla serwera licencji</td><td><a href="https://www.usenix.org/system/files/usenixsecurity25-roudot.pdf" target="_blank" rel="noopener">USENIX Security 2025</a></td><td>2025</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-17"><td>[17]</td><td>WebView2 bez Widevine (issue otwarte)</td><td><a href="https://github.com/MicrosoftEdge/WebView2Feedback/issues/4828" target="_blank" rel="noopener">WebView2Feedback #4828</a></td><td>2024-09</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-18"><td>[18]</td><td>WebView2 Fixed Runtime bez PlayReady</td><td><a href="https://github.com/MicrosoftEdge/WebView2Feedback/issues/4632" target="_blank" rel="noopener">WebView2Feedback #4632</a></td><td>2024-06</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-19"><td>[19]</td><td>Electron: Widevine tylko w forku castLabs + VMP</td><td><a href="https://newreleases.io/project/github/castlabs/electron-releases/release/v18.3.13%2Bwvcus" target="_blank" rel="noopener">castLabs electron-releases</a></td><td>2022</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-20"><td>[20]</td><td>Netflix ze Store = aplikacja webowa na Edge</td><td><a href="https://www.windowslatest.com/2024/07/25/windows-11s-netflix-loses-downloads-downgraded-to-microsoft-edge-based-web-app/" target="_blank" rel="noopener">Windows Latest</a></td><td>2024-07-25</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-21"><td>[21]</td><td>Prior art: kiosk Chromium, spatial navigation, kopiowanie Widevine</td><td><a href="https://github.com/FromChaosComesClarity/NetflixHD" target="_blank" rel="noopener">GitHub NetflixHD</a></td><td>2026-10-08</td><td>2026-10-11</td><td>spatial navigation i kopia CDM obalone dla Windows przez [44][45]</td></tr><tr id="src-22"><td>[22]</td><td>netflix-navigator porzucony (2022-12)</td><td><a href="https://github.com/dutiyesh/netflix-navigator" target="_blank" rel="noopener">GitHub dutiyesh/netflix-navigator</a></td><td>2022-12</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-23"><td>[23]</td><td>NetflixController z wirtualną klawiaturą porzucony (2020-10)</td><td><a href="https://github.com/FThompson/NetflixController" target="_blank" rel="noopener">GitHub FThompson/NetflixController</a></td><td>2020-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-24"><td>[24]</td><td>Polyfill WICG zarchiwizowany</td><td><a href="https://github.com/WICG/spatial-navigation" target="_blank" rel="noopener">GitHub WICG/spatial-navigation</a></td><td>2026-03</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-25"><td>[25]</td><td>js-spatial-navigation: ostatni push 2024-05</td><td><a href="https://github.com/luke-chang/js-spatial-navigation" target="_blank" rel="noopener">GitHub luke-chang/js-spatial-navigation</a></td><td>2024-05</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-26"><td>[26]</td><td>Norigin aktywny, dla aplikacji React</td><td><a href="https://github.com/NoriginMedia/Norigin-Spatial-Navigation" target="_blank" rel="noopener">GitHub NoriginMedia</a></td><td>2026-09</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-27"><td>[27]</td><td>Switch `enable-spatial-navigation` nadal w Chromium</td><td><a href="https://github.com/chromium/chromium/blob/main/content/public/common/content_switches.cc" target="_blank" rel="noopener">Chromium content_switches.cc</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-28"><td>[28]</td><td>Skróty klawiszowe Netflixa w przeglądarce</td><td><a href="https://help.netflix.com/en/node/24855" target="_blank" rel="noopener">Netflix Help Center</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-29"><td>[29]</td><td>Wewnętrzne API playera Netflixa (wrapper PiP Mozilli)</td><td><a href="https://source-hub.etos-pro.ru/mozilla/gecko-dev/commit/2e684db116078bb8e0c82148cc1769ea60ee9c69" target="_blank" rel="noopener">Mozilla gecko-dev (mirror)</a></td><td>2022</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-30"><td>[30]</td><td>Jedna sesja SMTC na przeglądarkę, osobna dla PWA</td><td><a href="https://chromium.googlesource.com/chromium/src/+/lkgr/content/browser/media/system_media_controls" target="_blank" rel="noopener">Chromium system_media_controls</a></td><td>live</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-31"><td>[31]</td><td>Audio service w osobnym procesie na Windows</td><td><a href="https://chromium.googlesource.com/chromium/src/+/lkgr-android-internal/services/audio/README.md" target="_blank" rel="noopener">Chromium services/audio README</a></td><td>live</td><td>2026-10-11</td><td>wysoka (potwierdzone [48])</td></tr><tr id="src-32"><td>[32]</td><td>Wyciszanie per sesja audio (ISimpleAudioVolume)</td><td><a href="https://learn.microsoft.com/en-us/windows/win32/api/audiopolicy/nf-audiopolicy-iaudiosessionmanager-getsimpleaudiovolume" target="_blank" rel="noopener">Microsoft Learn</a></td><td>live</td><td>2026-10-11</td><td>sporne: `E_NOINTERFACE` na build 26300 [48]</td></tr><tr id="src-33"><td>[33]</td><td>Warunki SetForegroundWindow</td><td><a href="https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow" target="_blank" rel="noopener">Microsoft Learn</a></td><td>2025-10-06</td><td>2026-10-11</td><td>wysoka</td></tr><tr id="src-34"><td>[34]</td><td>RegisterHotKey kontra WH_KEYBOARD_LL</td><td><a href="https://api.codeproject.com/Articles/1273010/Global-Hotkeys-within-Desktop-Applications" target="_blank" rel="noopener">CodeProject</a></td><td>2019</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-35"><td>[35]</td><td>G20S Pro i Pro BT mają różne kody przycisków</td><td><a href="https://alexelec.run.place/docs/alexelec/docs/hid-remote" target="_blank" rel="noopener">AlexELEC docs</a></td><td>undated</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-36"><td>[36]</td><td>Moonlight-qt CLI i opcje</td><td><a href="https://github.com/moonlight-stream/moonlight-qt/blob/master/app/cli/commandlineparser.cpp" target="_blank" rel="noopener">GitHub moonlight-qt</a></td><td>2026-10</td><td>2026-10-11</td><td>wysoka (potwierdzone [48])</td></tr><tr id="src-37"><td>[37]</td><td>Wyciek `Runtime.enable` wykrywalny przez anty-bot</td><td><a href="https://apiserpent.com/blog/puppeteer-stealth-still-works-2026" target="_blank" rel="noopener">apiserpent blog</a></td><td>2026</td><td>2026-10-11</td><td>niska (unverified; Netflix nie reaguje [44])</td></tr><tr id="src-38"><td>[38]</td><td>CDP `Input` daje `isTrusted=true`, `dispatchEvent` nie; infobar `chrome.debugger`</td><td><a href="https://v2ex.com/t/1236297" target="_blank" rel="noopener">V2EX</a></td><td>2026</td><td>2026-10-11</td><td>wysoka (potwierdzone [45])</td></tr><tr id="src-39"><td>[39]</td><td>Chrome 142 Local Network Access</td><td><a href="https://blog.openreplay.com/de/chrome-local-network-access-lna-berechtigung/" target="_blank" rel="noopener">OpenReplay blog</a></td><td>2025</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-40"><td>[40]</td><td>Historyczny limit 720p dla Chrome</td><td><a href="https://www.pcworld.com/article/415654/confirmed-only-microsoft-edge-will-play-netflix-content-at-1080p-on-your-pc.html" target="_blank" rel="noopener">PCWorld</a></td><td>2016</td><td>2026-10-11</td><td>wysoka (jako historia)</td></tr><tr id="src-41"><td>[41]</td><td>Disney+ 1080p tylko w Edge (stare doniesienia)</td><td><a href="https://www.resetera.com/threads/why-full-hd-4k-is-not-working-on-disney-via-browser.252273/" target="_blank" rel="noopener">ResetEra</a></td><td>~2021</td><td>2026-10-11</td><td>niska</td></tr><tr id="src-42"><td>[42]</td><td>Edge: `--remote-debugging-port` + `--user-data-dir`</td><td><a href="https://learn.microsoft.com/microsoft-edge/devtools/protocol" target="_blank" rel="noopener">Microsoft Learn</a></td><td>live</td><td>2026-10-11</td><td>średnia</td></tr><tr id="src-43"><td>[43]</td><td>AttachThreadInput i ryzyko deadlocków</td><td><a href="https://www.purebasic.fr/english/viewtopic.php?p=377886" target="_blank" rel="noopener">PureBasic forum</a></td><td>~2012</td><td>2026-10-11</td><td>niska</td></tr><tr id="src-44"><td>[44]</td><td>Spike S1–S4 na UM760: jakość, DRM, CDP, Playwright, nowy profil (Edge i Chrome 155)</td><td>Spike MediaStation, pomiar własny</td><td>2026-10-12</td><td>2026-10-15</td><td>wysoka (2 przeglądarki, 4 warianty S2)</td></tr><tr id="src-45"><td>[45]</td><td>Spike S5–S7: spatial navigation, zaufane i niezaufane wejście, mapa fokusu, reguła Back</td><td>Spike MediaStation, pomiar własny</td><td>2026-10-13</td><td>2026-10-15</td><td>wysoka (Edge i Chrome, 2 przebiegi S7)</td></tr><tr id="src-46"><td>[46]</td><td>Spike C1–C3: wariant C (rozszerzenie bez portu CDP)</td><td>Spike MediaStation, pomiar własny</td><td>2026-10-13</td><td>2026-10-15</td><td>wysoka</td></tr><tr id="src-47"><td>[47]</td><td>Spike S8: pauza 30 min w oknie zminimalizowanym i ukrytym</td><td>Spike MediaStation, pomiar własny</td><td>2026-10-14</td><td>2026-10-15</td><td>średnia (unverified; jedna próba na wariant)</td></tr><tr id="src-48"><td>[48]</td><td>Spike S9–S11: wyciszanie, Home z pilota (dongle USB), foreground, Moonlight</td><td>Spike MediaStation, pomiar własny</td><td>2026-10-14</td><td>2026-10-15</td><td>wysoka (S10 16/16; tylko dongle)</td></tr></tbody></table></details><h2 id="stale">Staleness map</h2><p>Tabela pochodzi z <code>recon_kit.py staleness</code> (2026-10-15). Okna świeżości z pakietu technicznego: wersje i kompatybilność 1 mies., ekosystem 6 mies., landscape 12 mies., wzorce 24 mies. Pomiary spike'u są w klasie wersji, bo zależą od Edge i Chrome 155 oraz bieżącego UI Netflixa.</p>
 <table>
 <thead>
 <tr>
@@ -348,89 +499,124 @@ details{margin-top:2em}summary{cursor:pointer;font-weight:600;font-size:1.2rem}t
 </thead>
 <tbody>
 <tr>
-<td><a class="cite" href="#src-1">[1]</a><a class="cite" href="#src-2">[2]</a> Netflix: Chrome i Edge do 2160p</td>
+<td><a class="cite" href="#src-1">[1]</a><a class="cite" href="#src-44">[44]</a> Netflix 1080p w Edge i Chrome 155</td>
 <td>wersje</td>
-<td>2026-08</td>
-<td>2026-09-01</td>
-<td><span class="b warn">⚠ ryzyko</span> przeterminowane wg daty publikacji; strona Netflix <a class="cite" href="#src-1">[1]</a> sprawdzona live 2026-10-11</td>
+<td>2026-10-12</td>
+<td>2026-11-12</td>
+<td>świeże (pomiar)</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-7">[7]</a><a class="cite" href="#src-44">[44]</a> reguły <code>navigator.webdriver</code></td>
+<td>wersje</td>
+<td>2026-10-12</td>
+<td>2026-11-12</td>
+<td>świeże</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-44">[44]</a> Netflix nie reaguje na CDP ani Playwright</td>
+<td>wersje</td>
+<td>2026-10-12</td>
+<td>2026-11-12</td>
+<td>świeże</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-44">[44]</a> Widevine CDM w katalogu instalacji</td>
+<td>wersje</td>
+<td>2026-10-12</td>
+<td>2026-11-12</td>
+<td>świeże</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-45">[45]</a> spatial navigation odrzucona; selektory UI Netflixa</td>
+<td>wersje</td>
+<td>2026-10-13</td>
+<td>2026-11-13</td>
+<td>świeże; selektory starzeją się z każdym wdrożeniem UI Netflixa</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-46">[46]</a> wariant C bez ostrzeżeń, <code>--autoplay-policy</code></td>
+<td>wersje</td>
+<td>2026-10-13</td>
+<td>2026-11-13</td>
+<td>świeże</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-47">[47]</a> pauza 30 min: minimalizacja tak, SW_HIDE nie</td>
+<td>wersje</td>
+<td>2026-10-14</td>
+<td>2026-11-14</td>
+<td>świeże, jedna próba</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-36">[36]</a><a class="cite" href="#src-48">[48]</a> Moonlight-qt 6.2.0 CLI i zachowanie okna</td>
+<td>wersje</td>
+<td>2026-10-14</td>
+<td>2026-11-14</td>
+<td>świeże</td>
 </tr>
 <tr>
 <td><a class="cite" href="#src-3">[3]</a> HDR i Atmos tylko w Edge</td>
 <td>wersje</td>
 <td>2026-08</td>
-<td>2026-09-01</td>
-<td><span class="b warn">⚠ ryzyko</span> przeterminowane, jedno źródło; sprawdzić w S1</td>
+<td>2026-09-15</td>
+<td><span class="b warn">⚠️ przeterminowane</span>, jedno źródło; sprawdzić na TV</td>
 </tr>
 <tr>
 <td><a class="cite" href="#src-5">[5]</a> Chrome 136: user-data-dir</td>
 <td>wersje</td>
 <td>2025-03</td>
-<td>2025-04-01</td>
-<td><span class="b warn">⚠ ryzyko</span> przeterminowane wg publikacji; zachowanie potwierdzone na Chrome 151 <a class="cite" href="#src-6">[6]</a></td>
+<td>2025-04-17</td>
+<td><span class="b warn">⚠️ przeterminowane</span> wg publikacji; port z własnym profilem działa na 155 <a class="cite" href="#src-44">[44]</a></td>
 </tr>
 <tr>
 <td><a class="cite" href="#src-11">[11]</a> Chrome 137: brak <code>--load-extension</code></td>
 <td>wersje</td>
 <td>2025-04</td>
-<td>2025-05-01</td>
-<td><span class="b warn">⚠ ryzyko</span> przeterminowane; sprawdzić przed wyborem C</td>
+<td>2025-05-15</td>
+<td><span class="b warn">⚠️ przeterminowane</span>; sprawdzić przed wyborem C</td>
 </tr>
 <tr>
 <td><a class="cite" href="#src-17">[17]</a><a class="cite" href="#src-18">[18]</a> WebView2: DRM</td>
 <td>wersje</td>
 <td>2024-09</td>
-<td>2024-10-01</td>
-<td><span class="b warn">⚠ ryzyko</span> przeterminowane wg publikacji; stan issue (open) sprawdzony 2026-10-11</td>
-</tr>
-<tr>
-<td><a class="cite" href="#src-7">[7]</a> reguły <code>navigator.webdriver</code></td>
-<td>wersje</td>
-<td>2026-10</td>
-<td>2026-11-01</td>
-<td>świeże</td>
-</tr>
-<tr>
-<td><a class="cite" href="#src-9">[9]</a><a class="cite" href="#src-10">[10]</a> flagi Playwrighta</td>
-<td>wersje</td>
-<td>2026-10</td>
-<td>2026-11-01</td>
-<td>świeże</td>
-</tr>
-<tr>
-<td><a class="cite" href="#src-36">[36]</a> Moonlight-qt CLI</td>
-<td>wersje</td>
-<td>2026-10</td>
-<td>2026-11-01</td>
-<td>świeże</td>
+<td>2024-10-15</td>
+<td><span class="b warn">⚠️ przeterminowane</span> wg publikacji; stan issue (open) sprawdzony 2026-10-11</td>
 </tr>
 <tr>
 <td><a class="cite" href="#src-37">[37]</a> wyciek <code>Runtime.enable</code></td>
 <td>ekosystem</td>
 <td>2026-06</td>
-<td>2026-12-01</td>
+<td>2026-12-15</td>
 <td>świeże</td>
 </tr>
 <tr>
 <td><a class="cite" href="#src-22">[22]</a>–<a class="cite" href="#src-26">[26]</a> biblioteki i rozszerzenia</td>
 <td>ekosystem</td>
 <td>2026-10</td>
-<td>2027-04-01</td>
+<td>2027-04-11</td>
 <td>świeże</td>
 </tr>
 <tr>
-<td>brak doniesień o blokadzie automatyzacji</td>
+<td><a class="cite" href="#src-44">[44]</a> brak blokady automatyzacji (doniesienia + pomiar)</td>
 <td>landscape</td>
-<td>2026-10</td>
-<td>2027-10-01</td>
+<td>2026-10-12</td>
+<td>2027-10-12</td>
+<td>świeże</td>
+</tr>
+<tr>
+<td><a class="cite" href="#src-48">[48]</a> kody HID pilota G20S Pro (dongle)</td>
+<td>wzorce</td>
+<td>2026-10-13</td>
+<td>2028-10-13</td>
 <td>świeże</td>
 </tr>
 <tr>
 <td><a class="cite" href="#src-30">[30]</a><a class="cite" href="#src-31">[31]</a> SMTC i audio service</td>
 <td>wzorce</td>
 <td>2026-10</td>
-<td>2028-10-01</td>
+<td>2028-10-11</td>
 <td>świeże</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Najwcześniejszy re-check: 2026-11-01</strong> dla klas wersji. Twierdzenia oznaczone <span class="b warn">⚠ ryzyko</span> zostały potwierdzone jako nadal aktualne podczas tego runu. Mimo to warto je zweryfikować ponownie przy Refresh, najlepiej razem z wynikami spike'u.</p></main></body></html>
+<p><strong>Najwcześniejszy re-check dla świeżych twierdzeń: 2026-11-12</strong> (pomiary spike'u na Edge i Chrome 155). Przy następnym wydaniu Edge lub Chrome warto powtórzyć S1, S2 i S7 harnessem spike'u, a twierdzenia ⚠️ zweryfikować przy Refresh.</p></main></body></html>
