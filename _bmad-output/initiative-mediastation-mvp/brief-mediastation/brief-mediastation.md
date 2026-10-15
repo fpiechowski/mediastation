@@ -2,7 +2,7 @@
 title: "Product Brief: MediaStation"
 status: final
 created: 2026-10-10
-updated: 2026-10-11
+updated: 2026-10-15
 ---
 
 # Product Brief: MediaStation
@@ -75,6 +75,8 @@ Warunki techniczne, bez których powyższe kryteria nie mają szans się spełni
 - Kolejne serwisy streamingowe (Prime Video, HBO Max itd.), które dojdą po sprawdzeniu wzorca na Netfliksie.
 - Nawigacja D-padem w Plexie i aplikacjach natywnych.
 - Przełącznik otwartych aplikacji pod przytrzymaniem Home.
+- Widgety z poleceniami na ekranie głównym, żeby MediaStation był czymś więcej niż launcherem (szczegóły w addendum).
+- Kafelki Moonlight per host i per gra zamiast jednej ikony Moonlighta (szczegóły w addendum).
 - Automatyczna obsługa awarii (popupy aktualizacji, wylogowanie, utrata sieci). W MVP rozwiązywane ręcznie.
 - Autostart z Windowsem i ukrycie pulpitu, które autor konfiguruje sam, poza produktem.
 - HDMI-CEC, którego UM760 nie obsługuje. Telewizor włącza się jego własnym pilotem.
@@ -90,3 +92,4 @@ MediaStation całkowicie zastępuje VIDAA w salonie. Każdy serwis streamingowy,
 - **Jakość per serwis:** HDR i Atmos w Netfliksie są dziś dostępne tylko w Edge, a Prime Video, Disney+ i HBO Max w przeglądarkach desktopowych mają podobno limit ok. 720p. Przy obecnym celu Full HD nie blokuje to MVP, ale może wpłynąć na wybór przeglądarki dla kolejnych serwisów.
 - **Kruchość nawigacji D-padem:** zmiany UI Netflixa mogą psuć nawigację. W MVP akceptujemy, że autor dostarcza poprawki ręcznie.
 - **Klawiatura ekranowa poza serwisami webowymi:** koszt jej automatycznego pokazywania jest do oszacowania.
+- **Ocena na Filmwebie / IMDb po seansie:** pod koniec filmu MediaStation mógłby zaproponować ocenę obejrzanej produkcji. Żona dużo ocenia na Filmwebie, a VIDAA tego nie daje, więc to potencjalnie mocny powód do zmiany nawyku. Otwarte: identyfikacja tytułu, brak publicznego API do ocen, tańszy wariant z kodem QR. Decyzja „MVP czy kolejna inicjatywa” zapadnie po `bmad-forge-idea`.

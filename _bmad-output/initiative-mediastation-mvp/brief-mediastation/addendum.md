@@ -67,3 +67,26 @@ The approach for controlling streaming services (D-pad navigation, pause, playba
 - A browser extension that talks to MediaStation over native messaging or a localhost WebSocket.
 
 Decide on the basis of dedicated technical research and early spikes against Netflix (see "Early risks to spike" above), not on the basis of this list.
+
+## Post-MVP feature ideas (2026-10-15)
+
+Ideas raised after the brief was finalized. Triaged against the success criterion (does the wife choose MediaStation over VIDAA without help).
+
+### Home-screen recommendation widgets
+
+- Goal: a home screen with content widgets (recommendations, continue watching), not only app tiles.
+- Scraping the streaming services is fragile and adds to two existing risks: D-pad navigation breaking on UI changes and automation detection.
+- Before deciding, compare API-based sources (e.g. TMDB, Trakt, JustWatch) with `bmad-deep-recon`. ? Coverage and terms not verified.
+- Out of MVP: the wife already gets recommendations inside Netflix, so it does not move the success criterion.
+
+### Moonlight tiles per host and per game
+
+- Goal: one tile per paired host instead of a generic Moonlight icon; in a Games category, one tile per game on the host.
+- Likely path: read paired hosts from Moonlight's config, list apps with `Moonlight.exe list <host>`, launch with `Moonlight.exe stream <host> <app>`. ? CLI not verified; check `Moonlight.exe --help` on the UM760.
+- Out of MVP: serves the author, not the success criterion. Probably cheap, so a good first ticket in the next initiative.
+
+### Rating prompt after watching (open, see brief)
+
+- Near the end of playback, offer to rate the title on Filmweb (the wife rates a lot there) or IMDb.
+- Unknowns: mapping the service's title to the Filmweb/IMDb entry (Polish titles, series vs. episodes); ? no public rating API for either site (unverified), so either site automation or opening the title page, which then needs D-pad navigation too; a cheaper variant shows a QR code to rate on the phone.
+- To be pressure-tested with `bmad-forge-idea` before deciding MVP vs. next initiative.
