@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge: ocena na Filmwebie</title>
+<style>
+:root{--bg:#f6f1e7;--paper:#fffdf8;--ink:#2a2420;--muted:#6b6058;--line:#e2d8c8;--seal:#9e2a2b;--seal2:#7a1f20;--ok:#2f6b3a;--no:#8a3b2b}
+@media (prefers-color-scheme: dark){:root{--bg:#1b1816;--paper:#24201d;--ink:#eee6da;--muted:#a89c90;--line:#3a332e;--seal:#c24a4b;--seal2:#8f2c2d;--ok:#7fbf86;--no:#d98a74}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Georgia,"Times New Roman",serif}
+main{max-width:860px;margin:0 auto;padding:32px 16px 64px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:28px}
+header{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+header .t{flex:1;min-width:260px}
+h1{font-size:28px;margin:0 0 6px}
+h2{font-size:18px;margin:28px 0 10px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.sub{color:var(--muted);margin:0}
+ul{margin:0;padding-left:20px}
+li{margin:4px 0}
+.lock li::marker{content:"🔒 "}
+.rej li::marker{content:"✕  ";color:var(--no)}
+.open li::marker{content:"?  ";color:var(--muted)}
+.cast{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.p{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.p b{display:block}
+.p i{color:var(--muted);font-size:14px}
+.verdict{font-size:18px;color:var(--ok);font-weight:bold;margin:10px 0 0}
+footer{color:var(--muted);font-size:13px;margin-top:20px}
+</style>
+</head>
+<body>
+<main><div class="card">
+<header>
+<svg width="150" height="150" viewBox="0 0 150 150" aria-label="Pieczęć HARDENED">
+  <path d="M75 6 L86 16 L100 10 L106 24 L121 24 L122 39 L136 45 L131 59 L142 70 L133 82 L140 96 L127 103 L127 118 L112 119 L106 133 L92 128 L80 139 L69 129 L55 135 L48 121 L33 121 L32 106 L18 100 L24 86 L12 76 L22 64 L14 51 L28 44 L28 29 L43 27 L48 13 L62 18 Z" fill="var(--seal)"/>
+  <circle cx="75" cy="73" r="46" fill="none" stroke="var(--seal2)" stroke-width="3"/>
+  <circle cx="75" cy="73" r="39" fill="none" stroke="#f3d9c9" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <text x="75" y="70" text-anchor="middle" font-family="Georgia,serif" font-size="15" font-weight="bold" fill="#fbe9dd" letter-spacing="1">HARDENED</text>
+  <text x="75" y="88" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#f3d9c9">2026-10-15 · MVP</text>
+</svg>
+<div class="t">
+<h1>Przypomnienie o ocenie na Filmwebie</h1>
+<p class="sub">MediaStation · initiative-mediastation-mvp · bmad-forge-idea</p>
+<p class="verdict">Wchodzi do MVP w wariancie minimalnym: wiersz „Do oceny” z kodem QR.</p>
+</div>
+</header>
+
+<h2>Dlaczego to się broni</h2>
+<ul>
+<li>Żona ocenia po seansie na telefonie, musi szukać tytułu, czasem zapomina, a zależy jej na kompletności ocen.</li>
+<li>Reszta zakresu MVP to parytet z VIDAA. To jedyna funkcja, która daje powód, żeby <em>woleć</em> MediaStation.</li>
+</ul>
+
+<h2>Zablokowane decyzje</h2>
+<ul class="lock">
+<li>Ocena przez kod QR na telefonie. Ocena na TV nie daje nic ponad QR.</li>
+<li>Serial oceniany jako całość, po skończonym sezonie. Film po seansie, odcinki wcale.</li>
+<li>Dowolny profil Netflixa, neutralny tekst; konto Filmwebu należy do tego, kto skanuje.</li>
+<li>Docelowo dwa miejsca i jedna kolejka: toast przy napisach i wiersz „Do oceny” na ekranie głównym.</li>
+<li>MVP: wiersz „Do oceny” + QR z URL-em wyszukiwania + próg ~90% dla filmu + <code>SxEy</code> dla sezonu.</li>
+<li>Kolejna inicjatywa: toast nad pełnoekranowym Edge i mapowanie przez Wikidata (P1874 → P5032).</li>
+</ul>
+
+<h2>Odrzucone</h2>
+<ul class="rej">
+<li>Strona Filmwebu w Chrome z D-padem: kolejna krucha integracja (logowanie, cookie-wall, reklamy) bez wartości ponad QR.</li>
+<li>Ocena z pilota: brak oficjalnego API w Filmwebie i IMDb, a nieoficjalne obejścia to szara strefa ToS.</li>
+<li>Karta tylko po seansach na profilu żony: gubi wspólne seriale oglądane na profilu autora.</li>
+<li>IMDb: żona ocenia na Filmwebie.</li>
+</ul>
+
+<h2>Słabe punkty, które przetrwały</h2>
+<ul class="open">
+<li>Wykrycie ostatniego odcinka sezonu przy starcie z „Continue Watching” nie było testowane w spike'u.</li>
+<li>Czy link z QR otwiera aplikację Filmweb, czy przeglądarkę mobilną bez zalogowania.</li>
+<li>Tytuł w playerze zależy od języka profilu; nie wiadomo, czy wyszukiwarka Filmwebu go znajdzie.</li>
+<li>„Oceniłam” jest ręczne, bo MediaStation nie wie, czy ocena została wystawiona.</li>
+<li>Dodatkowy zakres przy niedokończonym parytecie (Back, mapa fokusu, wznawianie).</li>
+</ul>
+
+<h2>Kto przesłuchiwał pomysł</h2>
+<div class="cast">
+<div class="p"><b>📋 John · PM</b><i>„Wybór zapada na początku wieczoru, a toast pojawia się na końcu.” Potem: „To jedyna rzecz, która ciągnie”.</i></div>
+<div class="p"><b>🎨 Sally · UX</b><i>„Ona już trzyma telefon w ręce.” Wymusiła QR i drugie miejsce na przypomnienie.</i></div>
+<div class="p"><b>🏗️ Winston · architekt</b><i>Serial czy odcinek decyduje o częstotliwości i mapowaniu.</i></div>
+<div class="p"><b>💻 Amelia · dev</b><i>Profil Netflixa jest wykrywalny; reguła zależy od tego, kto ogląda.</i></div>
+<div class="p"><b>🎞️ Bożena · 2 800 ocen</b><i>(wygenerowana) Oceniam na telefonie, serial raz po sezonie.</i></div>
+<div class="p"><b>🔧 Marek · integracje</b><i>(wygenerowany) Chrome z Filmwebem to trzecia krucha integracja, a parytet jeszcze nie działa.</i></div>
+<div class="p"><b>🧑‍⚖️ Tomasz · mediator</b><i>(wygenerowany) Prośba o ocenę trafiona w złą osobę niszczy zaufanie.</i></div>
+<div class="p"><b>🕰️ Irena · powiadomienia</b><i>(wygenerowana) Pokaż w momencie, ale nie zabieraj, gdy ktoś zignoruje.</i></div>
+</div>
+
+<footer>Forged idea: forge-filmweb-rating-prompt.md · memlog: .memlog.md</footer>
+</div></main>
+</body>
+</html>
