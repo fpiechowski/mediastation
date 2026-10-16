@@ -35,7 +35,7 @@ created: 2026-10-15
 
 ## Do sprawdzenia przy implementacji
 
-- Wykrycie ostatniego odcinka sezonu przy starcie z „Continue Watching” (czy lista odcinków jest dostępna bez modala). Fallback do decyzji w architekturze.
+- Wykrycie ostatniego odcinka sezonu przy starcie z „Continue Watching” (czy lista odcinków jest dostępna bez modala). Fallback rozstrzygnięty w architekturze (architecture spine, AD-12): gdy nie da się ustalić końca sezonu, serial czeka jako „w zawieszeniu”, a karta pojawia się po N dniach bez kolejnego odcinka.
 - Czy QR z linkiem filmweb.pl otwiera aplikację Filmweb na telefonie żony, czy przeglądarkę mobilną (sprawdzenie zajmuje minutę).
 - Język tytułu w playerze zależy od języka profilu (np. angielski na profilu autora). Trzeba sprawdzić, czy wyszukiwarka Filmwebu znajduje tytuły oryginalne i angielskie.
 - „Oceniłam” jest ręczne, bo MediaStation nie wie, czy ocena została wystawiona.
