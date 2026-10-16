@@ -85,8 +85,9 @@ Ideas raised after the brief was finalized. Triaged against the success criterio
 - Likely path: read paired hosts from Moonlight's config, list apps with `Moonlight.exe list <host>`, launch with `Moonlight.exe stream <host> <app>`. ? CLI not verified; check `Moonlight.exe --help` on the UM760.
 - Out of MVP: serves the author, not the success criterion. Probably cheap, so a good first ticket in the next initiative.
 
-### Rating prompt after watching (open, see brief)
+### Rating prompt after watching (resolved: in MVP, minimal variant)
 
-- Near the end of playback, offer to rate the title on Filmweb (the wife rates a lot there) or IMDb.
-- Unknowns: mapping the service's title to the Filmweb/IMDb entry (Polish titles, series vs. episodes); ? no public rating API for either site (unverified), so either site automation or opening the title page, which then needs D-pad navigation too; a cheaper variant shows a QR code to rate on the phone.
-- To be pressure-tested with `bmad-forge-idea` before deciding MVP vs. next initiative.
+- The brief holds the scope. The forge holds the rationale, the rejected options and the implementation checks: [forge-filmweb-rating-prompt.md](../forge-filmweb-rating-prompt/forge-filmweb-rating-prompt.md). IMDb is out of scope, because the wife rates only on Filmweb.
+- Neither Filmweb nor IMDb has an official rating API. The alternatives are unofficial mobile-app APIs, scrapers or session cookies, which are fragile and sit in a ToS grey area. That is why rating happens on the phone through a QR code and not from the remote.
+- Title-page mapping (next initiative): Wikidata Netflix ID (P1874) → Filmweb film ID (P5032). ? Coverage of new titles is not verified.
+- Netflix `/watch/<id>` carries the episode id, not the series id. The series id is only available if the user went through `/title/<id>` or `jbv` first, so mapping has to work at series level.
