@@ -34,6 +34,7 @@ MediaStation to pełnoekranowa nakładka na Windows 11, która zamienia mini PC 
 4. Wybiera profil, przechodzi po wierszach i wchodzi w odcinek wyłącznie D-padem. Gdy trzeba coś wpisać, pojawia się klawiatura ekranowa obsługiwana strzałkami.
 5. Back cofa ekran po ekranie, a z ekranu głównego Netflixa wraca do MediaStation. Home w każdej chwili przenosi prosto do ekranu głównego MediaStation.
 6. W trakcie odcinka przechodzi do innej aplikacji. Netflix pauzuje i milknie, ale się nie zamyka. Po powrocie jest dokładnie tam, gdzie była, z odcinkiem na pauzie. Wznawia go przyciskiem OK.
+7. Po seansie na ekranie głównym czeka karta „Do oceny” z kodem QR. Skanuje go telefonem i ocenia tytuł na Filmwebie, nie szukając go i nie pamiętając o nim. Reszta MVP zapewnia parytet z VIDAA, a ta funkcja jako jedyna daje jej powód, żeby wolała MediaStation.
 
 **Zasady obowiązujące w całym produkcie:**
 
@@ -69,6 +70,7 @@ Warunki techniczne, bez których powyższe kryteria nie mają szans się spełni
 - Plex i inne aplikacje natywne: tylko uruchamianie i powrót do ekranu głównego.
 - Home działający zawsze, także gdy MediaStation nie ma fokusu.
 - Akcja „zamknij / uruchom ponownie aplikację” z poziomu ekranu głównego, dostępna z pilota.
+- Przypomnienie o ocenie na Filmwebie w wariancie minimalnym: wiersz „Do oceny” na ekranie głównym, a w nim karty z kodem QR do wyszukiwarki Filmwebu z tytułem z playera Netflixa. Film trafia do kolejki po obejrzeniu ok. 90%, a serial, oceniany jako całość, po ostatnim odcinku sezonu. Działa to na dowolnym profilu Netflixa. Karta czeka, aż ktoś wybierze „Oceniłam” albo „Pomiń”.
 
 **Poza MVP:**
 
@@ -77,6 +79,7 @@ Warunki techniczne, bez których powyższe kryteria nie mają szans się spełni
 - Przełącznik otwartych aplikacji pod przytrzymaniem Home.
 - Widgety z poleceniami na ekranie głównym, żeby MediaStation był czymś więcej niż launcherem (szczegóły w addendum).
 - Kafelki Moonlight per host i per gra zamiast jednej ikony Moonlighta (szczegóły w addendum).
+- Rozbudowa przypomnienia o ocenie: toast z kodem QR przy napisach końcowych, wyświetlany nad odtwarzaczem, oraz otwieranie strony tytułu na Filmwebie zamiast wyszukiwarki, dzięki mapowaniu przez Wikidata (szczegóły w addendum).
 - Automatyczna obsługa awarii (popupy aktualizacji, wylogowanie, utrata sieci). W MVP rozwiązywane ręcznie.
 - Autostart z Windowsem i ukrycie pulpitu, które autor konfiguruje sam, poza produktem.
 - HDMI-CEC, którego UM760 nie obsługuje. Telewizor włącza się jego własnym pilotem.
@@ -92,4 +95,4 @@ MediaStation całkowicie zastępuje VIDAA w salonie. Każdy serwis streamingowy,
 - **Jakość per serwis:** HDR i Atmos w Netfliksie są dziś dostępne tylko w Edge, a Prime Video, Disney+ i HBO Max w przeglądarkach desktopowych mają podobno limit ok. 720p. Przy obecnym celu Full HD nie blokuje to MVP, ale może wpłynąć na wybór przeglądarki dla kolejnych serwisów.
 - **Kruchość nawigacji D-padem:** zmiany UI Netflixa mogą psuć nawigację. W MVP akceptujemy, że autor dostarcza poprawki ręcznie.
 - **Klawiatura ekranowa poza serwisami webowymi:** koszt jej automatycznego pokazywania jest do oszacowania.
-- **Ocena na Filmwebie / IMDb po seansie:** pod koniec filmu MediaStation mógłby zaproponować ocenę obejrzanej produkcji. Żona dużo ocenia na Filmwebie, a VIDAA tego nie daje, więc to potencjalnie mocny powód do zmiany nawyku. Otwarte: identyfikacja tytułu, brak publicznego API do ocen, tańszy wariant z kodem QR. Decyzja „MVP czy kolejna inicjatywa” zapadnie po `bmad-forge-idea`.
+- **Przypomnienie o ocenie na Filmwebie:** zakres jest rozstrzygnięty (patrz „Zakres MVP”), ale przy implementacji trzeba sprawdzić trzy rzeczy. Po pierwsze, czy da się wykryć ostatni odcinek sezonu, gdy odcinek startuje z „Continue Watching”. Po drugie, czy kod QR z linkiem filmweb.pl otwiera aplikację Filmweb, czy przeglądarkę mobilną. Po trzecie, czy wyszukiwarka Filmwebu znajduje tytuł w języku profilu Netflixa, np. angielski.
