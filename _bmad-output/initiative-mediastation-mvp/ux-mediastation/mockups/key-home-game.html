@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>MediaStation · Home Game</title>
+<style>
+  /*
+    Key screen: Home → zakładka Game (J2) + Home → zakładka Audio (pusta).
+    Governing spine sections:
+      DESIGN.md     → frontmatter tokens; Colors; Typography; Layout & Spacing; Elevation & Depth;
+                      Shapes; Components (Focus ring, Tile, State dot, Tab + tab-running-dot, Logo, Avatar).
+      EXPERIENCE.md → Information Architecture (Home → Game, Home → Audio); Voice and Tone
+                      („W tle”, „Pusta Audio”); Component Patterns (Focus ring, Tab, Tile, Chip / state dot);
+                      State Patterns (Kafelek Background; Powrót na Home; Pusta Audio);
+                      Accessibility Floor (stan nigdy tylko kolorem); Key Flows J2 krok 4.
+    Section 1: Moonlight w tle (wyciszony, sesja żyje), fokus na kafelku; kropki na Game i Video (Netflix też w tle).
+               R6: chip „Wyciszony” + linia stanu „W tle · wyciszony” (tabela stanów kafelka).
+    Section 2: zakładka Audio aktywna, empty state (R13: body, text-2, w pasie kafelków); brak fokusowalnych
+               elementów → fokus na zakładce jako odwrócona pigułka (R5: białe wypełnienie, tekst ground, bez skali).
+    Fonts: local only, no network fetch. Viewport: 1920×1080 per screen.
+  */
+  :root {
+    --ground: #0F1012; --surface-dim: #1A1C20; --surface: #1E2024; --surface-2: #26292E; --line: #33363C;
+    --text: #FFFFFF; --text-2: #C4C7CC; --text-3: #9AA0A6; --accent: #8AB4F8; --focus: #FFFFFF;
+    --tile-mark: #E6E8EB; --tile-gradient-top: #2A2D33; --scrim: #0F1012B8;
+    --qr-bg: #FFFFFF; --qr-ink: #111111;
+    --avatar-from: #E8A87C; --avatar-to: #C77D9B; --avatar-ink: #1A1214;
+    --r-qr: 14px; --r-card: 20px; --r-tile: 22px; --r-full: 9999px;
+    --gutter: 112px; --bar-top: 56px; --tabs-top: 172px; --apps-top: 292px; --rate-top: 732px;
+    --tile-gap: 48px; --card-gap: 40px; --meta-gap: 30px; --meta-gap-focused: 44px;
+    --focus-shadow: 0 28px 56px rgba(0,0,0,.6), 0 10px 20px rgba(0,0,0,.45);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; background: var(--ground); }
+  body {
+    color: var(--text); cursor: none;
+    font-family: "Roboto Flex", Roboto, "Segoe UI", system-ui, sans-serif;
+    font-variation-settings: "opsz" 32;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection { background: var(--surface-2); color: var(--text); }
+
+  .screen { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--ground); }
+  .screen::before {
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 520px; pointer-events: none;
+    background: radial-gradient(1200px 520px at 30% -10%, rgba(138,180,248,.07), transparent 70%);
+  }
+
+  /* Header */
+  .bar { position: absolute; top: var(--bar-top); left: var(--gutter); right: var(--gutter);
+    display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand svg { width: 48px; height: 48px; display: block; }
+  .brand b { font-size: 32px; font-weight: 600; letter-spacing: -0.01em; }
+  .greet { display: flex; align-items: center; gap: 16px; margin-left: 56px; padding-left: 56px;
+    border-left: 2px solid var(--line); font-size: 28px; font-weight: 400; color: var(--text-2); }
+  .avatar { width: 48px; height: 48px; border-radius: var(--r-full); display: grid; place-items: center;
+    background: linear-gradient(140deg, var(--avatar-from), var(--avatar-to));
+    color: var(--avatar-ink); font-size: 24px; font-weight: 650; }
+  .time { font-size: 32px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-2); }
+
+  /* Tabs */
+  .tabs { position: absolute; top: var(--tabs-top); left: var(--gutter); display: flex; gap: 12px; }
+  .tab { height: 64px; padding: 0 32px; border-radius: var(--r-full); display: flex; align-items: center;
+    gap: 12px; font-size: 30px; font-weight: 500; color: var(--text-3); }
+  .tab.on { background: var(--surface-2); color: var(--text); }
+  .tab.focus { background: var(--focus); color: var(--ground); }   /* focus-pill (R5) */
+  .tab .run { width: 12px; height: 12px; border-radius: var(--r-full); background: var(--accent);
+    box-shadow: 0 0 0 4px rgba(138,180,248,.18); }
+
+  /* Tiles */
+  .apps { position: absolute; top: var(--apps-top); left: var(--gutter); display: flex; gap: var(--tile-gap); }
+  .app { width: 544px; }
+  .tile { height: 306px; border-radius: var(--r-tile); position: relative; display: grid; place-items: center;
+    background: linear-gradient(160deg, var(--tile-gradient-top) 0%, var(--surface) 60%);
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+    transition: transform 150ms cubic-bezier(.16,1,.3,1), box-shadow 150ms cubic-bezier(.16,1,.3,1); }
+  .tile .mark { font-size: 64px; font-weight: 650; letter-spacing: -0.02em; color: var(--tile-mark); }
+  .app.focus .tile { transform: scale(1.08); outline: 5px solid var(--focus); outline-offset: 0;
+    box-shadow: var(--focus-shadow); }
+  .meta { margin-top: var(--meta-gap); height: 72px; }
+  .app.focus .meta { margin-top: var(--meta-gap-focused); }
+  .meta .name { font-size: 30px; font-weight: 600; color: var(--text); }
+  .app:not(.focus) .meta .name { color: var(--text-3); font-weight: 500; }
+  .meta .state { margin-top: 6px; font-size: 26px; line-height: 1.3; color: var(--text-2);
+    display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+  .chip { position: absolute; left: 24px; bottom: 24px; height: 44px; padding: 0 18px 0 14px;
+    border-radius: var(--r-full); background: var(--scrim); display: flex; align-items: center; gap: 10px;
+    font-size: 24px; font-weight: 400; color: var(--text); white-space: nowrap; }
+  .chip svg { width: 22px; height: 22px; display: block; flex: none; }
+  .meta .state i { flex: none; width: 10px; height: 10px; border-radius: var(--r-full); background: var(--accent); }
+
+  /* Pusta Audio — jedno zdanie w pasie kafelków */
+  .empty { position: absolute; top: var(--apps-top); left: var(--gutter);
+    font-size: 26px; font-weight: 400; line-height: 1.3; color: var(--text-2); max-width: 65ch; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="logo" viewBox="0 0 48 48"><rect x="2" y="8" width="44" height="32" rx="9" fill="none" stroke="currentColor" stroke-width="3.2"/><path d="M20 17.5v13l11-6.5z" fill="currentColor"/></symbol>
+  <symbol id="pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="2" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="2" fill="currentColor"/></symbol>
+  <symbol id="muted" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+</svg>
+
+<!-- ============ Screen 1: Game, Moonlight w tle, fokus na kafelku (J2 krok 4) ============ -->
+<section class="screen" aria-label="Home, Game, fokus na kafelku Moonlight">
+  <header class="bar">
+    <div class="brand">
+      <svg aria-hidden="true"><use href="#logo"/></svg>
+      <b>MediaStation</b>
+      <div class="greet"><span class="avatar">E</span>Dobry wieczór, Eliza</div>
+    </div>
+    <div class="time">21:58</div>
+  </header>
+
+  <nav class="tabs">
+    <div class="tab">Video <span class="run" role="img" aria-label="W tle"></span></div>
+    <div class="tab">Audio</div>
+    <div class="tab on">Game <span class="run" role="img" aria-label="W tle"></span></div>
+  </nav>
+
+  <section class="apps">
+    <div class="app focus">
+      <div class="tile"><span class="mark">Moonlight</span>
+        <span class="chip"><svg aria-hidden="true"><use href="#muted"/></svg>Wyciszony</span></div>
+      <div class="meta"><div class="name">Moonlight</div>
+        <div class="state"><i></i>W tle · wyciszony</div></div>
+    </div>
+  </section>
+</section>
+
+<!-- ============ Screen 2: Audio, pusta zakładka, fokus na zakładce ============ -->
+<section class="screen" aria-label="Home, Audio, pusta zakładka">
+  <header class="bar">
+    <div class="brand">
+      <svg aria-hidden="true"><use href="#logo"/></svg>
+      <b>MediaStation</b>
+      <div class="greet"><span class="avatar">E</span>Dobry wieczór, Eliza</div>
+    </div>
+    <div class="time">21:58</div>
+  </header>
+
+  <nav class="tabs">
+    <div class="tab">Video <span class="run" role="img" aria-label="W tle"></span></div>
+    <div class="tab on focus">Audio</div>
+    <div class="tab">Game <span class="run" role="img" aria-label="W tle"></span></div>
+  </nav>
+
+  <p class="empty">Tu jeszcze cisza. Muzyka dojdzie wkrótce.</p>
+</section>
+</body>
+</html>

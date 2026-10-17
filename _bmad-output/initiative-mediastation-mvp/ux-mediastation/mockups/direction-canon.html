@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>MediaStation · Canon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400..700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ground: #0F1012; --surface: #1E2024; --surface-2: #26292E; --line: #33363C;
+    --text: #FFFFFF; --text-2: #C4C7CC; --text-3: #9AA0A6; --accent: #8AB4F8;
+    --r-tile: 22px; --r-card: 20px; --gutter: 112px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; }
+  body {
+    background: var(--ground); color: var(--text);
+    font-family: "Roboto Flex", system-ui, sans-serif; font-variation-settings: "opsz" 32;
+    -webkit-font-smoothing: antialiased; position: relative;
+  }
+  body::before { /* faint top light, like ambient glow from the panel edge */
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 520px; pointer-events: none;
+    background: radial-gradient(1200px 520px at 30% -10%, rgba(138,180,248,.07), transparent 70%);
+  }
+  .bar { position: absolute; top: 56px; left: var(--gutter); right: var(--gutter);
+    display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand svg { width: 48px; height: 48px; }
+  .brand b { font-size: 32px; font-weight: 600; letter-spacing: -0.01em; }
+  .greet { display: flex; align-items: center; gap: 16px; margin-left: 56px; padding-left: 56px;
+    border-left: 2px solid var(--line); font-size: 28px; color: var(--text-2); }
+  .avatar { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+    background: linear-gradient(140deg, #E8A87C, #C77D9B); color: #1A1214; font-size: 24px; font-weight: 650; }
+  .time { font-size: 32px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-2); }
+
+  .tabs { position: absolute; top: 172px; left: var(--gutter); display: flex; gap: 12px; }
+  .tab { position: relative; height: 64px; padding: 0 32px; border-radius: 32px; display: flex; align-items: center;
+    gap: 12px; font-size: 30px; font-weight: 500; color: var(--text-3); }
+  .tab.on { background: var(--surface-2); color: var(--text); }
+  .tab .bg { width: 12px; height: 12px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 4px rgba(138,180,248,.18); }
+
+  .apps { position: absolute; top: 292px; left: var(--gutter); display: flex; gap: 48px; }
+  .app { width: 544px; }
+  .tile { height: 306px; border-radius: var(--r-tile); background: var(--surface); position: relative;
+    display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+  .tile .mark { font-size: 64px; font-weight: 650; letter-spacing: -0.02em; color: #E6E8EB; }
+  .tile.netflix { background: linear-gradient(160deg, #2A2D33 0%, #1E2024 60%); }
+  .tile.plex { background: linear-gradient(160deg, #24272C 0%, #1B1D21 60%); }
+  .tile .chip { position: absolute; left: 24px; bottom: 24px; height: 44px; padding: 0 18px 0 14px; border-radius: 22px;
+    background: rgba(15,16,18,.72); display: flex; align-items: center; gap: 10px; font-size: 24px; color: var(--text); }
+  .chip svg { width: 22px; height: 22px; }
+  .app.focus .tile { transform: scale(1.08); outline: 5px solid #fff; outline-offset: 0;
+    box-shadow: 0 28px 56px rgba(0,0,0,.6), 0 10px 20px rgba(0,0,0,.45); }
+  .meta { margin-top: 30px; height: 72px; }
+  .app.focus .meta { margin-top: 44px; }
+  .meta .name { font-size: 30px; font-weight: 600; }
+  .meta .state { margin-top: 6px; font-size: 26px; color: var(--text-2); display: flex; align-items: center; gap: 12px; }
+  .meta .state i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+  .app:not(.focus) .meta .name { color: var(--text-3); font-weight: 500; }
+
+  .rate { position: absolute; top: 732px; left: var(--gutter); right: var(--gutter); }
+  .rate h2 { font-size: 32px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 20px; }
+  .cards { display: flex; gap: 40px; }
+  .card { width: 820px; height: 268px; border-radius: var(--r-card); background: var(--surface);
+    display: flex; gap: 36px; padding: 24px 36px 24px 24px; }
+  .qr { flex: none; width: 220px; height: 220px; border-radius: 14px; background: #fff; padding: 14px; }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  .info { display: flex; flex-direction: column; min-width: 0; padding-top: 4px; }
+  .info h3 { font-size: 34px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; }
+  .info .sub { margin-top: 6px; font-size: 26px; color: var(--text-3); }
+  .info .hint { margin-top: 18px; font-size: 26px; line-height: 1.3; color: var(--text-2); max-width: 26ch; }
+  .actions { margin-top: auto; display: flex; gap: 16px; }
+  .btn { height: 56px; padding: 0 28px; border-radius: 28px; display: flex; align-items: center; gap: 10px;
+    font-size: 26px; font-weight: 500; background: var(--surface-2); color: var(--text); }
+  .btn svg { width: 24px; height: 24px; }
+  .btn.ghost { background: transparent; color: var(--text-2); box-shadow: inset 0 0 0 2px var(--line); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="qr" viewBox="0 0 25 25">
+    <path fill-rule="evenodd" fill="#111" d="M0 0h7v7h-7zM1 1v5h5v-5zM2 2h3v3h-3zM18 0h7v7h-7zM19 1v5h5v-5zM20 2h3v3h-3zM0 18h7v7h-7zM1 19v5h5v-5zM2 20h3v3h-3z"/>
+    <path fill="#111" d="M8 0h1v1h-1zM9 0h2v1h-2zM12 0h1v1h-1zM9 1h2v1h-2zM12 1h1v1h-1zM13 1h1v1h-1zM15 1h1v1h-1zM13 2h2v1h-2zM15 2h2v1h-2zM8 3h3v1h-3zM14 3h2v1h-2zM8 4h2v1h-2zM10 4h3v1h-3zM15 4h2v1h-2zM8 5h4v1h-4zM13 5h1v1h-1zM14 5h1v1h-1zM12 6h1v1h-1zM13 6h1v1h-1zM14 6h3v1h-3zM10 7h1v1h-1zM11 7h4v1h-4zM15 7h1v1h-1zM16 7h1v1h-1zM0 8h1v1h-1zM1 8h1v1h-1zM7 8h5v1h-5zM12 8h1v1h-1zM13 8h1v1h-1zM14 8h1v1h-1zM15 8h2v1h-2zM17 8h3v1h-3zM22 8h1v1h-1zM23 8h1v1h-1zM1 9h3v1h-3zM4 9h1v1h-1zM7 9h3v1h-3zM10 9h1v1h-1zM12 9h1v1h-1zM17 9h2v1h-2zM20 9h3v1h-3zM24 9h1v1h-1zM2 10h1v1h-1zM3 10h3v1h-3zM10 10h1v1h-1zM11 10h2v1h-2zM15 10h4v1h-4zM23 10h1v1h-1zM24 10h1v1h-1zM0 11h1v1h-1zM1 11h1v1h-1zM2 11h2v1h-2zM4 11h2v1h-2zM11 11h1v1h-1zM15 11h6v1h-6zM22 11h3v1h-3zM1 12h2v1h-2zM3 12h1v1h-1zM5 12h4v1h-4zM10 12h1v1h-1zM12 12h2v1h-2zM14 12h3v1h-3zM18 12h1v1h-1zM19 12h6v1h-6zM0 13h2v1h-2zM4 13h1v1h-1zM9 13h4v1h-4zM20 13h2v1h-2zM23 13h2v1h-2zM0 14h1v1h-1zM5 14h2v1h-2zM7 14h1v1h-1zM12 14h1v1h-1zM15 14h1v1h-1zM16 14h3v1h-3zM19 14h1v1h-1zM21 14h1v1h-1zM23 14h2v1h-2zM1 15h4v1h-4zM6 15h2v1h-2zM9 15h2v1h-2zM11 15h1v1h-1zM14 15h2v1h-2zM23 15h2v1h-2zM1 16h1v1h-1zM2 16h2v1h-2zM6 16h1v1h-1zM7 16h1v1h-1zM8 16h1v1h-1zM11 16h1v1h-1zM14 16h1v1h-1zM19 16h1v1h-1zM20 16h2v1h-2zM23 16h2v1h-2zM8 17h1v1h-1zM11 17h4v1h-4zM15 17h7v1h-7zM22 17h1v1h-1zM9 18h1v1h-1zM16 18h2v1h-2zM19 18h1v1h-1zM20 18h5v1h-5zM8 19h3v1h-3zM11 19h3v1h-3zM15 19h1v1h-1zM16 19h2v1h-2zM19 19h1v1h-1zM20 19h1v1h-1zM21 19h3v1h-3zM8 20h1v1h-1zM10 20h4v1h-4zM16 20h1v1h-1zM22 20h1v1h-1zM23 20h1v1h-1zM24 20h1v1h-1zM11 21h1v1h-1zM13 21h4v1h-4zM22 21h1v1h-1zM23 21h2v1h-2zM11 22h3v1h-3zM15 22h2v1h-2zM20 22h1v1h-1zM24 22h1v1h-1zM8 23h3v1h-3zM13 23h9v1h-9zM22 23h3v1h-3zM9 24h6v1h-6zM18 24h1v1h-1zM20 24h1v1h-1z"/>
+  </symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="skip" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></symbol>
+</svg>
+
+<header class="bar">
+  <div class="brand">
+    <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="2" y="8" width="44" height="32" rx="9" fill="none" stroke="#fff" stroke-width="3.2"/><path d="M20 17.5v13l11-6.5z" fill="#fff"/></svg>
+    <b>MediaStation</b>
+    <div class="greet"><span class="avatar">E</span>Dobry wieczór, Eliza</div>
+  </div>
+  <div class="time">21:47</div>
+</header>
+
+<nav class="tabs">
+  <div class="tab on">Video</div>
+  <div class="tab">Audio</div>
+  <div class="tab">Game <span class="bg" aria-label="Działa w tle"></span></div>
+</nav>
+
+<section class="apps">
+  <div class="app focus">
+    <div class="tile netflix"><span class="mark">Netflix</span>
+      <span class="chip"><svg><use href="#pause"/></svg>Wstrzymane</span></div>
+    <div class="meta"><div class="name">Netflix</div>
+      <div class="state"><i></i>W tle · Pamiętniki wampirów, wstrzymane</div></div>
+  </div>
+  <div class="app">
+    <div class="tile plex"><span class="mark">Plex</span></div>
+    <div class="meta"><div class="name">Plex</div></div>
+  </div>
+</section>
+
+<section class="rate">
+  <h2>Do oceny</h2>
+  <div class="cards">
+    <article class="card">
+      <div class="qr"><svg><use href="#qr"/></svg></div>
+      <div class="info">
+        <h3>Pamiętniki wampirów</h3><div class="sub">Sezon 8 · obejrzany</div>
+        <p class="hint">Zeskanuj telefonem i oceń na Filmwebie</p>
+        <div class="actions"><span class="btn"><svg><use href="#check"/></svg>Ocenione</span><span class="btn ghost"><svg><use href="#skip"/></svg>Pomiń</span></div>
+      </div>
+    </article>
+    <article class="card">
+      <div class="qr"><svg><use href="#qr"/></svg></div>
+      <div class="info">
+        <h3>Diuna: Część druga</h3><div class="sub">Film · obejrzany</div>
+        <p class="hint">Zeskanuj telefonem i oceń na Filmwebie</p>
+        <div class="actions"><span class="btn"><svg><use href="#check"/></svg>Ocenione</span><span class="btn ghost"><svg><use href="#skip"/></svg>Pomiń</span></div>
+      </div>
+    </article>
+  </div>
+</section>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>MediaStation · Neon nad Wisłą</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Sacramento&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0E0B14;--panel:#17121F;--panel2:#1D1726;--tube:#3A2E3F;--coral:#FF5C7A;--cyan:#4FD6E8;--amber:#FFB547;--text:#F4ECE6;--muted:#A79BB0;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--ink);color:var(--text);font-family:"Familjen Grotesk",sans-serif;font-variant-numeric:tabular-nums}
+::selection{background:var(--coral);color:var(--ink)}
+body{position:relative;background:radial-gradient(1200px 700px at 18% 0%,#1A1222 0%,var(--ink) 60%)}
+.safe{position:absolute;inset:56px 96px 96px 96px}
+/* header */
+header{display:flex;align-items:center;justify-content:space-between;height:88px}
+.brand{display:flex;align-items:center;gap:24px}
+.mark{width:64px;height:64px}
+.word{font-family:"Sacramento",cursive;font-size:80px;line-height:88px;color:#FFE3E8;letter-spacing:0;
+  text-shadow:0 0 2px #fff,0 0 8px var(--coral),0 0 20px var(--coral),0 0 48px rgba(255,92,122,.55);padding-top:8px}
+.hello{display:flex;align-items:center;gap:16px;margin-left:32px;padding-left:32px;border-left:1px solid var(--tube);height:56px;font-size:30px;color:var(--text)}
+.avatar{width:48px;height:48px;border-radius:50%;background:#2A2033;border:2px solid var(--tube);display:grid;place-items:center;font-size:22px;font-weight:600;color:var(--muted)}
+.time{font-size:44px;font-weight:500;letter-spacing:.01em;color:var(--text)}
+/* tabs */
+nav{display:flex;gap:48px;margin-top:40px;height:64px;align-items:flex-start}
+.tab{font-size:36px;font-weight:500;color:var(--muted);display:flex;align-items:center;gap:16px;position:relative;padding-bottom:16px}
+.tab.on{color:var(--text);font-weight:700}
+.tab.on::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;border-radius:4px;background:var(--text);opacity:.85}
+.pilot{display:flex;align-items:center;gap:8px;font-size:24px;font-weight:500;color:var(--cyan)}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan),0 0 16px rgba(79,214,232,.6)}
+/* app tiles */
+.apps{display:flex;gap:40px;margin-top:40px}
+.tile{width:600px;height:312px;border-radius:32px;background:var(--panel);border:2px solid var(--tube);
+  padding:40px 40px 32px;display:flex;flex-direction:column;justify-content:space-between;position:relative}
+.tile::before{content:"";position:absolute;inset:8px;border-radius:24px;border:1px solid rgba(58,46,63,.6);pointer-events:none}
+.tile .name{font-size:64px;font-weight:700;letter-spacing:-.02em;line-height:1}
+.tile .state{display:flex;align-items:center;gap:16px;font-size:28px;color:var(--muted);line-height:40px}
+.pill{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px 0 14px;border-radius:20px;border:2px solid rgba(79,214,232,.45);color:var(--text);font-size:24px;font-weight:600;background:rgba(79,214,232,.08)}
+.tile.focus{border-color:var(--coral);background:var(--panel2);
+  box-shadow:0 0 0 3px var(--coral),0 0 6px 3px rgba(255,92,122,.9),0 0 32px 6px rgba(255,92,122,.45),0 0 88px 8px rgba(255,92,122,.22),inset 0 0 32px rgba(255,92,122,.14)}
+.tile.focus::before{border-color:rgba(255,200,210,.35)}
+.tile.focus .state{color:var(--text)}
+/* rating row */
+h2{font-size:40px;font-weight:700;letter-spacing:-.01em;margin-top:56px;height:48px;line-height:48px}
+.cards{display:flex;gap:40px;margin-top:16px}
+.card{width:800px;height:264px;border-radius:32px;background:var(--panel);border:2px solid var(--tube);padding:24px;display:flex;gap:32px}
+.qr{width:216px;height:216px;flex:none;border-radius:16px;background:#F4ECE6;padding:12px}
+.qr svg{width:192px;height:192px;display:block}
+.info{display:flex;flex-direction:column;flex:1;min-width:0;padding-top:4px}
+.info .t{font-size:36px;font-weight:700;line-height:44px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info .s{font-size:26px;color:var(--muted);line-height:36px}
+.info .h{font-size:26px;line-height:36px;margin-top:16px;color:var(--text)}
+.acts{display:flex;gap:16px;margin-top:auto}
+.btn{height:56px;padding:0 32px;border-radius:28px;border:2px solid var(--tube);font-size:28px;font-weight:600;display:flex;align-items:center;color:var(--text);background:rgba(255,255,255,.02)}
+.btn.ghost{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="safe">
+  <header>
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <rect x="4" y="10" width="56" height="40" rx="12" stroke="#3A2E3F" stroke-width="3"/>
+        <path d="M16 40V22l8 12 8-12v18" stroke="#FF5C7A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 0 4px #FF5C7A)"/>
+        <path d="M24 56h16" stroke="#3A2E3F" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <div class="word">MediaStation</div>
+      <div class="hello"><span class="avatar">E</span>Dobry wieczór, Eliza</div>
+    </div>
+    <div class="time">21:47</div>
+  </header>
+
+  <nav>
+    <div class="tab on">Video</div>
+    <div class="tab">Audio</div>
+    <div class="tab">Game <span class="pilot"><span class="dot"></span>Moonlight</span></div>
+  </nav>
+
+  <section class="apps">
+    <div class="tile focus">
+      <div class="name">Netflix</div>
+      <div class="state"><span class="pill"><span class="dot"></span>W tle</span><span>· Pamiętniki wampirów, wstrzymane</span></div>
+    </div>
+    <div class="tile">
+      <div class="name">Plex</div>
+      <div class="state">Gotowy do włączenia</div>
+    </div>
+  </section>
+
+  <h2>Do oceny</h2>
+  <section class="cards">
+    <div class="card">
+      <div class="qr"><svg viewBox="0 0 21 21" shape-rendering="crispEdges" aria-hidden="true"><g fill="#0E0B14">
+        <path d="M0 0h7v7H0zM1 1v5h5V1zM2 2h3v3H2zM14 0h7v7h-7zM15 1v5h5V1zM16 2h3v3h-3zM0 14h7v7H0zM1 15v5h5v-5zM2 16h3v3H2z" fill-rule="evenodd"/>
+        <path d="M8 0h1v2H8zM10 1h2v1h-2zM9 3h2v2H9zM12 3h1v3h-1zM8 6h1v1H8zM10 6h1v2h-1zM0 8h2v1H0zM3 8h3v1H3zM7 8h2v2H7zM12 8h3v1h-3zM17 8h1v2h-1zM19 8h2v1h-2zM1 10h2v2H1zM5 10h1v3H5zM9 10h3v1H9zM14 10h2v2h-2zM18 11h3v1h-3zM0 12h1v1H0zM8 12h2v2H8zM11 12h2v1h-2zM16 13h1v3h-1zM19 13h2v2h-2zM10 14h1v2h-1zM12 14h3v1h-3zM8 16h1v3H8zM13 16h2v2h-2zM18 16h1v1h-1zM10 17h2v1h-2zM17 18h4v1h-4zM9 19h1v2H9zM11 19h3v1h-3zM15 19h1v2h-1zM12 20h2v1h-2zM19 20h2v1h-2z"/>
+      </g></svg></div>
+      <div class="info">
+        <div class="t">Pamiętniki wampirów</div>
+        <div class="s">Sezon 8 · obejrzany</div>
+        <div class="h">Zeskanuj telefonem i oceń na Filmwebie</div>
+        <div class="acts"><div class="btn">Ocenione</div><div class="btn ghost">Pomiń</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="qr"><svg viewBox="0 0 21 21" shape-rendering="crispEdges" aria-hidden="true"><g fill="#0E0B14">
+        <path d="M0 0h7v7H0zM1 1v5h5V1zM2 2h3v3H2zM14 0h7v7h-7zM15 1v5h5V1zM16 2h3v3h-3zM0 14h7v7H0zM1 15v5h5v-5zM2 16h3v3H2z" fill-rule="evenodd"/>
+        <path d="M9 0h2v1H9zM8 2h1v2H8zM11 2h2v2h-2zM9 5h2v1H9zM12 5h1v2h-1zM1 8h1v2H1zM4 8h2v1H4zM8 8h1v1H8zM10 8h2v2h-2zM15 8h2v1h-2zM19 9h2v2h-2zM0 11h3v1H0zM6 10h1v2H6zM13 10h1v3h-1zM16 10h2v1h-2zM3 12h2v1H3zM8 12h3v1H8zM15 12h1v2h-1zM18 13h2v1h-2zM9 14h1v2H9zM11 14h1v1h-1zM13 15h3v1h-3zM19 15h1v3h-1zM8 17h2v1H8zM11 16h1v3h-1zM14 17h2v2h-2zM17 17h1v1h-1zM8 19h2v2H8zM12 20h3v1h-3zM16 19h2v1h-2zM20 19h1v2h-1z"/>
+      </g></svg></div>
+      <div class="info">
+        <div class="t">Diuna: Część druga</div>
+        <div class="s">Film · obejrzany</div>
+        <div class="h">Zeskanuj telefonem i oceń na Filmwebie</div>
+        <div class="acts"><div class="btn">Ocenione</div><div class="btn ghost">Pomiń</div></div>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

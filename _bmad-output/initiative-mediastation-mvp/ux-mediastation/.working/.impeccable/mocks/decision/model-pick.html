@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>MediaStation · Wieczorna lampa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--ground:#15110E;--raised:#2A221C;--lamp:#F2B663;--text:#F6EBDD;--muted:#A8978A;--taupe:#8A7A6A;--line:#3A2F27}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden}
+body{background:var(--ground);color:var(--text);font-family:"Alegreya Sans",sans-serif;font-size:28px;line-height:1.25;position:relative;
+  background-image:radial-gradient(900px 520px at 400px 560px,rgba(242,182,99,.10),transparent 70%),radial-gradient(1400px 700px at 960px 1200px,rgba(0,0,0,.45),transparent 70%)}
+::selection{background:var(--lamp);color:var(--ground)}
+header{position:absolute;left:112px;right:112px;top:56px;height:72px;display:flex;align-items:center}
+.brand{display:flex;align-items:center;gap:18px}
+.brand b{font-size:36px;font-weight:800;letter-spacing:-.01em}
+.greet{display:flex;align-items:center;gap:16px;margin-left:56px;padding-left:56px;border-left:1px solid var(--line);color:var(--muted);font-size:30px}
+.avatar{width:48px;height:48px;border-radius:50%;background:linear-gradient(160deg,#6B4E36,#3A2A1E);color:var(--text);display:grid;place-items:center;font-size:24px;font-weight:700}
+.time{margin-left:auto;font-size:40px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--text)}
+nav{position:absolute;left:112px;top:176px;display:flex;gap:56px;font-size:32px;font-weight:700}
+nav span{color:var(--taupe);position:relative;padding-bottom:12px}
+nav .on{color:var(--text)}
+nav .on::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;border-radius:2px;background:var(--lamp)}
+.bg-dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--lamp);margin-left:12px;vertical-align:4px;box-shadow:0 2px 8px rgba(242,182,99,.5)}
+.apps{position:absolute;left:112px;top:280px;display:flex;gap:56px}
+.tile{width:600px;height:330px;border-radius:24px;background:var(--raised);position:relative;padding:36px 40px;display:flex;flex-direction:column;justify-content:flex-end}
+.tile .mark{position:absolute;left:40px;top:36px;font-size:56px;font-weight:800;letter-spacing:-.02em}
+.tile .state{font-size:26px;color:var(--muted)}
+.tile.idle{opacity:.5;filter:brightness(.8)}
+.tile.focus{transform:scale(1.06);transform-origin:50% 60%;
+  background:linear-gradient(180deg,#2E251E 0%,#3E2F22 55%,#6A4A28 100%);
+  box-shadow:0 0 0 4px var(--text),0 28px 60px rgba(0,0,0,.6),0 10px 18px rgba(0,0,0,.45);z-index:2}
+.tile.focus .state{color:var(--text)}
+.tile.focus .state i{font-style:normal;color:var(--lamp);font-weight:700}
+.pool{position:absolute;left:112px;top:540px;width:600px;height:200px;z-index:1;pointer-events:none;
+  background:radial-gradient(50% 50% at 50% 30%,rgba(242,182,99,.32),rgba(242,182,99,.10) 55%,transparent 100%);filter:blur(6px)}
+.rate{position:absolute;left:112px;top:690px;opacity:.62;filter:brightness(.85)}
+.rate h2{font-size:32px;font-weight:700;margin-bottom:24px;color:var(--text)}
+.cards{display:flex;gap:40px}
+.card{width:820px;height:316px;border-radius:24px;background:var(--raised);padding:28px;display:flex;gap:32px}
+.qr{width:260px;height:260px;flex:none;background:var(--text);border-radius:14px;padding:14px}
+.qr svg{display:block;width:100%;height:100%}
+.info{display:flex;flex-direction:column;min-width:0}
+.info h3{font-size:36px;font-weight:700;line-height:1.1}
+.info .sub{font-size:26px;color:var(--muted);margin-top:6px}
+.info p{font-size:26px;margin-top:20px;color:var(--text);max-width:22ch}
+.acts{margin-top:auto;display:flex;gap:16px}
+.btn{font-size:26px;font-weight:700;padding:12px 28px;border-radius:999px;background:#3A2F27;color:var(--text)}
+.btn.ghost{background:transparent;box-shadow:inset 0 0 0 2px var(--line);color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="52" height="52" viewBox="0 0 52 52" aria-hidden="true"><rect x="2" y="2" width="48" height="48" rx="14" fill="#2A221C"/><path d="M14 30a12 12 0 0 1 24 0z" fill="#F2B663"/><rect x="14" y="34" width="24" height="4" rx="2" fill="#F6EBDD"/></svg>
+    <b>MediaStation</b>
+  </div>
+  <div class="greet"><span class="avatar">E</span>Dobry wieczór, Eliza</div>
+  <div class="time">21:47</div>
+</header>
+
+<nav>
+  <span class="on">Video</span>
+  <span>Audio</span>
+  <span>Game<i class="bg-dot" aria-label="Moonlight działa w tle"></i></span>
+</nav>
+
+<div class="pool" aria-hidden="true"></div>
+<section class="apps">
+  <div class="tile focus">
+    <div class="mark">Netflix</div>
+    <div class="state"><i>W tle</i> · Pamiętniki wampirów, wstrzymane</div>
+  </div>
+  <div class="tile idle">
+    <div class="mark">Plex</div>
+    <div class="state">&nbsp;</div>
+  </div>
+</section>
+
+<section class="rate">
+  <h2>Do oceny</h2>
+  <div class="cards">
+    <article class="card">
+      <div class="qr"><svg viewBox="0 0 25 25" shape-rendering="crispEdges" aria-hidden="true"><symbol id="qr" viewBox="0 0 25 25"><g fill="#15110E">
+        <path d="M0 0h7v7h-7zM1 1v5h5v-5zM2 2h3v3h-3zM18 0h7v7h-7zM19 1v5h5v-5zM20 2h3v3h-3zM0 18h7v7h-7zM1 19v5h5v-5zM2 20h3v3h-3z" fill-rule="evenodd"/>
+        <path d="M8 0h2v1h-2zM11 1h1v2h-1zM13 0h3v1h-3zM9 2h1v2h-1zM14 2h2v1h-2zM12 4h2v2h-2zM8 5h1v2h-1zM15 4h1v3h-1zM10 6h1v1h-1zM0 8h2v1h-2zM3 8h1v2h-1zM5 9h3v1h-3zM9 8h3v1h-3zM13 8h1v2h-1zM16 8h2v1h-2zM19 8h1v2h-1zM21 8h3v1h-3zM1 10h1v2h-1zM6 11h2v1h-2zM10 10h2v2h-2zM15 10h3v1h-3zM20 10h1v3h-1zM23 10h2v1h-2zM0 13h3v1h-3zM4 12h1v2h-1zM8 13h1v2h-1zM12 12h2v1h-2zM16 12h1v2h-1zM18 13h1v1h-1zM22 12h1v2h-1zM2 15h2v1h-2zM6 14h1v2h-1zM10 15h3v1h-3zM14 14h1v2h-1zM17 15h2v1h-2zM21 15h1v1h-1zM23 14h2v2h-2zM8 17h2v1h-2zM12 17h1v2h-1zM15 17h3v1h-3zM20 17h2v2h-2zM24 17h1v1h-1zM9 19h2v1h-2zM14 19h1v2h-1zM16 19h3v3h-3zM17 20v1h1v-1zM22 20h2v1h-2zM8 21h1v2h-1zM11 21h2v1h-2zM20 22h1v2h-1zM23 22h2v1h-2zM10 23h3v1h-3zM15 23h2v2h-2zM18 24h3v1h-3zM9 24h1v1h-1zM22 24h1v1h-1z" fill-rule="evenodd"/>
+      </g></symbol><use href="#qr"/></svg></div>
+      <div class="info">
+        <h3>Pamiętniki wampirów</h3>
+        <div class="sub">Sezon 8 · obejrzany</div>
+        <p>Zeskanuj telefonem i oceń na Filmwebie</p>
+        <div class="acts"><span class="btn">Ocenione</span><span class="btn ghost">Pomiń</span></div>
+      </div>
+    </article>
+    <article class="card">
+      <div class="qr"><svg viewBox="0 0 25 25" shape-rendering="crispEdges" aria-hidden="true"><use href="#qr"/></svg></div>
+      <div class="info">
+        <h3>Diuna: Część druga</h3>
+        <div class="sub">Film · obejrzany</div>
+        <p>Zeskanuj telefonem i oceń na Filmwebie</p>
+        <div class="acts"><span class="btn">Ocenione</span><span class="btn ghost">Pomiń</span></div>
+      </div>
+    </article>
+  </div>
+</section>
+</body>
+</html>

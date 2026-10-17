@@ -1,0 +1,133 @@
+{
+  "title": "MediaStation — wybierz kierunek wizualny",
+  "question": "Trzy wyraźnie różne światy dla ekranu głównego oglądanego z kanapy (TV 1920×1080, wieczór, ciepłe przygaszone światło). Weź jeden, poproś o ponowne losowanie albo wybierz standard kategorii.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Neon nad Wisłą",
+      "kicker": "THE ROLL",
+      "lineage": "Warszawskie neony PRL (Neon Muzeum, Sezam, Berlin, Jubiler)",
+      "thesis": "Fokus to zapalona rurka neonu: z 3 m widać tylko to, co świeci.",
+      "palette": ["#0E0B14", "#FF5C7A", "#4FD6E8", "#FFB547", "#F4ECE6"],
+      "materials": ["rurki neonowe na zgaszonym szkle", "nocny atrament z fioletem", "czysty grotesk do treści"],
+      "viewport": "Logo-neon MediaStation i „Dobry wieczór, Eliza” w lewym górnym rogu, zakładki Video/Audio/Game, rząd dużych kafelków (Netflix zapalony), a pod nim wiersz „Do oceny” z kartami QR.",
+      "risk": "Przy zbyt wielu kolorach neonu staje się kolorowym szyldem zamiast spokojnego salonu. Trzymamy jedną barwę fokusu.",
+      "raised": [
+        {"from": "challenger-character-catalog", "raise": "Każdy kafelek ma stałą tabliczkę: nazwę i jedną linijkę stanu („W tle · Pamiętniki wampirów”)."},
+        {"from": "challenger-botanical-folio", "raise": "Wszystkie kafelki mają tę samą skalę i linię bazową. Neon zapala kafelek, nie powiększa go."},
+        {"from": "challenger-crouwel-grid", "raise": "Jedna siatka 8 px jest jedynym źródłem odstępów. Rurki biegną po tej samej siatce."},
+        {"from": "challenger-japanese-density", "raise": "Stany pokazują plakietki w miejscu (Uruchamianie, W tle, Błąd), bez okien dialogowych."},
+        {"from": "challenger-ticket-wallet", "raise": "Karta „Do oceny” ma stałe pola: tytuł, QR, Ocenione, Pomiń, zawsze w tym samym miejscu."}
+      ],
+      "html": ".impeccable/mocks/decision/assigned.html",
+      "htmlFrame": "1920x1080"
+    },
+    {
+      "id": "model-pick",
+      "label": "Wieczorna lampa",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "Salon wieczorem: jedna ciepła lampa i półmrok wokół",
+      "thesis": "Fokus to plama ciepłego światła lampy, reszta ekranu odpoczywa w półmroku.",
+      "palette": ["#15110E", "#2A221C", "#F2B663", "#F6EBDD", "#8A7A6A"],
+      "materials": ["ciepły półmrok", "światło lampy jako gradient spod kafelka", "miękki humanistyczny sans"],
+      "viewport": "Ten sam układ: logo i powitanie u góry, zakładki, kafelki, wiersz „Do oceny”. Kafelek w fokusie jest podświetlony ciepło od spodu i lekko uniesiony, reszta jest przygaszona.",
+      "risk": "Najbliżej miejsca, w którym ląduje większość projektów w tej kategorii. Ciepło łatwo zamienia się w beżową mgłę bez charakteru.",
+      "html": ".impeccable/mocks/decision/model-pick.html",
+      "htmlFrame": "1920x1080"
+    },
+    {
+      "id": "challenger-split-flap",
+      "label": "Tablica odjazdów",
+      "verdict": "competitive",
+      "lineage": "Dworcowa tablica klapkowa (split-flap)",
+      "thesis": "Ekran główny jako spokojna tablica: każda aplikacja to wiersz ze stanem, który przeskakuje klapkami.",
+      "palette": ["#111214", "#F2F2EE", "#F5A524", "#B3473F", "#6B7075"],
+      "materials": ["matowe czarne klapki", "biały kondensowany sans w kapitalikach", "bursztynowe lampki stanu"],
+      "viewport": "Kafelki jak tablice z klapkami. Nazwa i stan („W TLE”, „URUCHAMIANIE”) zmieniają się kaskadą znaków, a fokus to jasna rama z podniesioną klapką.",
+      "case": "Najczytelniejszy język stanów (w tle, start, błąd), ale chłodny, dworcowy klimat słabiej pasuje do ciepłego salonu.",
+      "risk": "Animacja klapek oglądana z kanapy co wieczór może męczyć. Musi być krótka i rzadka.",
+      "html": ".impeccable/mocks/decision/challenger-split-flap.html",
+      "htmlFrame": "1920x1080",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-split-flap-concourse-hero.webp"
+    },
+    {
+      "id": "challenger-ticket-wallet",
+      "label": "Portfel biletów",
+      "verdict": "declined",
+      "lineage": "Bilety lotnicze z epoki odrzutowców",
+      "palette": ["#1B2A52", "#F3EFE6", "#C8102E"],
+      "materials": ["kupony z kopią", "perforacja"],
+      "thesis": "Każdy seans to kupon do oderwania.",
+      "viewport": "Kafelki jak kupony, a karta „Do oceny” jak odcinek z QR.",
+      "case": "Podróże to nie świat Elizy, a biały kupon kłóci się z ciemnym salonem.",
+      "risk": "Kostium biletu na ekranie aplikacji.",
+      "kept": "Stałe pola karty „Do oceny”."
+    },
+    {
+      "id": "challenger-character-catalog",
+      "label": "Katalog maskotek",
+      "verdict": "declined",
+      "lineage": "Katalog gadżetów z postaciami",
+      "palette": ["#F7E3EC", "#CDE8F5", "#FFFFFF"],
+      "materials": ["pastele", "biały keyline"],
+      "thesis": "Każda aplikacja jako postać z tabliczką.",
+      "viewport": "Pastelowa siatka kafelków-postaci.",
+      "case": "Pastelowy i dziecięcy, sprzeczny z deklaracją „ciemny, czysty”.",
+      "risk": "Infantylizacja.",
+      "kept": "Stała tabliczka z nazwą i linijką stanu."
+    },
+    {
+      "id": "challenger-japanese-density",
+      "label": "Gęsty japoński portal",
+      "verdict": "declined",
+      "lineage": "Japońskie portale o dużej gęstości",
+      "palette": ["#FFFFFF", "#111111", "#D7261E"],
+      "materials": ["hairline'y", "moduły"],
+      "thesis": "Wszystko na jednym ekranie.",
+      "viewport": "Mozaika małych modułów.",
+      "case": "Gęstość jest sprzeczna z 10-foot UI.",
+      "risk": "Nieczytelne z 3 m.",
+      "kept": "Stany jako plakietki w miejscu."
+    },
+    {
+      "id": "challenger-botanical-folio",
+      "label": "Zielnik sezonów",
+      "verdict": "declined",
+      "lineage": "Botaniczne plansze",
+      "palette": ["#F3EAD8", "#3F6B3A", "#B0222A"],
+      "materials": ["kremowy papier", "sepiowe linie"],
+      "thesis": "Jedna roślina w pięciu stanach.",
+      "viewport": "Plansze w jednej skali.",
+      "case": "Kremowy i literacki, bez związku z wieczornym TV.",
+      "risk": "Muzealny chłód.",
+      "kept": "Jedna skala i jedna linia bazowa dla wszystkich kafelków."
+    },
+    {
+      "id": "challenger-crouwel-grid",
+      "label": "Siatka Crouwela",
+      "verdict": "declined",
+      "lineage": "Wim Crouwel, plakaty siatkowe",
+      "palette": ["#FFFFFF", "#1A1A1A", "#2B59C3"],
+      "materials": ["widoczna siatka"],
+      "thesis": "Siatka jest projektem.",
+      "viewport": "Litery budowane z komórek.",
+      "case": "Plakatowa ekspresja zasłania zadanie.",
+      "risk": "Chłodny formalizm.",
+      "kept": "Jedna siatka jako źródło odstępów."
+    }
+  ],
+  "reroll": {"registers": ["safer", "bolder"]},
+  "buildPath": {"value": "code"},
+  "canon": true,
+  "canonCard": {
+    "label": "Standard kategorii (Google TV / Apple TV)",
+    "thesis": "To, co dziś robią najlepsze systemy TV, wykonane z pełną starannością.",
+    "palette": ["#0F1012", "#1E2024", "#FFFFFF", "#8AB4F8"],
+    "materials": ["ciemny grafit", "biała ramka fokusu ze skalą", "czysty sans"],
+    "viewport": "Logo u góry, zakładki, rząd zaokrąglonych kafelków. Fokus jest białą ramką z powiększeniem, niżej wiersz „Do oceny”.",
+    "risk": "Celowo nie do odróżnienia od Google TV.",
+    "html": ".impeccable/mocks/decision/canon.html",
+    "htmlFrame": "1920x1080"
+  },
+  "steer": true
+}

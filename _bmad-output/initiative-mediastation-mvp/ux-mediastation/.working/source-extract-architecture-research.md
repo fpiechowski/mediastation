@@ -1,0 +1,54 @@
+# Ekstrakt źródeł: architektura + research (subagenci, 2026-10-16)
+
+## Architektura (architecture-mediastation.md, final)
+- AD-7: komunikat `screen{name: profiles|browse|modal|title|search|watch|limit|error, root}` wysyła ServiceDriver.
+  - `root:true` + Back → `backResult{handled:false}` → ekran główny (timeout ~500 ms).
+  - `watch` w pauzie: OK → `video.play()`, nigdy nie ma autowznowienia.
+  - `page-error`: reload `/watch/<id>`.
+  - `limit`/`error` obsługiwane ręcznie w MVP.
+  - Shell nie dostaje `screen`, tylko snapshot view-modelu (AD-16).
+- AD-8: Action `{kind: Up|Down|Left|Right|Ok|Back|Home|Keyboard|AppMenu, phase: press|repeat|long}`.
+  - Tryby `shell|app|osk` zmienia Orchestrator.
+  - Kursor domyślnie ukryty.
+  - Home połykany zawsze.
+  - `AppMenu` tylko w trybie shell (np. long-press OK). Mapowanie AppMenu = DECYZJA bmad-ux.
+  - Shell i OSK konsumują wyłącznie Actions.
+- AD-9: OSK to topmost, NOACTIVATE okno nakładki, fokus zostaje w aplikacji.
+  - Web: auto na `textFocus{active}`. Inne aplikacje: Action `Keyboard`.
+  - Back zamyka OSK.
+  - Znaki idą od razu do aplikacji (CDP insertText / SendInput). Tekst nie trafia do view-modelu.
+  - Fallback: OSK rysowana przez PageRuntime w stronie (otwarte, pierwsza story epiki OSK).
+- AD-10: `NotRunning → Starting → Foreground ⇄ Background → Stopping`, `Failed`.
+  - Z `Failed` wychodzi się tylko przez AppMenu (zamknij / uruchom ponownie).
+  - Start leniwy (po wybraniu kafelka).
+  - Wyjście z aplikacji: pause → mute → minimize.
+  - Crash MediaStation → supervise restart → ekran główny + adopcja żywych aplikacji jako Background.
+  - Wybudzenie → ekran główny; profil wybiera driver.
+  - Inny major protokołu → kafelek w stanie błędu.
+  - Błąd configu → ekran błędu w shellu (AD-11).
+- AD-12: kolejka `rating-queue.json`, statusy pending|queued|rated|skipped, klucz trafia do kolejki raz.
+  - Film ≥0.9; serial `lastInSeason` + ≥0.9; null → pending → po `ratingPendingDays` (DECYZJA bmad-ux).
+  - Fokus kluczowany kluczem, nie indeksem.
+- AD-14/15: z-order zmienia tylko WindowManager. Home w trakcie Starting → aplikacja minimalizowana po starcie.
+- AD-16: shell renderuje snapshot (latest-wins), UI trzyma tylko fokus i scroll. Kafelki z `apps.json` (id, type, title, icon, back, pointer).
+- Odłożone do bmad-ux: UX ekranu limitu, `ratingPendingDays`, domyślne `back` i `pointer`, mapowanie `AppMenu`.
+
+## Research (ograniczenia)
+- Netflix działa w osobnym Edge (CDP), nie w WebView2. W WebView2 jest tylko shell.
+- Brak natywnej nawigacji strzałkami poza playerem. PageRuntime rysuje własne podświetlenie; `:focus-visible` Netflixa jest słaby.
+- W modalu akcje mają pierwszeństwo przed geometrią. Fokus zawężony do dialogu.
+- `/watch`: klawisze przepuszczane (OK pauza, ←/→ ±10 s). Kontrolek playera nie ma w DOM, gdy są ukryte.
+- Selektory `data-uia` są kruche i starzeją się z każdym wdrożeniem UI Netflixa.
+- Ekrany:
+  - profile gate po starcie i wybudzeniu,
+  - limit „Too many people…” (retry/upgrade); slot trzymany 1–2 min po zamknięciu na /watch,
+  - D7361-1254 po 30 min w tle (odzysk: reload /watch, pozycja zachowana),
+  - po 30 min pauzy czarny ekran z Play.
+- Back: watch → history.back; modal/title → zamknięcie; search → browse; browse/profiles → shell. `/title` reload ~1,5 s.
+- Wyszukiwanie: insertText → `/search?q=`, puste pole → `/browse`. Logowanie pilotem nietestowane (2FA bez captchy).
+- Moonlight:
+  - okno pojawia się 1–2 s po starcie,
+  - borderless, żeby uniknąć gaśnięcia monitora,
+  - sesja przeżywa minimalizację,
+  - po quit może zostać okno „Połączenie przerwane -1”.
+- Edge przy starcie odtwarzania gubi klatki. Czasów startu i nawigacji na UM760 nie mierzono.

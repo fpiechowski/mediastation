@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>UX Design Validation: mediastation</title>
+<style>
+  :root {
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --border: #e7e5e4;
+    --text: #1c1917;
+    --muted: #78716c;
+
+    --verdict-strong: #16a34a;
+    --verdict-adequate: #65a30d;
+    --verdict-thin: #d97706;
+    --verdict-broken: #dc2626;
+
+    --sev-low: #64748b;
+    --sev-medium: #ca8a04;
+    --sev-high: #ea580c;
+    --sev-critical: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+
+  header.report-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .title h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .title .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  .synthesis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--muted);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 24px;
+    font-size: 15.5px;
+  }
+  .synthesis p { margin: 0 0 10px; }
+  .synthesis p:last-child { margin-bottom: 0; }
+
+  .dimension-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .dim-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .dim-card .dim-name { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .dim-card .dim-verdict { font-size: 14px; font-weight: 600; }
+
+  section.dimension, section.reviewer-section { margin-bottom: 14px; }
+  section.dimension details, section.reviewer-section details {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  section summary {
+    padding: 14px 20px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  section summary::-webkit-details-marker { display: none; }
+  section summary::before {
+    content: "▸";
+    display: inline-block;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  section details[open] summary::before { transform: rotate(90deg); }
+  section summary h2 {
+    display: inline;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    flex: 1;
+  }
+  .verdict-pill {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: white;
+  }
+  .verdict-strong { background: var(--verdict-strong); }
+  .verdict-adequate { background: var(--verdict-adequate); }
+  .verdict-thin { background: var(--verdict-thin); }
+  .verdict-broken { background: var(--verdict-broken); }
+
+  .dim-body { padding: 4px 20px 18px; }
+  .dim-judgment { color: var(--text); font-size: 14.5px; }
+  .dim-judgment p { margin: 0 0 10px; }
+
+  .findings-list { padding: 0 20px 4px; }
+  article.finding {
+    padding: 14px 0;
+    border-top: 1px solid var(--border);
+  }
+  article.finding:first-child { border-top: none; }
+  article.finding header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .badge {
+    font-size: 10.5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+  }
+  .badge-sev-low { background: rgba(100, 116, 139, 0.12); color: var(--sev-low); }
+  .badge-sev-medium { background: rgba(202, 138, 4, 0.14); color: var(--sev-medium); }
+  .badge-sev-high { background: rgba(234, 88, 12, 0.14); color: var(--sev-high); }
+  .badge-sev-critical { background: rgba(220, 38, 38, 0.14); color: var(--sev-critical); }
+  .finding-title { margin: 0; font-size: 15px; font-weight: 500; flex: 1; min-width: 200px; }
+  .finding-location { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; color: var(--muted); }
+  .finding-note, .finding-fix { margin-top: 6px; font-size: 14px; }
+  .finding-fix strong { color: var(--muted); font-weight: 500; }
+
+  .reviewer-source {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  .mechanical {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-top: 24px;
+    font-size: 14px;
+  }
+  .mechanical h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .mechanical ul { margin: 0; padding-left: 20px; }
+  .mechanical li { margin-bottom: 4px; color: var(--text); }
+
+  footer.report-footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  footer .meta { display: flex; gap: 24px; flex-wrap: wrap; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em; background: rgba(120,113,108,0.10); padding: 0 4px; border-radius: 3px; }
+  .finding-resolution { margin-top: 6px; font-size: 14px; padding: 6px 10px; border-left: 3px solid var(--verdict-adequate); background: rgba(101,163,13,0.07); border-radius: 4px; }
+  .finding-resolution strong { color: var(--muted); font-weight: 500; }
+  .counts { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+</style>
+</head>
+
+<body>
+  <div class="container">
+    <header class="report-header">
+      <div class="title">
+        <h1>mediastation — UX Design Validation Report</h1>
+        <div class="subtitle">C:\Users\fpiec\mediastation\_bmad-output\initiative-mediastation-mvp\ux-mediastation\DESIGN.md<br>C:\Users\fpiec\mediastation\_bmad-output\initiative-mediastation-mvp\ux-mediastation\EXPERIENCE.md</div>
+      </div>
+    </header>
+    <div class="synthesis">
+      <p>Para spine'ów jest spójna i w większości gotowa do source-extract: wszystkie kolory mają hex i deklarowany kontrast (zweryfikowany), każda referencja <code>{path.to.token}</code> się rozwiązuje, J1–J4 mają protagonistkę, kroki, kulminację i ścieżkę awarii, a Handoff do architektury nazywa delty. Brak findingów critical. Przed handoffem trzeba domknąć trzy high z rubryki: brakującą sekcję Open assumptions (wymaganą przez memlog), rozjazd w sprawie Action <code>Keyboard</code> (spine ≠ najnowszy wpis memlogu ≠ brief/AD-9) oraz brak stanu „aplikacja pada na pierwszym planie”.</p>
+      <p>Dwie soczewki impeccable (critique: PASS WITH FIXES, 27/40; audit: PASS z warunkami, 13/16) potwierdzają, że shell trzyma kanon kategorii Google TV / Apple TV, ale przesuwają obraz w stronę key-screen mocków: dokładają 8 high, które dotyczą głównie jedynej funkcji ponad parytet z VIDAA i reguły jednego fokusu — podwójny ring w trybie <code>osk</code>, QR nieskanowalny z kanapy, wiersz „Do oceny” poza title-safe i bez zapasu na dłuższy tytuł, wstrzyknięty fokus znikający na jasnym artworku Netflixa. Obie soczewki niezależnie trafiają w te same miejsca (OSK, QR, title-safe), co podnosi pewność tych findingów.</p>
+      <p>Wszystkie 11 high ma rozstrzygnięcie w <code>.working/review-resolutions.md</code> (R1–R15, status: założenia przyjęte po „Dokończ”, do potwierdzenia przez użytkownika). Jedyna luka: reguła truncacji tytułu karty „Do oceny” (audit H2) jest pokryta przez R3 tylko częściowo. Otwarte pozostaje też fizyczne sprawdzenie QR na TV z 3 m (R2). Rozstrzygnięcia trzeba jeszcze wnieść do spine'ów i mocków w kolejnym Update.</p>
+    </div>
+    <div class="counts">Rubric: 0 critical · 3 high · 8 medium · 15 low | Impeccable critique: 0 critical · 3 high · 5 medium · 7 low | Impeccable audit: 0 critical · 5 high · 6 medium · 8 low</div>
+    <div class="dimension-summary">
+      <div class="dim-card">
+        <div class="dim-name">Flow coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Token completeness</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Component coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">State coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Visual reference coverage</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Bloat &amp; overspecification</div>
+        <div class="dim-verdict" style="color: var(--verdict-strong)">strong</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Inheritance discipline</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Shape fit</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">adequate</div>
+      </div>
+    </div>
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>Flow coverage</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>Źródła nie mają nazwanych UJ; wymagania wyciągnięte z briefu („Wieczór oczami żony” kroki 1–7, „Zakres MVP”) i memlogu (J1–J4). Każdy z J1–J4 ma protagonistkę, numerowane kroki, Kulminację i linię „Awaria”. Pokryte: wybudzenie, Home, Netflix D-padem, Back do Home, przełączanie z pauzą/wyciszeniem, „Do oceny” z QR, OSK, restart z AppMenu, restart MediaStation.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Kto wybiera profil Netflixa — niejednoznaczne</h3>
+              <span class="finding-location">EXPERIENCE.md → Key Flows J1; State Patterns → Profile gate</span>
+            </header>
+            <div class="finding-note">J1 krok 3 i State Patterns mówią, że profil wybiera driver, brief krok 4 — że Eliza, AD-10 tylko „Driver obsługuje wybór profilu”. Downstream nie wie, czy ekran <code>profiles</code> dostaje fokus PageRuntime, czy jest pomijany.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Zapisać decyzję (auto-wybór stałego profilu vs. Eliza wybiera D-padem z wstrzykniętym fokusem).</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R9 — profil wybiera Eliza; PageRuntime stawia fokus na ostatnio używanym profilu, ale go nie wybiera (także po wybudzeniu).</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Plex bez flow</h3>
+              <span class="finding-location">EXPERIENCE.md → Interaction Primitives → Back</span>
+            </header>
+            <div class="finding-note">Brief: „tylko uruchamianie i powrót”; zachowanie da się złożyć z Tile + tabeli Back (<code>back=home</code>).</div>
+            <div class="finding-fix"><strong>Fix:</strong> Opcjonalnie jedno zdanie w J2 lub w Component Patterns → Tile.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">J4: brak wskazówki po drugim Failed</h3>
+              <span class="finding-location">EXPERIENCE.md → Key Flows J4</span>
+            </header>
+            <div class="finding-note">„Brak dalszej eskalacji w MVP” zostawia Elizę bez wskazówki, co uderza w kryterium „Samodzielność”.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Dodać jedno zdanie copy na drugie Failed albo jawnie oznaczyć jako zaakceptowane ryzyko.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>Token completeness</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>17 tokenów <code>colors</code> (wszystkie hex), 11 ról <code>typography</code>, 4 <code>rounded</code>, 18 <code>spacing</code>, 25 wpisów <code>components</code>; każda referencja tokenu jest zdefiniowana. Produkt tylko ciemny (decyzja memlogu), więc brak par light/dark jest uzasadniony. Tabela kontrastu przeliczona — wartości się zgadzają.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Brak kontraktu kontrastu dla <code>focus-ring-injected</code> na treści Netflixa</h3>
+              <span class="finding-location">DESIGN.md → Colors; Elevation &amp; Depth → Fokus w Netflixie</span>
+            </header>
+            <div class="finding-note">5 px białego obrysu na jasnych plakatach może zniknąć; kontrast liczony tylko względem <code>ground</code>/<code>surface</code>/<code>surface-2</code>.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Dodać regułę/token (ciemna obwódka zewnętrzna albo cień) i docelowy kontrast wobec dowolnego tła.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R4 — biały obrys 5 px + ciemna obwódka 3 px <code>ground</code>.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Waga 500 nazwy kafelka poza fokusem nie jest tokenem</h3>
+              <span class="finding-location">DESIGN.md → Typography; <code>components.tile-meta</code></span>
+            </header>
+            <div class="finding-note"><code>typography.tile-name</code> ma tylko 600, tabela mówi „30 / 600 (500 poza fokusem)”.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Dodać <code>tile-name-unfocused</code> lub <code>fontWeight</code> w <code>tile-meta</code>.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Pochodne akcentu i cienie zapisane surowo</h3>
+              <span class="finding-location">DESIGN.md → Colors → Zasady; <code>focus-ring.shadow</code>, <code>tile.shadow</code></span>
+            </header>
+            <div class="finding-note"><code>rgba(138,180,248,.18)</code>, poświata <code>rgba(138,180,248,.07)</code> i cienie poza tokenami.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Tokeny <code>accent-halo</code>, <code>ground-glow</code>, <code>shadow-rest</code>/<code>shadow-lift</code>.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>Component coverage</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>Komponenty DESIGN.md → Components zestawione z EXPERIENCE.md → Component Patterns (Focus ring, Tile, Chip, State dot, Tab, Card „Do oceny”, QR, Button, OSK, AppMenu, Logo, Avatar, Config error). Reguły behawioralne konkretne.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Empty state zakładki Audio bez komponentu</h3>
+              <span class="finding-location">EXPERIENCE.md → State Patterns → Pusta Audio; DESIGN.md → Components</span>
+            </header>
+            <div class="finding-note">Istnieje tylko jako stan + copy; mock <code>key-home-game.html</code> stawia zdanie w pasie kafelków bez tokenu typografii.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Dodać komponent „Empty state” (typografia, kolor, położenie) w obu spine'ach.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R13 — Empty state jako komponent: body, <code>text-2</code>, w pasie kafelków, fokus zostaje na zakładce.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Chip: niekompletne stany i nienazwane ikony</h3>
+              <span class="finding-location">DESIGN.md → Components → Chip</span>
+            </header>
+            <div class="finding-note">Brak „Zamykam…” (Stopping); ikony Starting/Failed to „[ASSUMPTION] ikona + tekst” bez glifu ani zestawu.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Tabela stanów chipa (Starting, Stopping, Background, Failed) z ikoną i tekstem; nazwać źródło ikon.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R6 — tabela chip + linia stanu dla wszystkich stanów; ikony Material Symbols Rounded.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Niekompletny inwentarz klawiszy OSK</h3>
+              <span class="finding-location">EXPERIENCE.md → Interaction Primitives → OSK; DESIGN.md → OSK key</span>
+            </header>
+            <div class="finding-note">Brak klawisza usuwania i spacji — J3 nie pozwala poprawić literówki ani wpisać wielowyrazowego tytułu; mock ma „Usuń”, „Spacja”, „123”.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Dopisać pełny układ (rzędy, klawisze specjalne, wymiary) do obu spine'ów.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R12 — QWERTY + „Usuń”, „Spacja”, „123”, „Gotowe”; znacznik wariantów; long OK otwiera wiersz wariantów.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Header i wiersz „Do oceny” bez wierszy komponentów</h3>
+              <span class="finding-location">DESIGN.md → Layout &amp; Spacing; EXPERIENCE.md → „Do oceny”</span>
+            </header>
+            <div class="finding-note">Logo + powitanie + zegar oraz kontener wiersza (tytuł, scroll, znikanie) nie mają wierszy komponentów.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Dodać wiersze „Header” i „Wiersz Do oceny” albo zapisać, że to layout.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>State coverage</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>Sprawdzone powierzchnie: Home/Video, Audio, Game, AppMenu, OSK, Netflix (<code>profiles|browse|modal|title|search|watch|limit|error</code> + <code>page-error</code>), Moonlight/Plex, ekran błędu konfiguracji. Pokryte: zimny start, restart po crashu, powrót na Home, pusty i wielokartowy „Do oceny”, pełny cykl życia kafelka (AD-10), limit/błąd Netflixa, OSK otwarta.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">Brak stanu „aplikacja pada na pierwszym planie”</h3>
+              <span class="finding-location">EXPERIENCE.md → State Patterns → Kafelek — cykl życia</span>
+            </header>
+            <div class="finding-note">AD-10 prowadzi do Failed przez koniec procesu / utratę CDP / timeout, ale spine opisuje Failed tylko jako wygląd na Home. Nie wiadomo, co Eliza widzi, gdy Netflix lub Moonlight zniknie w trakcie oglądania.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Dodać wiersz: Foreground → Failed ⇒ Home, fokus na kafelku Failed, chip błędu (bez dialogu) — albo inna decyzja.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R7 — MediaStation sama wraca na Home, fokus na kafelku Failed, jedno OK otwiera AppMenu z „Uruchom ponownie”. Powiązane: R8 (zerwane CDP → po limicie Failed).</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">„Dokładnie jeden fokus” vs. OSK otwarta</h3>
+              <span class="finding-location">EXPERIENCE.md → Component Patterns → Focus ring; mock <code>key-netflix-search-osk.html</code></span>
+            </header>
+            <div class="finding-note">Fokus w aplikacji zostaje (NOACTIVATE), a mock rysuje jednocześnie <code>.inj</code> na polu i fokus na klawiszu.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Reguła dla trybu <code>osk</code>: pole tylko z kursorem / przygaszonym obrysem, pełny fokus na klawiszu.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R1 — białe ringi wyłącznie na klawiszu OSK; pole w stylu „active input”.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Brak stanu UX dla zerwanego CDP przy żywym procesie</h3>
+              <span class="finding-location">AD-10; EXPERIENCE.md → State Patterns</span>
+            </header>
+            <div class="finding-note">Netflix na pierwszym planie bez wstrzykniętego fokusu i z martwym D-padem.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Zdefiniować, co widzi użytkownik i czy D-pad jest buforowany.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R8 — bez osobnego UI, Home ratuje; po limicie reconnectu → Failed (R7); D-pad nie buforowany.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Wylogowany Netflix bez stanu dla Elizy</h3>
+              <span class="finding-location">EXPERIENCE.md → Interaction Primitives → OSK, krok 6</span>
+            </header>
+            <div class="finding-note">Spine mówi tylko, że loguje autor.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Jeden wiersz w State Patterns: ekran Netflixa as-is, Home ratuje, sprawa dla autora.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Starting bez limitu czasu i wskaźnika postępu</h3>
+              <span class="finding-location">EXPERIENCE.md → State Patterns → Starting; Accessibility Floor</span>
+            </header>
+            <div class="finding-note">Floor zakazuje ruchu poza fokusem — nie wiadomo, czy „Uruchamiam…” ma spinner.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Zapisać: chip statyczny, timeout z <code>settings.json</code> → Failed.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> Częściowo R6 (chip „Uruchamiam…” + linia „Chwilka…”); timeout i spinner nadal do zapisania.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>Visual reference coverage</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p><code>mockups/</code> i <code>wireframes/</code> nie istnieją, <code>imports/</code> pusty. Oba spine'y linkują <code>.working/.impeccable/mocks/decision/canon.html</code> (ścieżka się rozwiązuje). Key-screen mocki w <code>.working/</code> czekają na promocję do <code>mockups/</code> — brak linków z tego powodu nie jest critical.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">Key-screen mocki niosą decyzje, których nie ma w spine'ach</h3>
+              <span class="finding-location"><code>.working/key-*.html</code></span>
+            </header>
+            <div class="finding-note">Klawisze „Usuń”/„Spacja”/„123”, przygaszony Plex z hexami spoza palety (<code>#24272C</code>, <code>#1B1D21</code>), pełne zdanie Failed w chipie, dwa foci w trybie <code>osk</code>.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Przy promocji linkować każdy mock inline z opisem i przenieść decyzje do spine'ów albo usunąć z mocków.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R1, R6, R12, R14 — decyzje rozstrzygnięte; promocja mocków i linki nadal do zrobienia.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Nieaktualne „[ASSUMPTION] Brak szkicu OSK/AppMenu”</h3>
+              <span class="finding-location"><code>components.osk-key</code>, <code>osk-panel</code>, <code>appmenu</code></span>
+            </header>
+            <div class="finding-note">Szkice istnieją; wymiary OSK/AppMenu nadal nie są w tokenach; <code>config-error</code> bez szkicu.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Po promocji zaktualizować tokeny z mocków i zdjąć notatki.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Osierocone szkice odrzuconych kierunków</h3>
+              <span class="finding-location">Inspiration → „Odrzucone kierunki wizualne”</span>
+            </header>
+            <div class="finding-note"><code>assigned.html</code>, <code>challenger-split-flap.html</code>, <code>model-pick.html</code> wymienione z nazwy bez linku i powodu.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Opcjonalnie link + jedno zdanie „dlaczego nie”.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>Bloat &amp; overspecification</h2>
+          <span class="verdict-pill verdict-strong">strong</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>Wartości pikselowe w DESIGN.md są tokenami (stały viewport 1920×1080 uzasadnia layout bezwzględny); tabele zamiast prozy; proza EXPERIENCE.md rzeczowa. Tylko drobne restatementy źródeł.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">„Do oceny” powtarza reguły AD-12/forge</h3>
+              <span class="finding-location">EXPERIENCE.md → „Do oceny”</span>
+            </header>
+            <div class="finding-note">Progi 0.9, <code>lastInSeason</code>, statusy <code>pending|queued|rated|skipped</code>, klucz raz na zawsze.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Zostawić decyzje UX i odesłać do AD-12.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">„Model wejścia” przepisuje enum Actions z AD-8</h3>
+              <span class="finding-location">EXPERIENCE.md → Foundation</span>
+            </header>
+            <div class="finding-note">Duplikat architektury.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Odwołanie do AD-8 + to, co UX z tego wyprowadza.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Szczegóły drivera w State Patterns / Back</h3>
+              <span class="finding-location">EXPERIENCE.md → State Patterns; Back</span>
+            </header>
+            <div class="finding-note">D7361, <code>video.play()</code>, <code>history.back</code>, „timeout ~500 ms” to wiedza architektury.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Skrócić do efektu widocznego dla użytkownika + referencja AD-7/AD-5.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>Inheritance discipline</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>Wszystkie 5 ścieżek <code>sources:</code> się rozwiązuje. Nazwy ekranów Netflixa zgodne z AD-7, stany kafelka z AD-10, <code>ratingPendingDays</code> z AD-11/12. Najnowsze wpisy memlogu (Failed bez koloru błędu; Ocenione/Pomiń; Video/Audio/Game) odzwierciedlone.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">Action <code>Keyboard</code> poza webem — decyzja memlogu nie trafiła do spine'u</h3>
+              <span class="finding-location">EXPERIENCE.md → IA → OSK; Interaction Primitives → OSK krok 1; Handoff; Deferred</span>
+            </header>
+            <div class="finding-note">Memlog: „Action Keyboard z pilota: nie w MVP … deferred”. Spine nadal mówi „Action <code>Keyboard</code> w innych aplikacjach”, „przycisk do ustalenia”, Handoff „Nieustalony”, Deferred milczy. To zawężenie zakresu wobec briefu i AD-9.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Zapisać decyzję w IA, Interaction Primitives i Deferred; w Handoff delta „OSK poza webem tylko z klawiatury/gamepada — zawężenie AD-9/briefu → <code>bmad-correct-course</code>”.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R10 — Action <code>Keyboard</code> z pilota nie w MVP; do Deferred i do Handoff jako zawężenie AD-9 (bmad-correct-course).</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">„Oceniłam” → „Ocenione” bez delty w Handoff</h3>
+              <span class="finding-location">EXPERIENCE.md → Voice and Tone; Handoff</span>
+            </header>
+            <div class="finding-note">Brief i AD nadal mówią „Oceniłam”.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Dodać wiersz delty (brief, forge).</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Rozjazd nazw komponentów między spine'ami</h3>
+              <span class="finding-location">DESIGN.md / EXPERIENCE.md → Components</span>
+            </header>
+            <div class="finding-note">„Avatar + powitanie” vs „Logo / avatar”; „Chip” + „State dot” vs „Chip / state dot”; „OSK key” obejmuje też <code>osk-panel</code>.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Jedna nazwa na komponent w obu plikach.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>Shape fit</h2>
+          <span class="verdict-pill verdict-adequate">adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>DESIGN.md ma 8 sekcji w kanonicznej kolejności. EXPERIENCE.md ma wszystkie wymagane defaulty; sekcje własne („Do oceny”, Deferred, Handoff do architektury) zarabiają na miejsce.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">Brak sekcji „Open assumptions” w EXPERIENCE.md</h3>
+              <span class="finding-location">EXPERIENCE.md (całość); DESIGN.md <code>[ASSUMPTION]</code></span>
+            </header>
+            <div class="finding-note">Memlog wymaga tej sekcji; ~30 rozproszonych tagów <code>[ASSUMPTION]</code> bez zbiorczej listy — downstream nie odróżni założeń roboczych od decyzji.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Dodać sekcję z listą (założenie → lokalizacja → status), łącznie z założeniami z DESIGN.md.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R11 — sekcja „Open assumptions” w EXPERIENCE.md, tabela (id, treść, miejsce) z obu spine'ów; tagi inline zostają z odnośnikiem.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">Kolejność sekcji w EXPERIENCE.md</h3>
+              <span class="finding-location">EXPERIENCE.md</span>
+            </header>
+            <div class="finding-note">„Do oceny”, Inspiration i Responsive stoją po Key Flows.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Responsive i Inspiration przed Key Flows, „Do oceny” obok Component/State Patterns.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+    <section class="reviewer-section">
+      <details>
+        <summary>
+          <h2>Impeccable critique</h2>
+          <span class="reviewer-source">review-impeccable-critique.md</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>PASS WITH FIXES, Design Health 27/40 (górna granica Acceptable). Poprzeczka: kategoria Google TV / Apple TV na serio. Shell trzyma kanon czysto — jeden biały fokus z liftem, spokojna grafitowa paleta, ludzkie stany po polsku. Signature move (wiersz „Do oceny” z QR) jest najsłabiej dopracowanym elementem. Tryb zdegradowany: single-context, bez browser overlay, ocena na screenshotach 1920 px.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">F1 — Dwa ringi fokusu naraz w OSK</h3>
+              <span class="finding-location">key-netflix-search-osk.html #1–#2</span>
+            </header>
+            <div class="finding-note">Pole wyszukiwania i klawisz OSK mają identyczny biały ring 5 px; łamie „dokładnie jeden fokus”, pole wygrywa uwagą.</div>
+            <div class="finding-fix"><strong>Fix:</strong> W trybie <code>osk</code> pole w stylu „pole aktywne” (2 px <code>text-2</code> / caret), biały ring tylko na klawiszu; token <code>focus-ring-injected--input-active</code>.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R1 — pole jako „active input” (kursor + linia 2 px <code>text-2</code>), białe ringi wyłącznie na klawiszu OSK.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">F2 — QR za mały na skan z kanapy (~3 m)</h3>
+              <span class="finding-location">key-home-video.html, karta „Do oceny”</span>
+            </header>
+            <div class="finding-note">Realny URL Filmwebu da wersję 4–5 → ~5,5 px/moduł, kod ~12 cm na 55" — skan realnie z 1–1,5 m; quiet zone ≈ 2,5 modułu.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Krótszy payload + ECC L, QR rośnie do ~320–360 px przy fokusie w wierszu, quiet zone ≥ 4 moduły, test na sprzęcie.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R2 — krótki URL, ECC L, quiet zone ≥ 4 moduły, ~240 px w spoczynku / ~360 px z fokusem w wierszu; test dwoma telefonami z 3 m nadal otwarty.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">F3 — Wiersz „Do oceny” upchnięty i poza title-safe</h3>
+              <span class="finding-location">key-home-video.html #1–#2</span>
+            </header>
+            <div class="finding-note">Nagłówek klei się do metadanych Netflixa (~30 px nad, 20 px pod), dół kart 22 px od krawędzi (title-safe 54 px); <code>flat-type-hierarchy</code>.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Model Google TV: peek w spoczynku, scroll strony w górę przy fokusie w wierszu, dół ≥ 54 px, odstęp 48/20.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R3 — title-safe 5% (96/54 px), peek w spoczynku, scroll w górę przy fokusie, większy odstęp nad nagłówkiem.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">F4 — Fokus małych kontrolek słabszy niż kanon; ghost „Pomiń” udaje ring</h3>
+              <span class="finding-location">przyciski, AppMenu, klawisze OSK, zakładki</span>
+            </header>
+            <div class="finding-note">Sam obrys na ciemnej pigułce; stały obrys 2 px <code>line</code> na „Pomiń” myli z fokusem.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Token <code>focus-fill</code> (białe tło, tekst <code>ground</code>); ghost bez stałego obrysu.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R5 — odwrócona pigułka bez skali; „Pomiń” z subtelnym wypełnieniem.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">F5 — Failed i Starting nieodróżnialne z kanapy</h3>
+              <span class="finding-location">key-home-failed-appmenu.html #1 vs #3</span>
+            </header>
+            <div class="finding-note">Ten sam chip, różni je ikona 22 px; „Wciśnij OK” w najmniejszym tekście; Failed bez linii stanu.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Krótki chip Failed + pełny komunikat jako linia stanu; Starting z linią stanu.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R6 — chip „Nie odpowiada” + linia „Coś się zacięło. Wciśnij OK”; Starting „Uruchamiam…” + „Chwilka…”.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">F6 — Wstrzyknięty ring z promieniem 22 px na kwadratowych elementach</h3>
+              <span class="finding-location">key-netflix-search-osk.html #1–#3</span>
+            </header>
+            <div class="finding-note">Rogi elementów Netflixa wystają poza zaokrąglony ring.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Promień z <code>getComputedStyle</code> celu (fallback 4 px) + <code>outline-offset</code>.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R4 — promień elementu Netflixa (domyślnie 4 px).</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">F7 — Polskie znaki w OSK nieodkrywalne</h3>
+              <span class="finding-location">key-netflix-search-osk.html #1</span>
+            </header>
+            <div class="finding-note">ą ć ę ł ń ó ś ź ż tylko przez long-press OK, bez podpowiedzi.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Stała podpowiedź „Przytrzymaj OK, żeby wpisać ą, ę, ł…” + znacznik na klawiszach z wariantami.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> Częściowo R12 — znacznik w rogu klawiszy z wariantami; tekstowej podpowiedzi R12 nie wprowadza.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">F8 — „Pomiń” bez cofnięcia</h3>
+              <span class="finding-location">key-home-video.html #2; EXPERIENCE → Card „Do oceny”</span>
+            </header>
+            <div class="finding-note">Przypadkowe OK przy <code>phase: repeat</code> trwale usuwa kartę.</div>
+            <div class="finding-fix"><strong>Fix:</strong> ~5 s stanu zwiniętego „Pominięte · Cofnij”.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R15 — świadomie bez undo w MVP.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">F9 — AppMenu zasłania tożsamość kafelka</h3>
+              <span class="finding-location">key-home-failed-appmenu.html #2</span>
+            </header>
+            <div class="finding-note">Menu nie mówi, czego dotyczy.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Nagłówek panelu „Netflix” albo przesunięcie panelu.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">F10 — Podwójny komunikat „wstrzymane”</h3>
+              <span class="finding-location">key-home-video.html #1–#2</span>
+            </header>
+            <div class="finding-note">Chip i linia stanu mówią to samo.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Linia „W tle · &lt;tytuł&gt;” albo chip tylko z ikoną.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R6 utrzymuje oba („Wstrzymane” + „…, wstrzymane”) — świadomie lub do rewizji.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">F11 — Hint karty z sierotą, dotyka przycisków</h3>
+              <span class="finding-location">key-home-video.html #1–#2</span>
+            </header>
+            <div class="finding-note">„Filmwebie” w drugiej linii; ring „Ocenione” ~15 px pod hintem.</div>
+            <div class="finding-fix"><strong>Fix:</strong> <code>text-wrap: balance</code> lub krótszy hint; odstęp ≥ 24 px.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">F12 — Popup wariantu wisi nad treścią Netflixa</h3>
+              <span class="finding-location">key-netflix-search-osk.html #2</span>
+            </header>
+            <div class="finding-note">Wygląda na doklejony.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Rząd wariantów wewnątrz panelu OSK albo cień + padding.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">F13 — Pusta Audio: tekst mały i przyklejony do zakładek</h3>
+              <span class="finding-location">key-home-game.html #2</span>
+            </header>
+            <div class="finding-note">Wygląda jak niedokończony stan.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Na wysokości <code>apps-top</code>, 30–34 px, <code>text-2</code>.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R13 — w pasie kafelków, body, <code>text-2</code> (rozmiar body, nie 30–34 px).</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">F14 — Adnotacje w mocku OSK</h3>
+              <span class="finding-location">key-netflix-search-osk.html</span>
+            </header>
+            <div class="finding-note">20 px adnotacji może przeciec do referencji.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Klasa <code>.doc-note</code>, wykluczyć z handoffu.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">F15 — „Ocenione” czyta się jak stan</h3>
+              <span class="finding-location">key-home-video.html</span>
+            </header>
+            <div class="finding-note">Decyzja świadoma; tylko obserwacja.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Opcjonalnie „Już ocenione”, jeśli testy pokażą wahanie.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+    <section class="reviewer-section">
+      <details>
+        <summary>
+          <h2>Impeccable audit</h2>
+          <span class="reviewer-source">review-impeccable-audit.md</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>PASS z warunkami, 13/16 (Good; Responsive pominięte — tylko 1920×1080). Tekst i fokus w shellu z dużym zapasem kontrastu, wszystkie role tekstu ≥ 24 px, tokeny 1:1 z DESIGN.md. Słabe punkty: title-safe, budżet wysokości karty, QR, wstrzyknięty fokus na jasnym artworku i podwójny fokus w OSK.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">H1 — Wiersz „Do oceny” poza title-safe</h3>
+              <span class="finding-location">key-home-video.html <code>.rate</code>; <code>spacing.rate-top</code></span>
+            </header>
+            <div class="finding-note">Dół karty ≈ 1058 px (margines 22 px); przy overscanie 5% przyciski „Ocenione / Pomiń” — kulminacja J1 — są ucinane.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Dolny margines ≥ 54 px; zaktualizować <code>spacing.rate-top</code>; w instalacji wymagać „Just Scan”.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R3 — title-safe 5%, peek + scroll wiersza w górę przy fokusie.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">H2 — Karta „Do oceny” bez zapasu: overflow przy dłuższym tytule</h3>
+              <span class="finding-location">key-home-video.html <code>.card</code> / <code>.info</code></span>
+            </header>
+            <div class="finding-note">Zawartość ≈ 221 px na 220 px dostępnych; dwuliniowy tytuł wypycha przyciski poza kartę, fokus może trafić na niewidoczny przycisk.</div>
+            <div class="finding-fix"><strong>Fix:</strong> <code>line-clamp: 2</code> dla tytułu, hint w jednej linii, stałe sloty wysokości; reguła truncacji w EXPERIENCE.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> Częściowo R3 (więcej miejsca po scrollu wiersza). Reguła truncacji tytułu i stałe sloty karty — nierozstrzygnięte w R1–R15.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">H3 — QR: za mała quiet zone i ułamkowy moduł</h3>
+              <span class="finding-location"><code>.qr</code>; <code>components.qr</code></span>
+            </header>
+            <div class="finding-note">Quiet zone ≈ 1,8 modułu (norma 4) na ciemnym tle; realny URL → wersja 4–5, moduł ~5 px z rozmytymi krawędziami.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Całkowity moduł, quiet zone ≥ 4 moduły, krótszy URL, <code>crispEdges</code>, realny QR w mocku i test z 3 m.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R2 — quiet zone ≥ 4 moduły, pełne piksele, krótki URL, ECC L; test na TV otwarty.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">H4 — Wstrzyknięty fokus ginie na jasnym artworku Netflixa</h3>
+              <span class="finding-location"><code>.inj</code>; <code>components.focus-ring-injected</code></span>
+            </header>
+            <div class="finding-note">Biały 5 px bez skali i cienia: 1,09–1,25:1 na jasnych plakatach (fail WCAG 2.4.13 / 1.4.11).</div>
+            <div class="finding-fix"><strong>Fix:</strong> Ring dwukolorowy: 5 px biały + 3 px ciemny halo.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R4 — biały obrys 5 px + ciemna obwódka 3 px <code>ground</code> (#0F1012), bez skali i cienia.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">high</span>
+              <h3 class="finding-title">H5 — Dwa identyczne fokusy w trybie OSK</h3>
+              <span class="finding-location">key-netflix-search-osk.html #1–#2</span>
+            </header>
+            <div class="finding-note">Użytkownik D-pada nie wie, który element dostanie strzałkę/OK.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Pole oznaczone inaczej niż fokusem; biały ring tylko w OSK; dopisać do State Patterns.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R1 — jeden fokus w trybie <code>osk</code>, pole jako „active input”.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">M1 — Kropka „w tle” na zakładce bez tekstu</h3>
+              <span class="finding-location"><code>.tab .run</code></span>
+            </header>
+            <div class="finding-note">Floor wymaga kropki zawsze z tekstem; 12 px z 3 m łatwo przeoczyć.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Świadomy wyjątek w EXPERIENCE albo glif zamiast kropki; <code>role="img"</code> + <code>aria-label</code>.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">M2 — Granice klawiszy/przycisków niewidoczne z 3 m</h3>
+              <span class="finding-location"><code>.key</code>, <code>.btn</code>, <code>.btn.ghost</code></span>
+            </header>
+            <div class="finding-note"><code>surface-2</code> / <code>surface</code> 1,12:1, <code>line</code> / <code>surface</code> 1,35:1 — primary vs ghost nierozróżnialne.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Podnieść <code>surface-2</code> (~1,4–1,5:1) lub jaśniejsze primary; ghost ≥ 3:1, jeśli ma znaczyć przycisk.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> Częściowo R5 (ghost „Pomiń” z subtelnym wypełnieniem); granice klawiszy bez zmian.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">M3 — Linia stanu kafelka klei się do „Do oceny”</h3>
+              <span class="finding-location">key-home-video.html #1</span>
+            </header>
+            <div class="finding-note">~15 px między linią stanu a nagłówkiem sekcji.</div>
+            <div class="finding-fix"><strong>Fix:</strong> ≥ 36 px (<code>spacing.5</code>), łącznie z H1/H2.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R3 — większy odstęp nad nagłówkiem wiersza.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">M4 — Popup wariantów: słaba granica, brak wskazania</h3>
+              <span class="finding-location">key-netflix-search-osk.html #2 <code>.variants</code></span>
+            </header>
+            <div class="finding-note">1,43:1 nad plakatami; żaden klawisz nie sygnalizuje wariantów.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Cień + obrys <code>line</code>, klawisz źródłowy „pressed”, znacznik wariantów lub podpowiedź.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R12 — znacznik w rogu klawiszy z wariantami, wiersz wariantów z fokusem na pierwszym.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">M5 — Brak wizualizacji kursora żyroskopu w OSK</h3>
+              <span class="finding-location">key-netflix-search-osk.html; DESIGN → OSK key</span>
+            </header>
+            <div class="finding-note">Nie wiadomo, czy wskaźnik i fokus mogą się rozjechać.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Ekran z kursorem + zasada „pointer przenosi fokus”.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">medium</span>
+              <h3 class="finding-title">M6 — AppMenu bez nazwy aplikacji; scrim gasi Failed</h3>
+              <span class="finding-location">key-home-failed-appmenu.html #2</span>
+            </header>
+            <div class="finding-note">Z 3 m nie widać, którego kafelka dotyczy menu; chip Failed pod scrimem 1,6–2,4:1.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Nagłówek „Netflix” w panelu albo wyłączenie kafelka-właściciela spod scrimu.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">L1 — Brak ścieżki <code>prefers-reduced-motion</code></h3>
+              <span class="finding-location"><code>.tile</code> transition</span>
+            </header>
+            <div class="finding-note">Skala 1.08 zawsze animowana.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Reduced-motion: obrys + cień, skala bez tranzycji.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">L2 — Semantyka mocków</h3>
+              <span class="finding-location">wszystkie pliki</span>
+            </header>
+            <div class="finding-note"><code>&lt;span&gt;/&lt;div&gt;</code> bez ról, brak <code>tablist</code>/<code>tab</code>.</div>
+            <div class="finding-fix"><strong>Fix:</strong> <code>&lt;button&gt;</code>, <code>role="tab"</code>, <code>aria-current</code> w implementacji.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">L3 — Hardcode poza tokenami</h3>
+              <span class="finding-location">key-home-failed-appmenu.html</span>
+            </header>
+            <div class="finding-note">Plex <code>#24272C/#1B1D21</code>, avatar, <code>stroke="#fff"</code>.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Tokeny <code>var(--…)</code>, jeden wygląd kafelka.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R14 — mocki wyłącznie na tokenach (<code>surface-dim</code> / <code>surface</code>).</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">L4 — Font nie jest dołączony</h3>
+              <span class="finding-location">wszystkie pliki</span>
+            </header>
+            <div class="finding-note"><code>Roboto Flex</code> tylko lokalnie; fallback ignoruje <code>opsz</code> i wagę 650.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Bundlować variable font, <code>font-display: block</code>.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">L5 — QR w mocku nie jest prawdziwym kodem</h3>
+              <span class="finding-location"><code>.qr</code></span>
+            </header>
+            <div class="finding-note">Nie da się zweryfikować H3.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Wygenerować realny QR.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">L6 — Promień wstrzykniętego ringu ≠ promień elementu</h3>
+              <span class="finding-location"><code>.inj</code>; DESIGN.md</span>
+            </header>
+            <div class="finding-note">Kontrakt sprzeczny (promień elementu vs <code>{rounded.tile}</code>).</div>
+            <div class="finding-fix"><strong>Fix:</strong> Ring bierze promień elementu (min. 4 px).</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R4 — promień elementu Netflixa.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">L7 — Odwrócona hierarchia nagłówków</h3>
+              <span class="finding-location"><code>section-title</code> 32 &lt; <code>card-title</code> 34</span>
+            </header>
+            <div class="finding-note">Detektor: krok 1.23.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Sekcja 36/600 albo karta 32/600.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">low</span>
+              <h3 class="finding-title">L8 — Failed/Starting bez linii stanu</h3>
+              <span class="finding-location">kafelek meta</span>
+            </header>
+            <div class="finding-note">Background ją ma — niespójny wzorzec.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Dodać linię stanu albo zapisać wyjątek.</div>
+            <div class="finding-resolution"><strong>Rozstrzygnięcie:</strong> R6 — każdy stan ma chip + linię stanu.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+    <div class="mechanical">
+      <h3>Mechanical notes</h3>
+      <ul>
+        <li>Referencje <code>{path.to.token}</code>: wszystkie się rozwiązują; linki do <code>canon.html</code> rozwiązują się względem <code>ux-mediastation/</code>.</li>
+        <li>Frontmatter DESIGN.md: <code>fontWeight</code>/<code>lineHeight</code> jako liczby (przykłady używają stringów) — ujednolicić; <code>{colors.focus}</code> bez cudzysłowu w <code>focus-ring*.outline</code>; <code>logo.mark</code> to proza zamiast wartości.</li>
+        <li>Frontmatter EXPERIENCE.md bez <code>description</code> (opcjonalne). Indeks <code>ux-mediastation.md</code> i <code>.memlog.md</code> mają <code>updated: 2026-10-16</code> mimo wpisów z 2026-10-17 — odświeżyć.</li>
+        <li>Accessibility Floor „Brak autoplay” — doprecyzować, że dotyczy shellu (Netflix ma własne autoplay, Edge startuje z <code>--autoplay-policy=no-user-gesture-required</code>).</li>
+        <li>Detektor <code>impeccable detect</code>: <code>cramped-padding</code> na <code>.tile</code> to false positive (grid item), na <code>.nf-field</code> poza zakresem (UI Netflixa); <code>flat-type-hierarchy</code> częściowo zasadne (L7).</li>
+        <li>Mermaid: brak diagramów, nic do walidacji.</li>
+      </ul>
+    </div>
+    <footer class="report-footer">
+      <div class="meta">
+        <span>Rubric: C:\Users\fpiec\mediastation\_bmad-output\initiative-mediastation-mvp\ux-mediastation\review-rubric.md</span>
+        <span>Reviewers: review-impeccable-critique.md, review-impeccable-audit.md</span>
+        <span>Resolutions: .working/review-resolutions.md</span>
+        <span>Generated: 2026-10-17T12:52:53+02:00</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

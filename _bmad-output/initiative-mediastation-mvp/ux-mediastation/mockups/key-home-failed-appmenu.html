@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>MediaStation · J4 Netflix nie odpowiada</title>
+<style>
+  /*
+   * Key screen: J4 „Netflix nie odpowiada” — Home/Video → Failed → AppMenu → Starting.
+   * Governing spine sections:
+   *   DESIGN.md     — Colors (brak koloru błędu; Failed = ikona + tekst), Typography, Layout & Spacing (title-safe),
+   *                   Elevation & Depth (focus-ring; nakładki + scrim), Shapes, Components:
+   *                   Tile, Chip, Focus ring, Focus pill, Tab, Button, AppMenu, Logo, Avatar + powitanie.
+   *   EXPERIENCE.md — Key Flows → J4 (kroki 1–3), State Patterns → Kafelek — cykl życia (Failed, Starting),
+   *                   Component Patterns → Tile, AppMenu, Focus ring, Interaction Primitives → OK / long-press,
+   *                   Voice and Tone (Stan Failed, Stan Starting, AppMenu), Accessibility Floor.
+   * Review resolutions: R5 (pozycja AppMenu w fokusie = odwrócona pigułka), R6 (chip + linia stanu:
+   *   Failed „Nie odpowiada” / „Coś się zacięło. Wciśnij OK”; Starting „Uruchamiam…” / „Chwilka…”),
+   *   R7 (Failed z Foreground → powrót na Home, fokus na kafelku Failed), R14 (tylko tokeny).
+   * Ikony: jeden zestaw w stylu Material Symbols Rounded (error, progress_activity, close, restart).
+   * Pusty „Do oceny” → wiersz znika (State Patterns → Powierzchnie).
+   */
+  :root {
+    --ground: #0F1012; --surface-dim: #1A1C20; --surface: #1E2024; --surface-2: #26292E; --line: #33363C;
+    --text: #FFFFFF; --text-2: #C4C7CC; --text-3: #9AA0A6; --accent: #8AB4F8;
+    --focus: #FFFFFF; --tile-mark: #E6E8EB; --tile-gradient-top: #2A2D33; --scrim: #0F1012B8;
+    --avatar-from: #E8A87C; --avatar-to: #C77D9B; --avatar-ink: #1A1214;
+    --r-tile: 22px; --r-card: 20px; --r-full: 9999px;
+    --safe-x: 96px; --safe-y: 54px; --gutter: 112px;
+    --bar-top: 56px; --tabs-top: 172px; --apps-top: 292px;
+    --tile-gap: 48px; --meta-gap: 30px; --meta-gap-focused: 44px;
+    --focus-shadow: 0 28px 56px rgba(0,0,0,.6), 0 10px 20px rgba(0,0,0,.45);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; background: var(--ground); }
+  body {
+    color: var(--text);
+    font-family: "Roboto Flex", Roboto, "Segoe UI", system-ui, sans-serif;
+    font-variation-settings: "opsz" 32; -webkit-font-smoothing: antialiased;
+    cursor: none;
+  }
+  ::selection { background: var(--surface-2); color: var(--text); }
+
+  .screen { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--ground); }
+  .screen::before {
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 520px; pointer-events: none;
+    background: radial-gradient(1200px 520px at 30% -10%, rgba(138,180,248,.07), transparent 70%);
+  }
+
+  /* Header */
+  .bar { position: absolute; top: var(--bar-top); left: var(--gutter); right: var(--gutter);
+    display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand svg { width: 48px; height: 48px; display: block; }
+  .brand b { font-size: 32px; font-weight: 600; letter-spacing: -0.01em; }
+  .greet { display: flex; align-items: center; gap: 16px; margin-left: 56px; padding-left: 56px;
+    border-left: 2px solid var(--line); font-size: 28px; color: var(--text-2); }
+  .avatar { width: 48px; height: 48px; border-radius: var(--r-full); display: grid; place-items: center;
+    background: linear-gradient(140deg, var(--avatar-from), var(--avatar-to));
+    color: var(--avatar-ink); font-size: 24px; font-weight: 650; }
+  .time { font-size: 32px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-2); }
+
+  /* Tabs */
+  .tabs { position: absolute; top: var(--tabs-top); left: var(--gutter); display: flex; gap: 12px; }
+  .tab { height: 64px; padding: 0 32px; border-radius: var(--r-full); display: flex; align-items: center;
+    gap: 12px; font-size: 30px; font-weight: 500; color: var(--text-3); }
+  .tab.on { background: var(--surface-2); color: var(--text); }
+
+  /* Tiles */
+  .apps { position: absolute; top: var(--apps-top); left: var(--gutter); display: flex; gap: var(--tile-gap); }
+  .app { width: 544px; }
+  .tile { height: 306px; border-radius: var(--r-tile); position: relative; display: grid; place-items: center;
+    background: linear-gradient(160deg, var(--tile-gradient-top) 0%, var(--surface) 60%);
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+    transition: transform 150ms cubic-bezier(.16,1,.3,1), box-shadow 150ms cubic-bezier(.16,1,.3,1); }
+  .tile .mark { font-size: 64px; font-weight: 650; letter-spacing: -0.02em; color: var(--tile-mark); }
+  .chip { position: absolute; left: 24px; bottom: 24px; height: 44px; padding: 0 18px 0 14px;
+    border-radius: var(--r-full); background: var(--scrim); display: flex; align-items: center; gap: 10px;
+    font-size: 24px; color: var(--text); white-space: nowrap; }
+  .chip svg { width: 22px; height: 22px; display: block; flex: none; }
+  .app.focus .tile { transform: scale(1.08); outline: 5px solid var(--focus); outline-offset: 0;
+    box-shadow: var(--focus-shadow); }
+  .meta { margin-top: var(--meta-gap); height: 72px; }
+  .app.focus .meta { margin-top: var(--meta-gap-focused); }
+  .meta .name { font-size: 30px; font-weight: 600; color: var(--text); }
+  .app:not(.focus) .meta .name { color: var(--text-3); font-weight: 500; }
+  .meta .state { margin-top: 6px; font-size: 26px; line-height: 1.3; color: var(--text-2); white-space: nowrap; }
+
+  /* AppMenu overlay: scrim + panel over the tile */
+  .scrim { position: absolute; inset: 0; background: var(--scrim); }
+  .appmenu { position: absolute; left: 164px; top: 367px; width: 440px; padding: 16px;
+    border-radius: var(--r-card); background: var(--surface);
+    display: flex; flex-direction: column; gap: 12px;
+    box-shadow: var(--focus-shadow); }
+  .item { height: 56px; padding: 0 28px 0 24px; border-radius: var(--r-full); display: flex; align-items: center;
+    gap: 12px; font-size: 26px; font-weight: 500; background: var(--surface-2); color: var(--text); }
+  .item svg { width: 24px; height: 24px; display: block; flex: none; }
+  .item.focus { background: var(--focus); color: var(--ground); }   /* focus-pill (R5) */
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="logo" viewBox="0 0 48 48"><rect x="2" y="8" width="44" height="32" rx="9" fill="none" stroke="currentColor" stroke-width="3.2"/><path d="M20 17.5v13l11-6.5z" fill="currentColor"/></symbol>
+  <!-- error: pełne koło z wyciętym wykrzyknikiem -->
+  <symbol id="error" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20zM10.85 6.6h2.3v7.6h-2.3zM10.85 15.7h2.3v2.3h-2.3z"/></symbol>
+  <!-- progress_activity: łuk 3/4 (w produkcie obraca się ≤1 obr./s) -->
+  <symbol id="progress" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="restart" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M18.5 3.5v4h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+</svg>
+
+<!-- ============ 1 · Home/Video — Netflix Failed (powrót z Foreground, R7), fokus na kafelku ============ -->
+<section class="screen" aria-label="Netflix w stanie Failed, fokus na kafelku">
+  <header class="bar">
+    <div class="brand"><svg aria-hidden="true"><use href="#logo"/></svg><b>MediaStation</b>
+      <div class="greet"><span class="avatar">E</span>Dobry wieczór, Eliza</div></div>
+    <div class="time">21:47</div>
+  </header>
+  <nav class="tabs"><div class="tab on">Video</div><div class="tab">Audio</div><div class="tab">Game</div></nav>
+  <div class="apps">
+    <div class="app focus">
+      <div class="tile"><span class="mark">Netflix</span>
+        <span class="chip"><svg aria-hidden="true"><use href="#error"/></svg>Nie odpowiada</span></div>
+      <div class="meta"><div class="name">Netflix</div>
+        <div class="state">Coś się zacięło. Wciśnij OK</div></div>
+    </div>
+    <div class="app">
+      <div class="tile"><span class="mark">Plex</span></div>
+      <div class="meta"><div class="name">Plex</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2 · AppMenu over Home, „Uruchom ponownie” preselected ============ -->
+<section class="screen" aria-label="AppMenu dla Netflixa, zaznaczone Uruchom ponownie">
+  <header class="bar">
+    <div class="brand"><svg aria-hidden="true"><use href="#logo"/></svg><b>MediaStation</b>
+      <div class="greet"><span class="avatar">E</span>Dobry wieczór, Eliza</div></div>
+    <div class="time">21:47</div>
+  </header>
+  <nav class="tabs"><div class="tab on">Video</div><div class="tab">Audio</div><div class="tab">Game</div></nav>
+  <div class="apps">
+    <div class="app">
+      <div class="tile"><span class="mark">Netflix</span>
+        <span class="chip"><svg aria-hidden="true"><use href="#error"/></svg>Nie odpowiada</span></div>
+      <div class="meta"><div class="name">Netflix</div>
+        <div class="state">Coś się zacięło. Wciśnij OK</div></div>
+    </div>
+    <div class="app">
+      <div class="tile"><span class="mark">Plex</span></div>
+      <div class="meta"><div class="name">Plex</div></div>
+    </div>
+  </div>
+  <div class="scrim" aria-hidden="true"></div>
+  <div class="appmenu" role="menu" aria-label="Netflix">
+    <div class="item focus" role="menuitem"><svg aria-hidden="true"><use href="#restart"/></svg>Uruchom ponownie</div>
+    <div class="item" role="menuitem"><svg aria-hidden="true"><use href="#close"/></svg>Zamknij</div>
+  </div>
+</section>
+
+<!-- ============ 3 · After restart — Netflix Starting, focus stays ============ -->
+<section class="screen" aria-label="Netflix w stanie Starting, fokus na kafelku">
+  <header class="bar">
+    <div class="brand"><svg aria-hidden="true"><use href="#logo"/></svg><b>MediaStation</b>
+      <div class="greet"><span class="avatar">E</span>Dobry wieczór, Eliza</div></div>
+    <div class="time">21:47</div>
+  </header>
+  <nav class="tabs"><div class="tab on">Video</div><div class="tab">Audio</div><div class="tab">Game</div></nav>
+  <div class="apps">
+    <div class="app focus">
+      <div class="tile"><span class="mark">Netflix</span>
+        <span class="chip"><svg aria-hidden="true"><use href="#progress"/></svg>Uruchamiam…</span></div>
+      <div class="meta"><div class="name">Netflix</div>
+        <div class="state">Chwilka…</div></div>
+    </div>
+    <div class="app">
+      <div class="tile"><span class="mark">Plex</span></div>
+      <div class="meta"><div class="name">Plex</div></div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

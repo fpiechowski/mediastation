@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>MediaStation · Tablica odjazdów</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--ground:#111214;--flap:#1C1D20;--flap-hi:#25262A;--paint:#F2F2EE;--paint-dim:#B9BBB8;--amber:#F5A524;--red:#B3473F;--steel:#6B7075;--steel-dim:#2A2C30;
+  --cond:"Barlow Condensed",sans-serif;--sans:"Barlow",sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--ground);color:var(--paint);font-family:var(--sans)}
+::selection{background:var(--amber);color:var(--ground)}
+.screen{position:relative;width:1920px;height:1080px;padding:56px 112px 0}
+/* header */
+.head{display:flex;align-items:center;justify-content:space-between;height:80px}
+.brand{display:flex;align-items:center;gap:20px}
+.brand svg{width:52px;height:52px}
+.brand b{font-family:var(--cond);font-weight:700;font-size:40px;letter-spacing:.06em;text-transform:uppercase}
+.greet{display:flex;align-items:center;gap:18px;margin-left:56px;padding-left:56px;border-left:1px solid var(--steel-dim);font-size:30px;color:var(--paint-dim)}
+.avatar{width:48px;height:48px;border-radius:50%;background:#3A3530;border:2px solid var(--steel)}
+.left{display:flex;align-items:center}
+/* split-flap cells */
+.flaps{display:flex;gap:4px}
+.f{position:relative;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(var(--flap-hi),var(--flap) 50%,#18191B 50%,var(--flap));
+  border-radius:4px;font-family:var(--cond);font-weight:600;color:var(--paint);box-shadow:0 2px 3px rgba(0,0,0,.5)}
+.f::after{content:"";position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;background:var(--ground)}
+.clock .f{width:52px;height:76px;font-size:60px}
+.clock .sep{width:22px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px}
+.clock .sep i{width:8px;height:8px;background:var(--paint);border-radius:1px}
+.state .f{width:30px;height:44px;font-size:32px}
+.state .f.sp{background:transparent;box-shadow:none;width:12px}.state .f.sp::after{display:none}
+.state .f.blank{color:transparent;opacity:.6}
+/* tabs */
+.tabs{display:flex;gap:64px;margin-top:56px;height:64px;align-items:flex-end;border-bottom:1px solid var(--steel-dim)}
+.tab{position:relative;font-family:var(--cond);font-weight:600;font-size:36px;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);padding-bottom:14px;display:flex;align-items:center;gap:14px}
+.tab.on{color:var(--paint)}
+.tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:4px;background:var(--paint)}
+.lamp{width:14px;height:14px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 4px rgba(245,165,36,.18)}
+.tab small{font-family:var(--sans);font-size:24px;letter-spacing:0;text-transform:none;color:var(--paint-dim);font-weight:500}
+/* app tiles */
+.tiles{display:flex;gap:48px;margin-top:48px}
+.tile{position:relative;width:820px;height:264px;background:var(--flap);border:2px solid var(--steel-dim);border-radius:10px;padding:40px 44px;display:flex;flex-direction:column;justify-content:space-between}
+.tile.plex{width:560px}
+.tile .name{font-family:var(--cond);font-weight:700;font-size:72px;letter-spacing:.04em;text-transform:uppercase;line-height:1}
+.tile.focus{background:linear-gradient(#26272B,var(--flap) 40%);border-color:transparent;
+  outline:5px solid var(--paint);outline-offset:6px;box-shadow:inset 0 2px 0 rgba(255,255,255,.14),0 22px 48px rgba(0,0,0,.65)}
+.statel{display:flex;align-items:center;gap:18px}
+.statel .what{font-family:var(--cond);font-weight:500;font-size:30px;letter-spacing:.03em;color:var(--paint-dim)}
+.statel .lamp{flex:none}
+.tile .idle{font-family:var(--cond);font-weight:500;font-size:28px;letter-spacing:.06em;text-transform:uppercase;color:var(--steel)}
+/* rating row */
+.rowh{margin-top:64px;display:flex;align-items:baseline;gap:20px}
+.rowh h2{font-family:var(--cond);font-weight:600;font-size:40px;letter-spacing:.06em;text-transform:uppercase}
+.rowh span{font-size:26px;color:var(--steel)}
+.cards{display:flex;gap:48px;margin-top:24px}
+.card{width:820px;height:300px;background:var(--flap);border:2px solid var(--steel-dim);border-radius:10px;padding:28px;display:flex;gap:36px}
+.qr{flex:none;width:244px;height:244px;background:var(--paint);border-radius:6px;padding:14px}
+.qr svg{width:100%;height:100%;display:block}
+.ci{display:flex;flex-direction:column;min-width:0}
+.ci h3{font-family:var(--sans);font-weight:600;font-size:36px;line-height:1.15}
+.ci .sub{font-family:var(--cond);font-weight:500;font-size:28px;letter-spacing:.06em;text-transform:uppercase;color:var(--steel);margin-top:6px}
+.ci p{font-size:26px;line-height:1.35;color:var(--paint-dim);margin-top:18px;max-width:22ch}
+.btns{display:flex;gap:16px;margin-top:auto}
+.btn{font-family:var(--cond);font-weight:600;font-size:28px;letter-spacing:.06em;text-transform:uppercase;padding:10px 26px;border:2px solid var(--steel);border-radius:6px;color:var(--paint)}
+.btn.ghost{border-color:var(--steel-dim);color:var(--paint-dim)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<pattern id="mods" width="24" height="24" patternUnits="userSpaceOnUse"><g fill="#111214">
+<rect x="0" y="0" width="4" height="4"/><rect x="8" y="0" width="4" height="8"/><rect x="16" y="4" width="8" height="4"/><rect x="4" y="8" width="4" height="4"/>
+<rect x="12" y="12" width="8" height="4"/><rect x="0" y="16" width="8" height="4"/><rect x="20" y="16" width="4" height="8"/><rect x="8" y="20" width="4" height="4"/><rect x="16" y="12" width="4" height="4"/></g></pattern>
+<g id="qr"><rect width="100" height="100" fill="url(#mods)" transform="scale(2.16)"/>
+<g fill="#F2F2EE"><rect x="0" y="0" width="64" height="64"/><rect x="152" y="0" width="64" height="64"/><rect x="0" y="152" width="64" height="64"/></g>
+<g fill="none" stroke="#111214" stroke-width="8"><rect x="4" y="4" width="48" height="48"/><rect x="164" y="4" width="48" height="48"/><rect x="4" y="164" width="48" height="48"/></g>
+<g fill="#111214"><rect x="16" y="16" width="24" height="24"/><rect x="176" y="16" width="24" height="24"/><rect x="16" y="176" width="24" height="24"/></g></g>
+</defs></svg>
+<div class="screen">
+  <header class="head">
+    <div class="left">
+      <div class="brand">
+        <svg viewBox="0 0 52 52" aria-hidden="true"><rect x="2" y="2" width="48" height="22" rx="4" fill="#25262A"/><rect x="2" y="28" width="48" height="22" rx="4" fill="#1C1D20"/><rect x="14" y="10" width="24" height="6" fill="#F2F2EE"/><rect x="14" y="28" width="24" height="6" fill="#F2F2EE"/><circle cx="44" cy="44" r="3" fill="#F5A524"/></svg>
+        <b>MediaStation</b>
+      </div>
+      <div class="greet"><span class="avatar"></span>Dobry wieczór, Eliza</div>
+    </div>
+    <div class="flaps clock" aria-label="21:47"><span class="f">2</span><span class="f">1</span><span class="sep"><i></i><i></i></span><span class="f">4</span><span class="f">7</span></div>
+  </header>
+
+  <nav class="tabs">
+    <div class="tab on">Video</div>
+    <div class="tab">Audio</div>
+    <div class="tab">Game <span class="lamp"></span><small>Moonlight w tle</small></div>
+  </nav>
+
+  <section class="tiles">
+    <div class="tile focus">
+      <div class="name">Netflix</div>
+      <div class="statel">
+        <span class="lamp"></span>
+        <span class="flaps state" aria-label="W tle"><span class="f">W</span><span class="f sp"></span><span class="f">T</span><span class="f">L</span><span class="f">E</span></span>
+        <span class="what">· Pamiętniki wampirów, wstrzymane</span>
+      </div>
+    </div>
+    <div class="tile plex">
+      <div class="name">Plex</div>
+      <div class="flaps state" aria-hidden="true"><span class="f blank">·</span><span class="f blank">·</span><span class="f blank">·</span><span class="f blank">·</span><span class="f blank">·</span></div>
+    </div>
+  </section>
+
+  <div class="rowh"><h2>Do oceny</h2></div>
+  <section class="cards">
+    <article class="card">
+      <div class="qr"><svg viewBox="0 0 216 216"><use href="#qr"/></svg></div>
+      <div class="ci">
+        <h3>Pamiętniki wampirów</h3>
+        <div class="sub">Sezon 8 · obejrzany</div>
+        <p>Zeskanuj telefonem i oceń na Filmwebie</p>
+        <div class="btns"><span class="btn">Ocenione</span><span class="btn ghost">Pomiń</span></div>
+      </div>
+    </article>
+    <article class="card">
+      <div class="qr"><svg viewBox="0 0 216 216"><use href="#qr" transform="translate(216 0) scale(-1 1)"/></svg></div>
+      <div class="ci">
+        <h3>Diuna: Część druga</h3>
+        <div class="sub">Film · obejrzany</div>
+        <p>Zeskanuj telefonem i oceń na Filmwebie</p>
+        <div class="btns"><span class="btn">Ocenione</span><span class="btn ghost">Pomiń</span></div>
+      </div>
+    </article>
+  </section>
+</div>
+</body>
+</html>

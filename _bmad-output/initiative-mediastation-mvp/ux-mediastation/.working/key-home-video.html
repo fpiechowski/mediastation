@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>MediaStation · Home Video</title>
+<style>
+  /*
+    Key screen: Home → zakładka Video (J1, kulminacja).
+    Governing spine sections:
+      DESIGN.md     → frontmatter tokens; Colors; Typography; Layout & Spacing (Home vertical bands, title-safe);
+                      Elevation & Depth (focus lift); Shapes; Components (Focus ring, Focus pill, Tile, Chip, State dot,
+                      Tab, Card „Do oceny”, QR, Button, Logo, Avatar + powitanie).
+      EXPERIENCE.md → Information Architecture (Home → Video); Voice and Tone (strings);
+                      Component Patterns (Focus ring, Tab, Tile, Chip / state dot, Card „Do oceny”, Button);
+                      State Patterns (Kafelek Background; Powrót na Home; Wiele kart);
+                      Key Flows J1 krok 7; „Do oceny”.
+    Review resolutions: R2 (QR: quiet zone 4 moduły, moduł w pełnych px — 7 px w spoczynku = 231 px,
+                        11 px przy fokusie w wierszu = 363 px), R3 (title-safe 96/54; peek wiersza; scroll w górę),
+                        R5 (odwrócona pigułka; „Pomiń” z cichym wypełnieniem), R6 (chip + linia stanu), R14 (tylko tokeny).
+    Section 1: fokus na kafelku Netflix (Background); wiersz „Do oceny” wystaje spod kafelków (peek, wygaszony
+               przed dolną krawędzią title-safe), nie przejmuje fokusu.
+    Section 2: D-pad w dół → strona przewija się o 238 px (kafelki na górnej krawędzi title-safe), cały wiersz
+               mieści się w title-safe, QR rośnie do 363 px, fokus (pigułka) na „Ocenione” pierwszej karty.
+               Druga karta wychodzi poza prawą krawędź title-safe → wiersz przycięty i wygaszony (scroll poziomy).
+    QR w mocku to placeholder 25 modułów (nie prawdziwy kod) — liczy się siatka modułów i quiet zone.
+    Fonts: local only, no network fetch. Viewport: 1920×1080 per screen.
+  */
+  :root {
+    --ground: #0F1012; --surface-dim: #1A1C20; --surface: #1E2024; --surface-2: #26292E; --line: #33363C;
+    --text: #FFFFFF; --text-2: #C4C7CC; --text-3: #9AA0A6; --accent: #8AB4F8; --focus: #FFFFFF;
+    --tile-mark: #E6E8EB; --tile-gradient-top: #2A2D33; --scrim: #0F1012B8;
+    --qr-bg: #FFFFFF; --qr-ink: #111111;
+    --avatar-from: #E8A87C; --avatar-to: #C77D9B; --avatar-ink: #1A1214;
+    --r-qr: 14px; --r-card: 20px; --r-tile: 22px; --r-full: 9999px;
+    --safe-x: 96px; --safe-y: 54px;
+    --gutter: 112px; --bar-top: 56px; --tabs-top: 172px; --apps-top: 292px; --rate-top: 770px;
+    --tile-gap: 48px; --card-gap: 40px; --meta-gap: 30px; --meta-gap-focused: 44px;
+    --qr-rest: 231px;    /* (25 + 2×4) × 7 px */
+    --qr-focus: 363px;   /* (25 + 2×4) × 11 px */
+    --row-scroll: 238px; /* apps-top − safe-y */
+    --focus-shadow: 0 28px 56px rgba(0,0,0,.6), 0 10px 20px rgba(0,0,0,.45);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; background: var(--ground); }
+  body {
+    color: var(--text); cursor: none;
+    font-family: "Roboto Flex", Roboto, "Segoe UI", system-ui, sans-serif;
+    font-variation-settings: "opsz" 32;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection { background: var(--surface-2); color: var(--text); }
+
+  .screen { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--ground); }
+  .screen::before {
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 520px; pointer-events: none;
+    background: radial-gradient(1200px 520px at 30% -10%, rgba(138,180,248,.07), transparent 70%);
+  }
+  /* Cała strona Home przewija się jako jedna warstwa (R3) */
+  .page { position: absolute; inset: 0; transition: transform 200ms cubic-bezier(.16,1,.3,1); }
+  .screen.scrolled .page { transform: translateY(calc(-1 * var(--row-scroll))); }
+
+  /* Header */
+  .bar { position: absolute; top: var(--bar-top); left: var(--gutter); right: var(--gutter);
+    display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand svg { width: 48px; height: 48px; display: block; }
+  .brand b { font-size: 32px; font-weight: 600; letter-spacing: -0.01em; }
+  .greet { display: flex; align-items: center; gap: 16px; margin-left: 56px; padding-left: 56px;
+    border-left: 2px solid var(--line); font-size: 28px; font-weight: 400; color: var(--text-2); }
+  .avatar { width: 48px; height: 48px; border-radius: var(--r-full); display: grid; place-items: center;
+    background: linear-gradient(140deg, var(--avatar-from), var(--avatar-to));
+    color: var(--avatar-ink); font-size: 24px; font-weight: 650; }
+  .time { font-size: 32px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-2); }
+
+  /* Tabs */
+  .tabs { position: absolute; top: var(--tabs-top); left: var(--gutter); display: flex; gap: 12px; }
+  .tab { height: 64px; padding: 0 32px; border-radius: var(--r-full); display: flex; align-items: center;
+    gap: 12px; font-size: 30px; font-weight: 500; color: var(--text-3); }
+  .tab.on { background: var(--surface-2); color: var(--text); }
+  .tab.focus { background: var(--focus); color: var(--ground); }
+  .tab .run { width: 12px; height: 12px; border-radius: var(--r-full); background: var(--accent);
+    box-shadow: 0 0 0 4px rgba(138,180,248,.18); }
+
+  /* Tiles */
+  .apps { position: absolute; top: var(--apps-top); left: var(--gutter); display: flex; gap: var(--tile-gap); }
+  .app { width: 544px; }
+  .tile { height: 306px; border-radius: var(--r-tile); position: relative; display: grid; place-items: center;
+    background: linear-gradient(160deg, var(--tile-gradient-top) 0%, var(--surface) 60%);
+    box-shadow: 0 2px 6px rgba(0,0,0,.35);
+    transition: transform 150ms cubic-bezier(.16,1,.3,1), box-shadow 150ms cubic-bezier(.16,1,.3,1); }
+  .tile .mark { font-size: 64px; font-weight: 650; letter-spacing: -0.02em; color: var(--tile-mark); }
+  .chip { position: absolute; left: 24px; bottom: 24px; height: 44px; padding: 0 18px 0 14px;
+    border-radius: var(--r-full); background: var(--scrim); display: flex; align-items: center; gap: 10px;
+    font-size: 24px; font-weight: 400; color: var(--text); white-space: nowrap; }
+  .chip svg { width: 22px; height: 22px; display: block; flex: none; }
+  .app.focus .tile { transform: scale(1.08); outline: 5px solid var(--focus); outline-offset: 0;
+    box-shadow: var(--focus-shadow); }
+  .meta { margin-top: var(--meta-gap); height: 72px; }
+  .app.focus .meta { margin-top: var(--meta-gap-focused); }
+  .meta .name { font-size: 30px; font-weight: 600; color: var(--text); }
+  .app:not(.focus) .meta .name { color: var(--text-3); font-weight: 500; }
+  .meta .state { margin-top: 6px; font-size: 26px; line-height: 1.3; color: var(--text-2);
+    display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+  .meta .state i { flex: none; width: 10px; height: 10px; border-radius: var(--r-full); background: var(--accent); }
+
+  /* Do oceny — w spoczynku peek: wiersz kończy się na dolnej krawędzi title-safe i tam gaśnie (R3) */
+  .rate { position: absolute; top: var(--rate-top); left: var(--gutter); right: var(--gutter);
+    height: calc(1080px - var(--safe-y) - var(--rate-top)); overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 88px), transparent);
+            mask-image: linear-gradient(to bottom, #000 calc(100% - 88px), transparent); }
+  .rate h2 { font-size: 32px; font-weight: 600; letter-spacing: -0.005em; line-height: 40px; margin-bottom: 20px; }
+  .cards { display: flex; gap: var(--card-gap); }
+  .card { flex: none; width: 820px; border-radius: var(--r-card); background: var(--surface);
+    display: flex; gap: 36px; padding: 24px 36px 24px 24px; }
+  .qr { flex: none; width: var(--qr-rest); height: var(--qr-rest); border-radius: var(--r-qr);
+    background: var(--qr-bg); overflow: hidden; }
+  .qr svg { width: 100%; height: 100%; display: block; color: var(--qr-ink); }
+  .info { flex: 1; display: flex; flex-direction: column; min-width: 0; padding-top: 4px; }
+  .info h3 { font-size: 34px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; text-wrap: balance;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .info .sub { margin-top: 6px; font-size: 26px; line-height: 1.3; color: var(--text-3); }
+  .info .hint { margin-top: 18px; font-size: 26px; line-height: 1.3; color: var(--text-2); max-width: 26ch; text-wrap: balance; }
+  .actions { margin-top: auto; padding-top: 24px; display: flex; gap: 16px; }
+  .btn { height: 56px; padding: 0 28px 0 24px; border-radius: var(--r-full); display: flex; align-items: center; gap: 10px;
+    font-size: 26px; font-weight: 500; background: var(--surface-2); color: var(--text); white-space: nowrap; }
+  .btn svg { width: 24px; height: 24px; display: block; flex: none; }
+  .btn.quiet { background: var(--surface-dim); color: var(--text-2); }
+  .btn.focus { background: var(--focus); color: var(--ground); }   /* focus-pill (R5) */
+
+  /* Fokus w wierszu „Do oceny”: pełny wiersz w title-safe, większy QR, prawa krawędź gaśnie (scroll poziomy) */
+  .screen.scrolled .rate { height: auto;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 140px), transparent);
+            mask-image: linear-gradient(to right, #000 calc(100% - 140px), transparent); }
+  .screen.scrolled .card { width: 880px; }
+  .screen.scrolled .qr { width: var(--qr-focus); height: var(--qr-focus); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="qr" viewBox="-4 -4 33 33" shape-rendering="crispEdges"><rect x="-4" y="-4" width="33" height="33" fill="var(--qr-bg)"/>
+    <path fill-rule="evenodd" fill="currentColor" d="M0 0h7v7h-7zM1 1v5h5v-5zM2 2h3v3h-3zM18 0h7v7h-7zM19 1v5h5v-5zM20 2h3v3h-3zM0 18h7v7h-7zM1 19v5h5v-5zM2 20h3v3h-3z"/>
+    <path fill="currentColor" d="M8 0h1v1h-1zM9 0h2v1h-2zM12 0h1v1h-1zM9 1h2v1h-2zM12 1h1v1h-1zM13 1h1v1h-1zM15 1h1v1h-1zM13 2h2v1h-2zM15 2h2v1h-2zM8 3h3v1h-3zM14 3h2v1h-2zM8 4h2v1h-2zM10 4h3v1h-3zM15 4h2v1h-2zM8 5h4v1h-4zM13 5h1v1h-1zM14 5h1v1h-1zM12 6h1v1h-1zM13 6h1v1h-1zM14 6h3v1h-3zM10 7h1v1h-1zM11 7h4v1h-4zM15 7h1v1h-1zM16 7h1v1h-1zM0 8h1v1h-1zM1 8h1v1h-1zM7 8h5v1h-5zM12 8h1v1h-1zM13 8h1v1h-1zM14 8h1v1h-1zM15 8h2v1h-2zM17 8h3v1h-3zM22 8h1v1h-1zM23 8h1v1h-1zM1 9h3v1h-3zM4 9h1v1h-1zM7 9h3v1h-3zM10 9h1v1h-1zM12 9h1v1h-1zM17 9h2v1h-2zM20 9h3v1h-3zM24 9h1v1h-1zM2 10h1v1h-1zM3 10h3v1h-3zM10 10h1v1h-1zM11 10h2v1h-2zM15 10h4v1h-4zM23 10h1v1h-1zM24 10h1v1h-1zM0 11h1v1h-1zM1 11h1v1h-1zM2 11h2v1h-2zM4 11h2v1h-2zM11 11h1v1h-1zM15 11h6v1h-6zM22 11h3v1h-3zM1 12h2v1h-2zM3 12h1v1h-1zM5 12h4v1h-4zM10 12h1v1h-1zM12 12h2v1h-2zM14 12h3v1h-3zM18 12h1v1h-1zM19 12h6v1h-6zM0 13h2v1h-2zM4 13h1v1h-1zM9 13h4v1h-4zM20 13h2v1h-2zM23 13h2v1h-2zM0 14h1v1h-1zM5 14h2v1h-2zM7 14h1v1h-1zM12 14h1v1h-1zM15 14h1v1h-1zM16 14h3v1h-3zM19 14h1v1h-1zM21 14h1v1h-1zM23 14h2v1h-2zM1 15h4v1h-4zM6 15h2v1h-2zM9 15h2v1h-2zM11 15h1v1h-1zM14 15h2v1h-2zM23 15h2v1h-2zM1 16h1v1h-1zM2 16h2v1h-2zM6 16h1v1h-1zM7 16h1v1h-1zM8 16h1v1h-1zM11 16h1v1h-1zM14 16h1v1h-1zM19 16h1v1h-1zM20 16h2v1h-2zM23 16h2v1h-2zM8 17h1v1h-1zM11 17h4v1h-4zM15 17h7v1h-7zM22 17h1v1h-1zM9 18h1v1h-1zM16 18h2v1h-2zM19 18h1v1h-1zM20 18h5v1h-5zM8 19h3v1h-3zM11 19h3v1h-3zM15 19h1v1h-1zM16 19h2v1h-2zM19 19h1v1h-1zM20 19h1v1h-1zM21 19h3v1h-3zM8 20h1v1h-1zM10 20h4v1h-4zM16 20h1v1h-1zM22 20h1v1h-1zM23 20h1v1h-1zM24 20h1v1h-1zM11 21h1v1h-1zM13 21h4v1h-4zM22 21h1v1h-1zM23 21h2v1h-2zM11 22h3v1h-3zM15 22h2v1h-2zM20 22h1v1h-1zM24 22h1v1h-1zM8 23h3v1h-3zM13 23h9v1h-9zM22 23h3v1h-3zM9 24h6v1h-6zM18 24h1v1h-1zM20 24h1v1h-1z"/>
+  </symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="2" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="2" fill="currentColor"/></symbol>
+  <symbol id="logo" viewBox="0 0 48 48"><rect x="2" y="8" width="44" height="32" rx="9" fill="none" stroke="currentColor" stroke-width="3.2"/><path d="M20 17.5v13l11-6.5z" fill="currentColor"/></symbol>
+</svg>
+
+<!-- ============ Screen 1: fokus na kafelku Netflix (J1 krok 7, powrót na Home); „Do oceny” w peeku ============ -->
+<section class="screen" aria-label="Home, Video, fokus na kafelku Netflix">
+ <div class="page">
+  <header class="bar">
+    <div class="brand">
+      <svg aria-hidden="true"><use href="#logo"/></svg>
+      <b>MediaStation</b>
+      <div class="greet"><span class="avatar">E</span>Dobry wieczór, Eliza</div>
+    </div>
+    <div class="time">21:47</div>
+  </header>
+
+  <nav class="tabs">
+    <div class="tab on">Video <span class="run" role="img" aria-label="W tle"></span></div>
+    <div class="tab">Audio</div>
+    <div class="tab">Game</div>
+  </nav>
+
+  <section class="apps">
+    <div class="app focus">
+      <div class="tile"><span class="mark">Netflix</span>
+        <span class="chip"><svg aria-hidden="true"><use href="#pause"/></svg>Wstrzymane</span></div>
+      <div class="meta"><div class="name">Netflix</div>
+        <div class="state"><i></i>W tle · Pamiętniki wampirów, wstrzymane</div></div>
+    </div>
+    <div class="app">
+      <div class="tile"><span class="mark">Plex</span></div>
+      <div class="meta"><div class="name">Plex</div></div>
+    </div>
+  </section>
+
+  <section class="rate">
+    <h2>Do oceny</h2>
+    <div class="cards">
+      <article class="card">
+        <div class="qr"><svg aria-hidden="true"><use href="#qr"/></svg></div>
+        <div class="info">
+          <h3>Pamiętniki wampirów</h3><div class="sub">Sezon 8 · obejrzany</div>
+          <p class="hint">Zeskanuj telefonem i oceń na Filmwebie</p>
+          <div class="actions"><span class="btn"><svg aria-hidden="true"><use href="#check"/></svg>Ocenione</span><span class="btn quiet"><svg aria-hidden="true"><use href="#close"/></svg>Pomiń</span></div>
+        </div>
+      </article>
+      <article class="card">
+        <div class="qr"><svg aria-hidden="true"><use href="#qr"/></svg></div>
+        <div class="info">
+          <h3>Diuna: Część druga</h3><div class="sub">Film · obejrzany</div>
+          <p class="hint">Zeskanuj telefonem i oceń na Filmwebie</p>
+          <div class="actions"><span class="btn"><svg aria-hidden="true"><use href="#check"/></svg>Ocenione</span><span class="btn quiet"><svg aria-hidden="true"><use href="#close"/></svg>Pomiń</span></div>
+        </div>
+      </article>
+    </div>
+  </section>
+ </div>
+</section>
+
+<!-- ============ Screen 2: Dół z kafelka Netflix → strona przewinięta, fokus na „Ocenione” pierwszej karty ============ -->
+<section class="screen scrolled" aria-label="Home, Video, wiersz Do oceny, fokus na przycisku Ocenione">
+ <div class="page">
+  <header class="bar">
+    <div class="brand">
+      <svg aria-hidden="true"><use href="#logo"/></svg>
+      <b>MediaStation</b>
+      <div class="greet"><span class="avatar">E</span>Dobry wieczór, Eliza</div>
+    </div>
+    <div class="time">21:49</div>
+  </header>
+
+  <nav class="tabs">
+    <div class="tab on">Video <span class="run" role="img" aria-label="W tle"></span></div>
+    <div class="tab">Audio</div>
+    <div class="tab">Game</div>
+  </nav>
+
+  <section class="apps">
+    <div class="app">
+      <div class="tile"><span class="mark">Netflix</span>
+        <span class="chip"><svg aria-hidden="true"><use href="#pause"/></svg>Wstrzymane</span></div>
+      <div class="meta"><div class="name">Netflix</div>
+        <div class="state"><i></i>W tle · Pamiętniki wampirów, wstrzymane</div></div>
+    </div>
+    <div class="app">
+      <div class="tile"><span class="mark">Plex</span></div>
+      <div class="meta"><div class="name">Plex</div></div>
+    </div>
+  </section>
+
+  <section class="rate">
+    <h2>Do oceny</h2>
+    <div class="cards">
+      <article class="card">
+        <div class="qr"><svg aria-hidden="true"><use href="#qr"/></svg></div>
+        <div class="info">
+          <h3>Pamiętniki wampirów</h3><div class="sub">Sezon 8 · obejrzany</div>
+          <p class="hint">Zeskanuj telefonem i oceń na Filmwebie</p>
+          <div class="actions"><span class="btn focus"><svg aria-hidden="true"><use href="#check"/></svg>Ocenione</span><span class="btn quiet"><svg aria-hidden="true"><use href="#close"/></svg>Pomiń</span></div>
+        </div>
+      </article>
+      <article class="card">
+        <div class="qr"><svg aria-hidden="true"><use href="#qr"/></svg></div>
+        <div class="info">
+          <h3>Diuna: Część druga</h3><div class="sub">Film · obejrzany</div>
+          <p class="hint">Zeskanuj telefonem i oceń na Filmwebie</p>
+          <div class="actions"><span class="btn"><svg aria-hidden="true"><use href="#check"/></svg>Ocenione</span><span class="btn quiet"><svg aria-hidden="true"><use href="#close"/></svg>Pomiń</span></div>
+        </div>
+      </article>
+    </div>
+  </section>
+ </div>
+</section>
+</body>
+</html>
