@@ -134,7 +134,7 @@ components:
     iconColor: '{colors.focus-ink}'
     outline: none
     scale: 1
-    note: '[ASSUMPTION R5] Fokus małych kontrolek (button, klawisz OSK, pozycja AppMenu, zakładka): odwrócona pigułka. Kontrast tekstu 19.0:1; pigułka vs surface 16.3:1, vs surface-2 14.6:1.'
+    note: 'Fokus małych kontrolek (button, klawisz OSK, pozycja AppMenu, zakładka): odwrócona pigułka. Kontrast tekstu 19.0:1; pigułka vs surface 16.3:1, vs surface-2 14.6:1.'
   focus-ring-injected:
     outline: '5px solid {colors.focus}'
     halo: '3px solid {colors.focus-halo}'
@@ -142,12 +142,12 @@ components:
     radius: 'border-radius elementu docelowego (getComputedStyle), fallback {rounded.injected-fallback}'
     scale: 1
     shadow: none
-    note: '[ASSUMPTION R4] PageRuntime w Netflixie. Biały obrys vs ciemne tła Netflixa ≥ 18.4:1; ciemna obwódka vs jasny artwork (#E6E6E6–#FFFFFF) 15.3–19.0:1 — na każdym tle jeden z dwóch pierścieni ma ≥ 3:1.'
+    note: 'PageRuntime w Netflixie. Biały obrys vs ciemne tła Netflixa ≥ 18.4:1; ciemna obwódka vs jasny artwork (#E6E6E6–#FFFFFF) 15.3–19.0:1 — na każdym tle jeden z dwóch pierścieni ma ≥ 3:1.'
   input-active:
     caret: '{colors.text}'
     underline: '2px solid {colors.text-2}'
     outline: none
-    note: '[ASSUMPTION R1] Pole docelowe w Netflixie, gdy otwarta jest OSK (tryb osk). Linia text-2 vs tło Netflixa #141414 10.9:1. Bez białego ringu.'
+    note: 'Pole docelowe w Netflixie, gdy otwarta jest OSK (tryb osk). Linia text-2 vs tło Netflixa #141414 10.9:1. Bez białego ringu.'
   logo:
     size: 48px
     mark: 'zaokrąglony ekran (obrys 3.2 / 48, rx 9) + trójkąt play, currentColor = {colors.text}'
@@ -217,14 +217,14 @@ components:
   chip-starting:
     icon: progress_activity
     label: 'Uruchamiam…'
-    note: '[ASSUMPTION A26] Ikona statyczna (bez obrotu).'
+    note: 'Ikona statyczna (bez obrotu).'
   chip-stopping:
     icon: close
     label: 'Zamykam…'
   chip-failed:
     icon: error
     label: 'Nie odpowiada'
-    note: '[ASSUMPTION A14] Bez koloru błędu — ikona + tekst.'
+    note: 'Bez koloru błędu — ikona + tekst.'
   state-dot:
     size: 10px
     radius: '{rounded.full}'
@@ -236,7 +236,7 @@ components:
     topRest: '{spacing.rate-top}'
     topFocused: '{spacing.rate-top-focused}'
     gap: '{spacing.card-gap}'
-    note: '[ASSUMPTION R3] Spoczynek na rate-top: widać nagłówek i górę kart (peek). Z fokusem w wierszu na rate-top-focused (przesunięcie 214px), dół kart ≥ title-safe-y od krawędzi.'
+    note: 'Spoczynek na rate-top: widać nagłówek i górę kart (peek). Z fokusem w wierszu na rate-top-focused (przesunięcie 214px), dół kart ≥ title-safe-y od krawędzi.'
   card-do-oceny:
     width: 820px
     widthFocused: 940px
@@ -251,7 +251,7 @@ components:
     hintMaxLines: 1
     subColor: '{colors.text-3}'
     hintColor: '{colors.text-2}'
-    note: '[ASSUMPTION R2] widthFocused / heightFocused: wariant karty z fokusem w wierszu „Do oceny”. [ASSUMPTION A24] Tytuł max 2 linie (ellipsis), podpowiedź 1 linia.'
+    note: 'widthFocused / heightFocused: wariant karty z fokusem w wierszu „Do oceny”. Tytuł max 2 linie (ellipsis), podpowiedź 1 linia.'
   qr:
     size: 240px
     sizeFocused: 360px
@@ -261,7 +261,7 @@ components:
     radius: '{rounded.qr}'
     background: '{colors.qr-bg}'
     ink: '{colors.qr-ink}'
-    note: '[ASSUMPTION R2] Wygląd: rozmiar, quiet zone, ECC L, moduły w pełnych px.'
+    note: 'Wygląd: rozmiar, quiet zone, ECC L, moduły w pełnych px.'
   button:
     height: 56px
     padding: 0 28px
@@ -276,11 +276,11 @@ components:
     textColor: '{colors.text-2}'
     border: none
     focused: '{components.focus-pill}'
-    note: '[ASSUMPTION R5] „Pomiń” w spoczynku: subtelne wypełnienie zamiast obrysu, który udawał ring. Różnica vs primary: kolor etykiety text-2 (8.6:1).'
+    note: '„Pomiń” w spoczynku: subtelne wypełnienie zamiast obrysu, który udawał ring. Różnica vs primary: kolor etykiety text-2 (8.6:1).'
   osk-panel:
     background: '{colors.surface}'
     radius: '{rounded.tile}'
-    note: '[ASSUMPTION A18] Panel u dołu ekranu, pełna szerokość minus {spacing.gutter}, dół ≥ {spacing.title-safe-y}.'
+    note: 'Panel u dołu ekranu, pełna szerokość minus {spacing.gutter}, dół ≥ {spacing.title-safe-y}.'
   osk-key:
     height: '{components.button.height}'
     radius: '{rounded.full}'
@@ -290,11 +290,11 @@ components:
     focused: '{components.focus-pill}'
     variantMark: '{colors.text-3}'
     specialKeys: 'Usuń (backspace), Spacja (space_bar), 123, Gotowe (check)'
-    note: '[ASSUMPTION R12] Klawisze z wariantami (a c e l n o s z) mają mały znacznik w rogu. [ASSUMPTION A18] Wymiary wyprowadzone z button/tab.'
+    note: 'Klawisze z wariantami (a c e l n o s z) mają mały znacznik w rogu. Wymiary wyprowadzone z button/tab.'
   osk-variants-row:
     background: '{colors.surface-2}'
     keyStyle: '{components.osk-key}'
-    note: '[ASSUMPTION R12] Rząd wariantów wewnątrz panelu OSK, nad rzędem klawisza źródłowego; fokus na pierwszym wariancie.'
+    note: 'Rząd wariantów wewnątrz panelu OSK, nad rzędem klawisza źródłowego; fokus na pierwszym wariancie.'
   appmenu:
     background: '{colors.surface}'
     radius: '{rounded.card}'
@@ -302,18 +302,18 @@ components:
     itemRadius: '{rounded.full}'
     itemTypography: '{typography.button}'
     itemFocused: '{components.focus-pill}'
-    note: '[ASSUMPTION A19] Panel nad kafelkiem; [ASSUMPTION A5] scrim {colors.scrim} pod spodem.'
+    note: 'Panel nad kafelkiem; scrim {colors.scrim} pod spodem.'
   empty-state:
     typography: '{typography.body}'
     textColor: '{colors.text-2}'
     top: '{spacing.apps-top}'
     left: '{spacing.gutter}'
-    note: '[ASSUMPTION R13] W pasie kafelków. Kontrast text-2 / ground 11.2:1.'
+    note: 'W pasie kafelków. Kontrast text-2 / ground 11.2:1.'
   config-error:
     background: '{colors.ground}'
     titleTypography: '{typography.card-title}'
     bodyTypography: '{typography.body}'
-    note: '[ASSUMPTION A20] Brak szkicu; pełnoekranowy komunikat na {colors.ground}, logo w lewym górnym rogu.'
+    note: 'Brak szkicu; pełnoekranowy komunikat na {colors.ground}, logo w lewym górnym rogu.'
 ---
 
 ## Brand & Style
@@ -324,7 +324,7 @@ Anty-marketing: żadnych kafelków promocyjnych, banerów ani rekomendacji. Na e
 
 Logo w MVP to placeholder: zaokrąglony ekran z trójkątem play + wordmark „MediaStation” w lewym górnym rogu (`{components.logo}`). Właściwe logo jest deferred.
 
-**Referencje wizualne.** Szkic kierunku: [`mockups/direction-canon.html`](mockups/direction-canon.html) — kompozycja kanonu (ekran główny, zakładka Video, Netflix w tle, dwie karty „Do oceny”); bazowe tokeny pochodzą z jego `:root` i CSS. Key-screen mocki są linkowane inline w sekcjach, których dotyczą. Mocki powstały przed Reviewer Gate i mogą nie mieć rozstrzygnięć R1–R15. **Przy konflikcie z mockami wygrywają spine'y (`DESIGN.md` + `EXPERIENCE.md`).** Tagi `[ASSUMPTION …]` rozwiązuje `EXPERIENCE.md` → Open assumptions.
+**Referencje wizualne.** Szkic kierunku: [`mockups/direction-canon.html`](mockups/direction-canon.html) — kompozycja kanonu (ekran główny, zakładka Video, Netflix w tle, dwie karty „Do oceny”); bazowe tokeny pochodzą z jego `:root` i CSS. Key-screen mocki są linkowane inline w sekcjach, których dotyczą. Mocki powstały przed Reviewer Gate i mogą nie mieć rozstrzygnięć R1–R16. **Przy konflikcie z mockami wygrywają spine'y (`DESIGN.md` + `EXPERIENCE.md`).** Rozstrzygnięcia R1–R16 i A1–A26 są potwierdzone (2026-10-17); ich lista: `EXPERIENCE.md` → Rozstrzygnięcia R/A.
 
 **Odrzucone kierunki wizualne:** Neon nad Wisłą, Wieczorna lampa, Tablica odjazdów.
 
@@ -357,9 +357,9 @@ Grafitowa skala tonalna + jeden chłodny akcent. Kontrast liczony względem `{co
 Zasady:
 - Cały tekst ≥ 5.5:1 (WCAG AA z zapasem). `line` nigdy nie niesie informacji samodzielnie.
 - `accent` nie jest kolorem fokusu, przycisku ani tła. Fokus jest biały i rozpoznawalny bez koloru.
-- Kontrast fokusu (non-text) ≥ 3:1 względem przyległych kolorów, także na jasnym artworku. Wartości per wariant: notatki `{components.focus-pill}`, `{components.focus-ring-injected}` [ASSUMPTION R4] i `{components.input-active}` [ASSUMPTION R1].
+- Kontrast fokusu (non-text) ≥ 3:1 względem przyległych kolorów, także na jasnym artworku. Wartości per wariant: notatki `{components.focus-pill}`, `{components.focus-ring-injected}` i `{components.input-active}`.
 - Tło ma subtelną poświatę: `radial-gradient(1200px 520px at 30% -10%, {colors.ground-glow}, transparent 70%)`, wysokość 520px.
-- Brak koloru błędu w palecie. Stan Failed rozróżnia ikona + tekst, nie czerwień [ASSUMPTION A14].
+- Brak koloru błędu w palecie. Stan Failed rozróżnia ikona + tekst, nie czerwień.
 
 ## Typography
 
@@ -369,12 +369,12 @@ Jedna rodzina: **Roboto Flex** (osie `opsz`, `wght`; polskie znaki), `font-varia
 |---|---|---|---|
 | Wordmark | `{typography.wordmark}` | 32px / 600 | „MediaStation” obok logo |
 | Zegar | `{typography.clock}` | 32px / 500, tabular | Prawy górny róg |
-| Powitanie | `{typography.greeting}` | 28px / 400 | „Dobry wieczór, Eliza” [ASSUMPTION A1] |
+| Powitanie | `{typography.greeting}` | 28px / 400 | „Dobry wieczór, Eliza” |
 | Zakładka | `{typography.tab}` | 30px / 500 | Video / Audio / Game |
 | Znak na kafelku | `{typography.tile-mark}` | 64px / 650 | Wordmark aplikacji (placeholder ikon) |
 | Nazwa kafelka | `{typography.tile-name}` / `{typography.tile-name-unfocused}` | 30px / 600 (fokus), 30px / 500 (poza fokusem) | Pod kafelkiem |
 | Tytuł sekcji | `{typography.section-title}` | 36px / 600 | „Do oceny” (większy niż tytuł karty i nazwa kafelka) |
-| Tytuł karty | `{typography.card-title}` | 34px / 600, lh 1.15 | Tytuł filmu/serialu, max 2 linie [ASSUMPTION A24] |
+| Tytuł karty | `{typography.card-title}` | 34px / 600, lh 1.15 | Tytuł filmu/serialu, max 2 linie |
 | Body | `{typography.body}` | 26px / 400, lh 1.3 | Linia stanu kafelka, podtytuł i podpowiedź karty, empty state |
 | Przycisk | `{typography.button}` | 26px / 500 | „Ocenione”, „Pomiń”, pozycje AppMenu |
 | Chip | `{typography.chip}` | 24px / 400 | Chip stanu na kafelku |
@@ -383,7 +383,7 @@ Bez all-caps, bez rozmiarów display ponad 64px. Tytuły mogą być po angielsku
 
 ## Layout & Spacing
 
-Jedna powierzchnia: **1920×1080**, stały viewport, **bez responsive**. Title-safe 5%: `{spacing.title-safe-x}` (96px) w poziomie, `{spacing.title-safe-y}` (54px) w pionie — żaden element z fokusem ani akcją nie wychodzi poza tę ramkę [ASSUMPTION R3]. Gutter boczny `{spacing.gutter}` (112px) leży wewnątrz title-safe.
+Jedna powierzchnia: **1920×1080**, stały viewport, **bez responsive**. Title-safe 5%: `{spacing.title-safe-x}` (96px) w poziomie, `{spacing.title-safe-y}` (54px) w pionie — żaden element z fokusem ani akcją nie wychodzi poza tę ramkę. Gutter boczny `{spacing.gutter}` (112px) leży wewnątrz title-safe.
 
 Pionowy układ Home (wartości bezwzględne, spoczynek):
 
@@ -394,11 +394,11 @@ Pionowy układ Home (wartości bezwzględne, spoczynek):
 | Kafelki | `{spacing.apps-top}` | Kafelki 544×306 (16:9), gap `{spacing.tile-gap}`; meta pod kafelkiem `{spacing.meta-gap}`. Empty state zakładki stoi w tym pasie |
 | Do oceny | `{spacing.rate-top}` | Nagłówek sekcji (odstęp nad nagłówkiem ≥ `{spacing.rate-heading-above}` od linii stanu, pod nagłówkiem `{spacing.rate-heading-below}`) + poziomy wiersz kart, gap `{spacing.card-gap}` |
 
-**Peek i scroll wiersza „Do oceny” — geometria** [ASSUMPTION R3] (wzorzec Google TV) — ilustracja: [`mockups/key-home-video.html`](mockups/key-home-video.html). Zachowanie: `EXPERIENCE.md` → Interaction Primitives → Scroll Home.
+**Peek i scroll wiersza „Do oceny” — geometria** (wzorzec Google TV) — ilustracja: [`mockups/key-home-video.html`](mockups/key-home-video.html). Zachowanie: `EXPERIENCE.md` → Interaction Primitives → Scroll Home.
 - Spoczynek: wiersz na `{spacing.rate-top}` wystaje spod kafelków — widać nagłówek i górę kart; dolna część kart może być poza ekranem.
 - Fokus w wierszu: wiersz na `{spacing.rate-top-focused}` (przesunięcie 214px; header i zakładki mogą wyjść poza ekran), karty w rozmiarze `widthFocused`/`heightFocused`, QR `{components.qr.sizeFocused}`, dół kart ≥ `{spacing.title-safe-y}` od krawędzi.
 
-Skala: 6 / 12 / 16 / 24 / 36 / 48 / 56px (`{spacing.1}`…`{spacing.7}`). Kafelek w fokusie rośnie ×1.08 — sąsiedzi się nie przesuwają; meta pod kafelkiem w fokusie odsuwa się do `{spacing.meta-gap-focused}`, żeby skala jej nie zasłoniła. Wiersze dłuższe niż ekran przewijają się poziomo w obrębie wiersza; lewa krawędź trzyma gutter [ASSUMPTION A16].
+Skala: 6 / 12 / 16 / 24 / 36 / 48 / 56px (`{spacing.1}`…`{spacing.7}`). Kafelek w fokusie rośnie ×1.08 — sąsiedzi się nie przesuwają; meta pod kafelkiem w fokusie odsuwa się do `{spacing.meta-gap-focused}`, żeby skala jej nie zasłoniła. Wiersze dłuższe niż ekran przewijają się poziomo w obrębie wiersza; lewa krawędź trzyma gutter.
 
 ## Elevation & Depth
 
@@ -406,12 +406,12 @@ Głębia ma dwa poziomy — spoczynek i lift kafelka; pozostałe pozycje to wari
 
 - **Spoczynek:** kafelek na `{colors.surface}`, cień `{components.elevation-rest}`. Karty bez cienia.
 - **Fokus kafelka w shellu:** `{components.focus-ring}` — biały obrys 5px, `scale(1.08)`, cień `{components.elevation-lift}`. To jedyny „lift” w systemie.
-- **Fokus małych kontrolek w shellu i OSK:** `{components.focus-pill}` — odwrócona pigułka (białe wypełnienie, tekst `{colors.focus-ink}`), bez skali i bez cienia [ASSUMPTION R5].
-- **Fokus w Netflixie (PageRuntime):** `{components.focus-ring-injected}` — biały obrys 5px + ciemna obwódka 3px `{colors.focus-halo}`, promień elementu Netflixa (fallback `{rounded.injected-fallback}`), **bez skali** (nie ruszamy layoutu cudzej strony) i bez cienia [ASSUMPTION R4].
-- **Pole w Netflixie przy otwartej OSK:** `{components.input-active}` — kursor tekstowy + linia 2px `{colors.text-2}`, bez ringu; jedyny fokus jest na klawiszu OSK [ASSUMPTION R1].
-- **Nakładki (OSK, AppMenu):** panel `{colors.surface}` nad treścią; scrim pod AppMenu [ASSUMPTION A5].
+- **Fokus małych kontrolek w shellu i OSK:** `{components.focus-pill}` — odwrócona pigułka (białe wypełnienie, tekst `{colors.focus-ink}`), bez skali i bez cienia.
+- **Fokus w Netflixie (PageRuntime):** `{components.focus-ring-injected}` — biały obrys 5px + ciemna obwódka 3px `{colors.focus-halo}`, promień elementu Netflixa (fallback `{rounded.injected-fallback}`), **bez skali** (nie ruszamy layoutu cudzej strony) i bez cienia.
+- **Pole w Netflixie przy otwartej OSK:** `{components.input-active}` — kursor tekstowy + linia 2px `{colors.text-2}`, bez ringu; jedyny fokus jest na klawiszu OSK.
+- **Nakładki (OSK, AppMenu):** panel `{colors.surface}` nad treścią; scrim pod AppMenu.
 
-Animacja fokusu: krótki transform/outline, ok. 150 ms ease-out [ASSUMPTION A6]; brak animacji wejścia ekranu. Przesunięcie strony przy wejściu do wiersza „Do oceny” używa tej samej krzywej.
+Animacja fokusu: krótki transform/outline, ok. 150 ms ease-out; brak animacji wejścia ekranu. Przesunięcie strony przy wejściu do wiersza „Do oceny” używa tej samej krzywej.
 
 ## Shapes
 
@@ -419,10 +419,10 @@ Miękkie, zaokrąglone prostokąty — język Google TV:
 
 | Token | Wartość | Gdzie |
 |---|---|---|
-| `{rounded.tile}` | 22px | Kafelki aplikacji, panel OSK [ASSUMPTION A18] |
-| `{rounded.card}` | 20px | Karta „Do oceny”, AppMenu [ASSUMPTION A19] |
+| `{rounded.tile}` | 22px | Kafelki aplikacji, panel OSK |
+| `{rounded.card}` | 20px | Karta „Do oceny”, AppMenu |
 | `{rounded.qr}` | 14px | Białe pole QR |
-| `{rounded.injected-fallback}` | 4px | Promień wstrzykniętego fokusu, gdy element Netflixa nie ma własnego [ASSUMPTION R4] |
+| `{rounded.injected-fallback}` | 4px | Promień wstrzykniętego fokusu, gdy element Netflixa nie ma własnego |
 | `{rounded.full}` | 9999px | Zakładki, przyciski, chipy, kropki stanu, avatar, klawisze OSK, `focus-pill` |
 
 Obrys fokusu przyjmuje promień elementu (`outline-offset: 0`) — w shellu i w Netflixie.
@@ -433,26 +433,26 @@ Obrys fokusu przyjmuje promień elementu (`outline-offset: 0`) — w shellu i w 
 |---|---|---|
 | **Focus ring** (`focus-ring`, `focus-pill`, `focus-ring-injected`, `input-active`) | Patrz Elevation & Depth (wszystkie warianty fokusu) | Patrz Elevation & Depth |
 | **Tile** (`tile`, `tile-focused`, `tile-meta`) | 544×306, `{rounded.tile}`, gradient 160° od `{colors.tile-gradient-top}`, wordmark aplikacji `{typography.tile-mark}` na środku; pod spodem nazwa + linia stanu | Spoczynek: nazwa `{typography.tile-name-unfocused}`, `{colors.text-3}`. Fokus: ring, nazwa `{typography.tile-name}`, `{colors.text}`. Stany cyklu życia → chip + linia stanu (tabela niżej). Przykłady: [`mockups/key-home-video.html`](mockups/key-home-video.html) (Background), [`mockups/key-home-failed-appmenu.html`](mockups/key-home-failed-appmenu.html) (Failed, Starting) |
-| **Chip** (`chip`, `chip-*`) | Pigułka 44px w lewym dolnym rogu kafelka (inset 24px), tło `{colors.scrim}`, ikona 22px z **Material Symbols Rounded** + krótki tekst | Tylko krótka etykieta; pełny komunikat idzie do linii stanu (tabela niżej) [ASSUMPTION R6] |
+| **Chip** (`chip`, `chip-*`) | Pigułka 44px w lewym dolnym rogu kafelka (inset 24px), tło `{colors.scrim}`, ikona 22px z **Material Symbols Rounded** + krótki tekst | Tylko krótka etykieta; pełny komunikat idzie do linii stanu (tabela niżej) |
 | **State dot** (`state-dot`) | Kropka 10px `{colors.accent}` przed linią stanu kafelka | Tylko Background („W tle · …”) |
-| **Tab** (`tab`, `tab-active`, `tab-focused`, `tab-running-dot`) | Pigułka 64px, padding 0 32px | Nieaktywna: tekst `{colors.text-3}`. Aktywna bez fokusu: tło `{colors.surface-2}`, tekst `{colors.text}`. Fokus: `focus-pill` [ASSUMPTION R5]. Kropka 12px `{colors.accent}` z halo `{colors.accent-halo}` = w zakładce działa coś w tle [ASSUMPTION A25] |
-| **Rate row** (`rate-row`) | Nagłówek „Do oceny” `{typography.section-title}` + poziomy wiersz kart | Peek i scroll: geometria w Layout & Spacing, zachowanie w `EXPERIENCE.md` → Scroll Home [ASSUMPTION R3]. Pusty: wiersz znika |
-| **Card „Do oceny”** (`card-do-oceny`) | 820×288 (focused 940×408), `{rounded.card}`, `{colors.surface}`; QR po lewej; tytuł `{typography.card-title}` max 2 linie, podtytuł (`{colors.text-3}`), podpowiedź (`{colors.text-2}`, 1 linia) [ASSUMPTION A24], przyciski na dole. Ilustracja: [`mockups/key-home-video.html`](mockups/key-home-video.html) | Fokus na przyciskach karty, nie na całej karcie [ASSUMPTION A17] |
-| **QR** (`qr`) | Białe pole ok. 240px (focused ok. 360px), quiet zone ≥ 4 moduły, moduły w pełnych px, ECC L, `{rounded.qr}`, moduły `{colors.qr-ink}` [ASSUMPTION R2] | Statyczny; nigdy nie dostaje fokusu |
-| **Button** (`button`, `button-ghost`) | Pigułka 56px, ikona 24px + etykieta. Primary „Ocenione” (`check`) na `{colors.surface-2}`, tekst `{colors.text}`; ghost „Pomiń” (`close`) na `{colors.surface-2}`, tekst `{colors.text-2}`, bez obrysu [ASSUMPTION R5] | Fokus: `focus-pill` [ASSUMPTION R5] |
-| **OSK** (`osk-panel`, `osk-key`, `osk-variants-row`) | Panel `{colors.surface}` u dołu ekranu [ASSUMPTION A18]; klawisze-pigułki: QWERTY, „Usuń” (`backspace`), „Spacja” (`space_bar`), „123” (panel cyfr i symboli `@ . _ -`), „Gotowe” (`check`); klawisze a c e l n o s z mają znacznik wariantów `{colors.text-3}` w rogu [ASSUMPTION R12]. Ilustracja: [`mockups/key-netflix-search-osk.html`](mockups/key-netflix-search-osk.html) | Fokus: `focus-pill`; kursor żyroskopu przenosi ten sam jedyny fokus [ASSUMPTION A22]. Long OK: rząd wariantów ą ć ę ł ń ó ś ź ż wewnątrz panelu, fokus na pierwszym wariancie [ASSUMPTION R12]. Pole w Netflixie: `input-active` [ASSUMPTION R1] |
-| **AppMenu** (`appmenu`) | Panel `{colors.surface}`, pozycje jak button: „Uruchom ponownie”, „Zamknij”; scrim pod spodem [ASSUMPTION A5] [ASSUMPTION A19]. Ilustracja: [`mockups/key-home-failed-appmenu.html`](mockups/key-home-failed-appmenu.html) | Pozycja w fokusie: `focus-pill` [ASSUMPTION R5]; przy Failed otwiera się z fokusem na „Uruchom ponownie” |
-| **Empty state** (`empty-state`) | Jedno zdanie `{typography.body}`, `{colors.text-2}`, w pasie kafelków (`{spacing.apps-top}`, od guttera). Ilustracja: [`mockups/key-home-game.html`](mockups/key-home-game.html) (pusta Audio) | Nie fokusowalny; fokus zostaje na zakładce [ASSUMPTION R13] |
+| **Tab** (`tab`, `tab-active`, `tab-focused`, `tab-running-dot`) | Pigułka 64px, padding 0 32px | Nieaktywna: tekst `{colors.text-3}`. Aktywna bez fokusu: tło `{colors.surface-2}`, tekst `{colors.text}`. Fokus: `focus-pill`. Kropka 12px `{colors.accent}` z halo `{colors.accent-halo}` = w zakładce działa coś w tle |
+| **Rate row** (`rate-row`) | Nagłówek „Do oceny” `{typography.section-title}` + poziomy wiersz kart | Peek i scroll: geometria w Layout & Spacing, zachowanie w `EXPERIENCE.md` → Scroll Home. Pusty: wiersz znika |
+| **Card „Do oceny”** (`card-do-oceny`) | 820×288 (focused 940×408), `{rounded.card}`, `{colors.surface}`; QR po lewej; tytuł `{typography.card-title}` max 2 linie, podtytuł (`{colors.text-3}`), podpowiedź (`{colors.text-2}`, 1 linia), przyciski na dole. Ilustracja: [`mockups/key-home-video.html`](mockups/key-home-video.html) | Fokus na przyciskach karty, nie na całej karcie |
+| **QR** (`qr`) | Białe pole ok. 240px (focused ok. 360px), quiet zone ≥ 4 moduły, moduły w pełnych px, ECC L, `{rounded.qr}`, moduły `{colors.qr-ink}` | Statyczny; nigdy nie dostaje fokusu |
+| **Button** (`button`, `button-ghost`) | Pigułka 56px, ikona 24px + etykieta. Primary „Ocenione” (`check`) na `{colors.surface-2}`, tekst `{colors.text}`; ghost „Pomiń” (`close`) na `{colors.surface-2}`, tekst `{colors.text-2}`, bez obrysu | Fokus: `focus-pill` |
+| **OSK** (`osk-panel`, `osk-key`, `osk-variants-row`) | Panel `{colors.surface}` u dołu ekranu; klawisze-pigułki: QWERTY, „Usuń” (`backspace`), „Spacja” (`space_bar`), „123” (panel cyfr i symboli `@ . _ -`), „Gotowe” (`check`); klawisze a c e l n o s z mają znacznik wariantów `{colors.text-3}` w rogu. Ilustracja: [`mockups/key-netflix-search-osk.html`](mockups/key-netflix-search-osk.html) | Fokus: `focus-pill`; kursor żyroskopu przenosi ten sam jedyny fokus. Long OK: rząd wariantów ą ć ę ł ń ó ś ź ż wewnątrz panelu, fokus na pierwszym wariancie. Pole w Netflixie: `input-active` |
+| **AppMenu** (`appmenu`) | Panel `{colors.surface}`, pozycje jak button: „Uruchom ponownie”, „Zamknij”; scrim pod spodem. Ilustracja: [`mockups/key-home-failed-appmenu.html`](mockups/key-home-failed-appmenu.html) | Pozycja w fokusie: `focus-pill`; przy Failed otwiera się z fokusem na „Uruchom ponownie” |
+| **Empty state** (`empty-state`) | Jedno zdanie `{typography.body}`, `{colors.text-2}`, w pasie kafelków (`{spacing.apps-top}`, od guttera). Ilustracja: [`mockups/key-home-game.html`](mockups/key-home-game.html) (pusta Audio) | Nie fokusowalny; fokus zostaje na zakładce |
 | **Logo** (`logo`) | 48px: ekran rx 9 + play, `currentColor` (`{colors.text}`); wordmark obok, gap 18px | Placeholder |
 | **Avatar + powitanie** (`avatar`) | Koło 48px, gradient `{colors.avatar-from}`→`{colors.avatar-to}`, inicjał; separator 2px `{colors.line}`, odstęp 56px | Dekoracja, bez fokusu |
-| **Config error** (`config-error`) | Pełny ekran na `{colors.ground}`, logo, tytuł + body [ASSUMPTION A20] | Brak fokusu / akcji [ASSUMPTION A20] |
+| **Config error** (`config-error`) | Pełny ekran na `{colors.ground}`, logo, tytuł + body | Brak fokusu / akcji |
 
-**Stany kafelka: chip + linia stanu** [ASSUMPTION R6]. Ikony z jednego zestawu: Material Symbols Rounded.
+**Stany kafelka: chip + linia stanu**. Ikony z jednego zestawu: Material Symbols Rounded.
 
 | Stan | Chip (ikona + tekst) | Linia stanu pod nazwą (`{typography.body}`, `{colors.text-2}`) |
 |---|---|---|
 | NotRunning | — | — |
-| Starting | `progress_activity` „Uruchamiam…” (ikona statyczna [ASSUMPTION A26]) | „Chwilka…” |
+| Starting | `progress_activity` „Uruchamiam…” (ikona statyczna) | „Chwilka…” |
 | Background | `pause` „Wstrzymane” (Netflix) / `volume_off` „Wyciszony” (Moonlight — sesja żyje, nie jest wstrzymana) | `{components.state-dot}` + „W tle · <tytuł>, wstrzymane” (Netflix) albo „W tle · wyciszony” (Moonlight) |
 | Stopping | `close` „Zamykam…” | — |
 | Failed | `error` „Nie odpowiada” | „Coś się zacięło. Wciśnij OK” |
@@ -468,6 +468,6 @@ Obrys fokusu przyjmuje promień elementu (`outline-offset: 0`) — w shellu i w 
 | `{colors.accent}` tylko na małe wskaźniki stanu | Akcent jako tło przycisku, zakładki lub fokusu |
 | Tekst ≥ 24px, kontrast ≥ 5.5:1; akcje w title-safe | Szary tekst `{colors.line}` niosący informację; przyciski przy krawędzi ekranu |
 | QR zawsze ciemny na białym, quiet zone ≥ 4 moduły | Odwracać QR do dark mode; ułamkowe piksele modułów |
-| W mockach wyłącznie tokeny; hexy spoza palety zastępuj `{colors.surface-dim}` albo `{colors.surface}` [ASSUMPTION R14] | Hexy spoza palety (np. `#24272C`, `#1B1D21`) |
+| W mockach wyłącznie tokeny; hexy spoza palety zastępuj `{colors.surface-dim}` albo `{colors.surface}` | Hexy spoza palety (np. `#24272C`, `#1B1D21`) |
 | Wordmark/placeholder zamiast cudzych logotypów w szkicach | Kafelki promocyjne, banery, rekomendacje, reklamy |
 | Jedna powierzchnia 1920×1080 | Breakpointy, kursor myszy, okna, pulpit |
