@@ -15,7 +15,7 @@ created: 2026-10-15
 
 ## Zakres MVP
 
-- **Wiersz „Do oceny” na ekranie głównym.** Karta z tytułem i kodem QR czeka, aż ktoś wybierze „Oceniłam” albo „Pomiń”. Jeden tytuł trafia do kolejki tylko raz.
+- **Wiersz „Do oceny” na ekranie głównym.** Karta z tytułem i kodem QR czeka, aż ktoś wybierze „Ocenione” albo „Pomiń”. Jeden tytuł trafia do kolejki tylko raz.
 - **Kod QR z URL-em wyszukiwania Filmwebu** z tytułem z playera Netflixa. Ocenę wystawia się w aplikacji na telefonie, zalogowanej na konto tego, kto skanuje.
 - **Film:** trafia do kolejki po obejrzeniu ok. 90% `duration`. Seans przerwany wcześniej nie trafia.
 - **Serial:** oceniany jako całość, trafia do kolejki po ostatnim odcinku sezonu (`SxEy` z playera porównane z liczbą odcinków sezonu). Pojedynczych odcinków nie oceniamy.
@@ -38,4 +38,4 @@ created: 2026-10-15
 - Wykrycie ostatniego odcinka sezonu przy starcie z „Continue Watching” (czy lista odcinków jest dostępna bez modala). Fallback rozstrzygnięty w architekturze (architecture spine, AD-12): gdy nie da się ustalić końca sezonu, serial czeka jako „w zawieszeniu”, a karta pojawia się po N dniach bez kolejnego odcinka.
 - Czy QR z linkiem filmweb.pl otwiera aplikację Filmweb na telefonie żony, czy przeglądarkę mobilną (sprawdzenie zajmuje minutę).
 - Język tytułu w playerze zależy od języka profilu (np. angielski na profilu autora). Trzeba sprawdzić, czy wyszukiwarka Filmwebu znajduje tytuły oryginalne i angielskie.
-- „Oceniłam” jest ręczne, bo MediaStation nie wie, czy ocena została wystawiona.
+- „Ocenione” jest ręczne, bo MediaStation nie wie, czy ocena została wystawiona.

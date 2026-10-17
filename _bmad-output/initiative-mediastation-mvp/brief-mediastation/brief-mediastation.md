@@ -2,7 +2,7 @@
 title: "Product Brief: MediaStation"
 status: final
 created: 2026-10-10
-updated: 2026-10-16
+updated: 2026-10-17
 ---
 
 # Product Brief: MediaStation
@@ -29,9 +29,9 @@ MediaStation to pełnoekranowa nakładka na Windows 11, która zamienia mini PC 
 **Wieczór oczami żony:**
 
 1. Włącza telewizor jego własnym pilotem, a telewizor od razu przełącza się na wejście HDMI MediaStation. Mini PC wybudza się przyciskiem na pilocie G20S. Pilot od TV służy tylko do włączania i wyłączania, tak jak w domach z dekoderem.
-2. Widzi ekran główny MediaStation: kafelki Netflix, Moonlight, Plex i kolejnych aplikacji.
+2. Widzi ekran główny MediaStation z zakładkami Video, Audio i Game. Kafelki aplikacji są pogrupowane w zakładki: Netflix w Video, Moonlight w Game.
 3. Strzałkami wybiera Netflix i naciska OK. Netflix otwiera się na pełnym ekranie, w przeglądarce dobranej pod ten serwis.
-4. Wybiera profil, przechodzi po wierszach i wchodzi w odcinek wyłącznie D-padem. Gdy trzeba coś wpisać, pojawia się klawiatura ekranowa obsługiwana strzałkami.
+4. Wybiera profil, przechodzi po wierszach i wchodzi w odcinek wyłącznie D-padem. Gdy trzeba coś wpisać, pojawia się klawiatura ekranowa obsługiwana strzałkami, a jeśli ktoś woli, także kursorem pilota.
 5. Back cofa ekran po ekranie, a z ekranu głównego Netflixa wraca do MediaStation. Home w każdej chwili przenosi prosto do ekranu głównego MediaStation.
 6. W trakcie odcinka przechodzi do innej aplikacji. Netflix pauzuje i milknie, ale się nie zamyka. Po powrocie jest dokładnie tam, gdzie była, z odcinkiem na pauzie. Wznawia go przyciskiem OK.
 7. Po seansie na ekranie głównym czeka karta „Do oceny” z kodem QR. Skanuje go telefonem i ocenia tytuł na Filmwebie, nie szukając go i nie pamiętając o nim. Reszta MVP zapewnia parytet z VIDAA, a ta funkcja jako jedyna daje jej powód, żeby wolała MediaStation.
@@ -61,17 +61,17 @@ Warunki techniczne, bez których powyższe kryteria nie mają szans się spełni
 
 **W MVP:**
 
-- Pełnoekranowy ekran główny w stylu smart TV, obsługiwany pilotem G20S Pro BT, klawiaturą i gamepadem.
+- Pełnoekranowy ekran główny w stylu smart TV, obsługiwany pilotem G20S Pro BT, klawiaturą i gamepadem. Aplikacje są pogrupowane w zakładki Video, Audio i Game. Audio jest w MVP pusta.
 - Uruchamianie aplikacji, w tym kilku naraz, z przełączaniem bez zamykania procesów.
 - Audio focus: słychać tylko aktywną aplikację, pozostałe są wyciszone w mikserze systemowym.
 - Pełna integracja Netflixa: nawigacja D-padem, Back zgodny z TV, pauza przy wyjściu, wykrywanie odtwarzania, przeglądarka dobrana pod ten serwis.
-- Klawiatura ekranowa obsługiwana D-padem. W serwisach webowych pojawia się automatycznie, a w pozostałych aplikacjach pokazuje się ją i chowa przyciskiem (potwierdzone w architecture spine, AD-9).
+- Klawiatura ekranowa obsługiwana D-padem, opcjonalnie także kursorem pilota. Pojawia się automatycznie w serwisach webowych. W Moonlight i aplikacjach natywnych tekst wpisuje się z klawiatury albo gamepada (architecture spine, AD-9).
 - Start MediaStation po zalogowaniu do Windows i automatyczny restart po awarii, bo Windows Update restartuje HTPC w nocy (architecture spine, AD-13).
 - Moonlight: uruchamianie; Home tylko chowa okno i wycisza Moonlighta, bez kończenia sesji.
 - Plex i inne aplikacje natywne: tylko uruchamianie i powrót do ekranu głównego.
 - Home działający zawsze, także gdy MediaStation nie ma fokusu.
 - Akcja „zamknij / uruchom ponownie aplikację” z poziomu ekranu głównego, dostępna z pilota.
-- Przypomnienie o ocenie na Filmwebie w wariancie minimalnym: wiersz „Do oceny” na ekranie głównym, a w nim karty z kodem QR do wyszukiwarki Filmwebu z tytułem z playera Netflixa. Film trafia do kolejki po obejrzeniu ok. 90%, a serial, oceniany jako całość, po ostatnim odcinku sezonu. Działa to na dowolnym profilu Netflixa. Karta czeka, aż ktoś wybierze „Oceniłam” albo „Pomiń”.
+- Przypomnienie o ocenie na Filmwebie w wariancie minimalnym: wiersz „Do oceny” na ekranie głównym, a w nim karty z kodem QR do wyszukiwarki Filmwebu z tytułem z playera Netflixa. Film trafia do kolejki po obejrzeniu ok. 90%, a serial, oceniany jako całość, po ostatnim odcinku sezonu. Działa to na dowolnym profilu Netflixa. Karta czeka, aż ktoś wybierze „Ocenione” albo „Pomiń”.
 
 **Poza MVP:**
 
@@ -85,6 +85,10 @@ Warunki techniczne, bez których powyższe kryteria nie mają szans się spełni
 - Autologowanie do Windows, ukrycie pulpitu i polityka Windows Update, które autor konfiguruje sam, poza produktem.
 - HDMI-CEC, którego UM760 nie obsługuje. Telewizor włącza się jego własnym pilotem.
 - Wydanie open source.
+- Wywołanie klawiatury ekranowej z pilota w Moonlight i aplikacjach natywnych.
+- Cofnięcie „Pomiń” i „Ocenione” na karcie „Do oceny”.
+- Rodzinne zdjęcia jako tło ekranu głównego.
+- Właściwe logo MediaStation. W MVP zostaje znak zastępczy.
 
 ## Wizja
 
@@ -95,5 +99,5 @@ MediaStation całkowicie zastępuje VIDAA w salonie. Każdy serwis streamingowy,
 - **Wykrywanie automatyzacji (zamknięte dla Netflixa):** spike pokazał, że Netflix nie reaguje na CDP ani na Playwrighta. Dla kolejnych serwisów do sprawdzenia w S12.
 - **Jakość per serwis:** HDR i Atmos w Netfliksie są dziś dostępne tylko w Edge, a Prime Video, Disney+ i HBO Max w przeglądarkach desktopowych mają podobno limit ok. 720p. Przy obecnym celu Full HD nie blokuje to MVP, ale może wpłynąć na wybór przeglądarki dla kolejnych serwisów.
 - **Kruchość nawigacji D-padem:** zmiany UI Netflixa mogą psuć nawigację. W MVP akceptujemy, że autor dostarcza poprawki ręcznie.
-- **Klawiatura ekranowa poza serwisami webowymi:** koszt jej automatycznego pokazywania jest do oszacowania.
+- **Klawiatura ekranowa poza serwisami webowymi:** poza MVP. Koszt wywołania z pilota i wpisywania przez `SendInput` do oszacowania w kolejnej inicjatywie.
 - **Przypomnienie o ocenie na Filmwebie:** zakres jest rozstrzygnięty (patrz „Zakres MVP”), ale przy implementacji trzeba sprawdzić trzy rzeczy. Po pierwsze, czy da się wykryć ostatni odcinek sezonu, gdy odcinek startuje z „Continue Watching” (fallback ustala architecture spine, AD-12). Po drugie, czy kod QR z linkiem filmweb.pl otwiera aplikację Filmweb, czy przeglądarkę mobilną. Po trzecie, czy wyszukiwarka Filmwebu znajduje tytuł w języku profilu Netflixa, np. angielski.

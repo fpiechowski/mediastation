@@ -7,14 +7,17 @@ paradigm: 'hexagonal (ports & adapters) z jednowątkowym actor core (Orchestrato
 scope: 'MediaStation MVP: pełnoekranowy shell TV na Windows 11 (UM760), sterowanie Netflixem w Edge przez CDP, wejście z pilota/klawiatury/gamepada, audio focus, Moonlight, aplikacje natywne, „Do oceny”'
 status: final
 created: '2026-10-16'
-updated: '2026-10-16'
-binds: [brief-mediastation, forge-filmweb-rating-prompt]
+updated: '2026-10-17'
+binds: [brief-mediastation, forge-filmweb-rating-prompt, ux-mediastation]
 sources:
   - ../brief-mediastation/brief-mediastation.md
   - ../brief-mediastation/addendum.md
   - ../research-browser-control-for-streaming-services/research-browser-control-for-streaming-services.md
   - ../research-browser-control-for-streaming-services/imports/spike-results-um760.md
   - ../forge-filmweb-rating-prompt/forge-filmweb-rating-prompt.md
+  - ../ux-mediastation/EXPERIENCE.md
+  - ../ux-mediastation/DESIGN.md
+  - ../change-mediastation/change-mediastation.md
   - ../../../spike/
 companions: []
 ---
@@ -134,6 +137,9 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
   - Do strony trafia jeden plik IIFE (vanilla TS, bez frameworka): wspólny **PageRuntime** (silnik fokusu, własne podświetlenie, `bridge.send/receive`, buforowanie komunikatów do czasu pojawienia się bindingu, nasłuch `<video>` i `focusin`) + jeden **ServiceDriver** (selektory, rozpoznawanie ekranów, reguła Back, metadane playera, ekran profili i limitu, bezpieczna strona przed zamknięciem).
   - Driver komunikuje się wyłącznie przez API PageRuntime, nigdy przez CDP ani `window.__*` hosta.
   - PageRuntime ignoruje surowe zdarzenia D-pada z klawiatury. Nawigację steruje wyłącznie przez `action` (AD-7, AD-8).
+  - Własne podświetlenie rysuje według tokenu `focus-ring-injected` z DESIGN.md: biały obrys z ciemną obwódką i promieniem elementu docelowego (`getComputedStyle`, fallback z tokenu), bez skali i bez zmiany layoutu strony. Wartości żyją tylko w DESIGN.md.
+  - Ekran `profiles`: driver fokusuje ostatnio używany profil (fallback: pierwszy) i nigdy go nie wybiera. Wybór należy do użytkownika. Sposób zapamiętania ostatniego profilu to wewnętrzna sprawa drivera.
+  - Ekrany `limit` i `error`: MediaStation nie dodaje własnego UI. Driver stawia fokus na głównej akcji ekranu (np. „Spróbuj ponownie”).
   - Nowy serwis = katalog `web/page/drivers/<service>/` z `manifest.json` (`service`, dopasowanie URL-i, start URL, wersja drivera). Start URL istnieje tylko tutaj. Kod hosta się nie zmienia.
 
 ### AD-7: Protokół strony v1
@@ -152,6 +158,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
     | host → page | `back` | odpowiedź: `backResult { handled: bool }` |
     | host → page | `pause`, `resume` | — |
     | host → page | `prepareClose` | odpowiedź: `closeReady`, gdy driver przejdzie na bezpieczną stronę (Netflix: `/browse`) |
+    | host → page | `osk` | `{ active: bool }`, przy pokazaniu i schowaniu OSK (AD-9) |
     | page → host | `hello` | `{ service, driverVersion }`, po każdej nawigacji |
     | page → host | `screen` | `{ name: profiles\|browse\|modal\|title\|search\|watch\|limit\|error, root: bool }` |
     | page → host | `playback` | `{ state: playing\|paused\|ended\|error, position, duration, title, kind: film\|episode, videoId, seriesId, season, episode, lastInSeason }` |
@@ -173,34 +180,41 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 - **Binds:** InputHub, Orchestrator, Shell UI, OSK, PageRuntime
 - **Prevents:** dwie ścieżki D-pada w webie; hook czekający na Orchestrator (Windows usuwa hook po `LowLevelHooksTimeout`); zawieszone klawisze; podwójne Actions; pętla własnych `SendInput`; UI czytający surowe klawisze
 - **Rule:**
-  - InputHub zamienia źródła na **Actions** `{ kind: Up|Down|Left|Right|Ok|Back|Home|Keyboard|AppMenu, phase: press|repeat|long, source, tsMono }`.
+  - InputHub zamienia źródła na **Actions** `{ kind: Up|Down|Left|Right|Ok|Back|Home|AppMenu, phase: press|repeat|long, source, tsMono }`. Action `Keyboard` jest deferred.
   - **Jedno naciśnięcie daje jedną Action.** Wyzwalaczem jest VK z hooka LL, a Raw Input służy tylko do identyfikacji urządzenia.
   - Własne `SendInput` (OSK, `back: key:<VK>`, odblokowanie foreground) mają znacznik w `dwExtraInfo` i hook je ignoruje. Flagi `LLKHF_INJECTED` samej w sobie nie ignorujemy, bo Home z pilota ją ma.
   - InputHub jest właścicielem timingu (repeat, long-press).
+  - Klawisz, który w bieżącym trybie ma przypisane `long` (OK w `shell` i w `osk`), dostaje `press` dopiero na key-up przed progiem long-press. Po osiągnięciu progu InputHub emituje `long` i nie emituje już `press`. Pozostałe klawisze dostają `press` na key-down.
   - Mapowanie jest w `config/input.json`, kluczowane sygnaturą urządzenia i kodem.
   - Orchestrator wysyła `SetInputRouting{ mode, appType, pointer, epoch }`. Hook decyduje na podstawie lokalnej kopii, bez blokowania. Key-up idzie za decyzją podjętą dla swojego key-down.
   - Tabela routingu:
 
-    | Tryb / typ aktywnej aplikacji | D-pad, OK | Back | Home, Keyboard | Mysz/żyroskop |
+    | Tryb / typ aktywnej aplikacji | D-pad, OK | Back | Home | Mysz/żyroskop |
     | --- | --- | --- | --- | --- |
     | `shell` (ekran główny) | połykane → Action do Shell | połykane → Action | połykane | wg `pointer` (domyślnie blokowana, kursor ukryty) |
-    | `osk` | połykane → OSK | połykane → zamyka OSK | połykane | blokowana |
+    | `osk` | połykane → OSK | połykane → OSK (zamyka rząd wariantów, a gdy go nie ma, OSK) | połykane → zamyka OSK i pokazuje ekran główny | dozwolona, kursor ograniczony do okna OSK (`ClipCursor`); kliknięcie poza OSK połykane |
     | `app` + `web` | połykane → `action` do strony | połykane → `back` do strony | połykane | wg `pointer` (domyślnie blokowana) |
     | `app` + `moonlight` / `native` | przechodzą do aplikacji | połykane → polityka `back` (`home` \| `key:<VK>`) | połykane | wg `pointer` (domyślnie dozwolona) |
 
-  - `AppMenu` istnieje tylko w trybie `shell` (np. long-press OK na kafelku).
+  - `AppMenu` istnieje tylko w trybie `shell`. Wyzwalacze:
+    - long-press OK (`phase: long`) na kafelku aplikacji w stanie `Background` albo `Failed`;
+    - OK (`press`) na kafelku w stanie `Failed`. AppMenu otwiera się wtedy z fokusem na „Uruchom ponownie”.
+  - Long-press OK na kafelku `NotRunning` nic nie robi. OK na kafelku `Starting` jest ignorowane.
   - Gamepad w Moonlight jest przepuszczany w całości. Home z pada to konfigurowalna kombinacja.
   - Shell UI i OSK konsumują **wyłącznie** Actions z core.
 
 ### AD-9: Jedna klawiatura ekranowa w MediaStation
 
-- **Binds:** OSK, InputHub, BrowserHost, NativeAppHost
+- **Binds:** OSK, InputHub, BrowserHost, PageRuntime
 - **Prevents:** dwie implementacje klawiatury; kradzież fokusu z pola tekstowego; wyciek wpisywanego tekstu
 - **Rule:**
   - OSK to okno nakładki MediaStation (topmost, `WS_EX_NOACTIVATE`). Fokus zostaje w aplikacji docelowej.
   - Pokazanie OSK przełącza tryb na `osk`, a Back ją zamyka (AD-8).
-  - Każdy znak trafia do aplikacji od razu, bez bufora: CDP `Input.insertText` (web) albo `SendInput` Unicode (natywne). Tekst nie trafia do logów, Intents ani view-modelu.
-  - W serwisach webowych OSK pokazuje się automatycznie na `textFocus{active:true}` aktywnej aplikacji, a w pozostałych aplikacjach przełącza ją Action `Keyboard`.
+  - Każdy znak trafia do aplikacji od razu, bez bufora, przez CDP `Input.insertText`. Tekst nie trafia do logów, Intents ani view-modelu.
+  - OSK pokazuje się wyłącznie automatycznie, na `textFocus{active:true}` aktywnej aplikacji webowej. W Moonlight i aplikacjach natywnych tekst wpisuje się z klawiatury albo gamepada. Wywołanie OSK z pilota (Action `Keyboard`, `SendInput` Unicode) jest deferred.
+  - Pokazanie i schowanie OSK host ogłasza stronie komunikatem `osk{active}` (AD-7). Przy `active:true` PageRuntime przełącza pole docelowe na styl `input-active` (DESIGN.md) i nie rysuje własnego fokusu. Jedyny fokus na ekranie jest na klawiszu OSK.
+  - OSK konsumuje OK według fazy: `press` wstawia znak, a `long` otwiera rząd polskich wariantów bez wstawiania litery bazowej (AD-8).
+  - Pointer w `osk` przenosi fokus OSK na klawisz pod kursorem, a OK albo klik zatwierdza (AD-8).
   - Fallback, jeśli nakładka nad pełnoekranowym Edge zawiedzie: dla webu OSK rysowana przez PageRuntime, z tym samym trybem `osk` i tymi samymi Actions.
 
 ### AD-10: Cykl życia aplikacji i odporność
@@ -209,16 +223,17 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 - **Prevents:** zabijanie żywej przeglądarki po restarcie MediaStation; martwy kafelek po wybudzeniu; niespójne stany
 - **Rule:**
   - Stany per aplikacja: `NotRunning → Starting → Foreground ⇄ Background → Stopping → NotRunning`. Do `Failed` prowadzą timeout, zakończenie procesu albo utrata CDP bez możliwości reconnectu.
-  - Wyjście z `Failed` tylko przez `AppMenu` (zamknij / uruchom ponownie).
+  - Wyjście z `Failed` tylko przez `AppMenu` (zamknij / uruchom ponownie). Na kafelku `Failed` AppMenu otwiera także zwykłe OK, z fokusem na „Uruchom ponownie” (AD-8).
+  - Gdy w `Failed` przechodzi aplikacja na pierwszym planie, Orchestrator sam przechodzi na ekran główny (tryb `shell`) i wysyła `focusRequest` na kafelek tej aplikacji (AD-16).
   - Aplikacje startują leniwie, dopiero po wybraniu kafelka.
   - **Adopcja sierot przy starcie:** Orchestrator wysyła `ProbeExisting` do każdego hosta.
     - Jeśli na `cdpPort` aplikacji odpowiada przeglądarka z jej profilem (albo żyje proces Moonlighta), host się podpina i raportuje `AppWindowAttached`.
     - Adoptowana aplikacja ląduje w `Background`, a na wierzchu jest ekran główny.
-  - **Wybudzenie z Modern Standby:** Orchestrator przechodzi na ekran główny i wysyła `RenewSession` do BrowserHost (CDP + `addBinding`). Driver obsługuje wybór profilu [ADOPTED].
-  - **Zerwane CDP przy żywym procesie:** reconnect z backoffem.
+  - **Wybudzenie z Modern Standby:** Orchestrator przechodzi na ekran główny, wysyła `focusRequest{default}` (AD-16) i `RenewSession` do BrowserHost (CDP + `addBinding`). Na ekranie profili driver tylko fokusuje ostatnio używany profil, a wybiera użytkownik (AD-6) [ADOPTED].
+  - **Zerwane CDP przy żywym procesie:** reconnect z backoffem, bez UI. W tym czasie `action` do strony są odrzucane, a nie buforowane. Home działa. Po `cdpReconnectTimeout` (`settings.json`) aplikacja przechodzi w `Failed`.
   - **Zamknięcie przeglądarki:** `prepareClose` → `closeReady` (AD-7) → zamknięcie [ADOPTED].
   - **Moonlight:** `quit` z limitem 30 s, potem MediaStation sama zamyka klienta [ADOPTED].
-  - **Restart MediaStation po awarii** robi `--supervise` (AD-2). Stan sesji nie jest trwały: po restarcie start od ekranu głównego plus adopcja.
+  - **Restart MediaStation po awarii** robi `--supervise` (AD-2). Stan sesji nie jest trwały: po restarcie start od ekranu głównego z `focusRequest{default}`, plus adopcja.
 
 ### AD-11: Rejestr aplikacji i konfiguracja w danych
 
@@ -226,12 +241,14 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 - **Prevents:** tabela „serwis → przeglądarka” w kodzie; rozjechane identyfikatory aplikacji; kolizje portów; dwa schematy jednego pliku
 - **Rule:**
   - Konfiguracja to trzy pliki w `config/`. Ich schematy to rekordy w Core, a nieznane pola są odrzucane.
-    - `apps.json` zawiera wpisy `{ id, type: web|moonlight|native, title, icon, back, pointer, … }`:
+    - `apps.json` zawiera wpisy `{ id, type: web|moonlight|native, category: video|audio|game, title, icon, back, pointer, … }`:
+      - `category` wyznacza zakładkę ekranu głównego, a kolejność wpisów w pliku jest kolejnością kafelków w zakładce. Zakładka bez wpisów (w MVP `audio`) pokazuje empty state;
+      - domyślne polityki: `web` → Back przez stronę (AD-7), `pointer: blocked`; `moonlight` → `back: key:Escape`, `pointer: allowed`; `native` → `back: home`, `pointer: allowed`;
       - `web`: `{ service, browser: edge|chrome, cdpPort }`, czyli tabela „serwis → przeglądarka” żyje tutaj;
       - `moonlight`: `{ host, app }`;
       - `native`: `{ exe, args }`.
     - `input.json` zawiera mapowanie wejścia.
-    - `settings.json` zawiera wartości polityk (np. `ratingPendingDays`, timeouty).
+    - `settings.json` zawiera wartości polityk, m.in. `ratingPendingDays` (domyślnie 7), `cdpReconnectTimeout` (domyślnie 30 s) i pozostałe timeouty.
   - `appId` to jedyny identyfikator aplikacji w całym systemie: profil `profiles\<appId>`, logi, stan.
   - `cdpPort` mieści się w zakresie 9220–9239 i jest unikalny.
   - Walidacja przy starcie. Błąd konfiguracji daje czytelny ekran błędu w shellu, a nie crash.
@@ -251,6 +268,8 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
     - przy starcie emituje `StoreLoaded`;
     - potem przyjmuje wyłącznie komendę `Persist` z całym dokumentem: `data/rating-queue.json` z `schemaVersion`, zapis atomowy (temp + replace).
   - MediaStation nie przechowuje żadnego konta Filmwebu.
+  - Karta niesie QR z URL-em wyszukiwarki filmweb.pl z tytułem, budowanym lokalnie: minimalny URL, bez zewnętrznego skracacza, ECC L. Dokładny format URL-a ustala story.
+  - Akcje karty: „Ocenione” → `rated`, „Pomiń” → `skipped`. W MVP bez undo; undo jest deferred i sprowadza się do zmiany `status`.
 
 ### AD-13: Envelope operacyjny
 
@@ -314,7 +333,9 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
   - JSON Schema eksportuje `System.Text.Json` (`JsonSchemaExporter`), a typy TS generuje `json-schema-to-typescript` w buildzie web. Ręczna edycja wygenerowanych typów jest zakazana.
   - Serializacja: camelCase, enumy jako stringi, jawne `null`.
   - Most UI ↔ core to WebView2 `postMessage` z kopertą `{ v, type, payload }`. Core wysyła **pełny snapshot** z monotonicznym `rev`, a UI odrzuca snapshot ze starszym `rev`.
-  - UI jest właścicielem tylko efemerycznego stanu nawigacji (fokus, scroll), kluczowanego stabilnymi id (`appId`, klucz „Do oceny”), nigdy indeksami.
+  - UI jest właścicielem tylko efemerycznego stanu nawigacji (fokus, scroll, aktywna zakładka), kluczowanego stabilnymi id (`appId`, klucz „Do oceny”, `category`), nigdy indeksami.
+  - Snapshot niesie `focusRequest { target: default|<appId>, seq }`. UI stosuje każde nowe `seq` dokładnie raz, potem fokus znów należy do UI. `default` = zakładka Video, pierwszy kafelek (zimny start, restart, wybudzenie). `<appId>` = kafelek tej aplikacji (`Failed` z pierwszego planu, AD-10).
+  - View-model niesie `category` każdej aplikacji, więc Shell sam grupuje kafelki w zakładki i liczy wskaźnik „działa w tle” per zakładka.
 
 ## Consistency Conventions
 
@@ -389,11 +410,11 @@ flowchart TB
 
 | Pozycja | Lives in | Governed by |
 | --- | --- | --- |
-| Ekran główny pilotem, klawiaturą i gamepadem, bez kursora | Shell UI, InputHub | AD-2, AD-8, AD-16 |
+| Ekran główny z zakładkami Video / Audio / Game, pilotem, klawiaturą i gamepadem, bez kursora | Shell UI, InputHub, Config | AD-2, AD-8, AD-11, AD-16 |
 | Kilka aplikacji naraz, przełączanie bez zamykania | Orchestrator, AppHosts, WindowManager | AD-3, AD-5, AD-10, AD-14, AD-15 |
 | Audio focus | AudioRouter | AD-5, AD-15 |
 | Pełna integracja Netflixa | BrowserHost, PageRuntime, driver `netflix` | AD-1, AD-6, AD-7 |
-| Klawiatura ekranowa | OSK, InputHub | AD-8, AD-9 |
+| Klawiatura ekranowa (automatyczna w serwisach webowych) | OSK, InputHub, PageRuntime | AD-7, AD-8, AD-9 |
 | Moonlight: start, Home chowa i wycisza | MoonlightHost | AD-5, AD-10 |
 | Plex i natywne: start i powrót | NativeAppHost | AD-8 (`back`), AD-11 |
 | Home zawsze działa, także przy ukradzionym fokusie | InputHub (wątek), WindowManager | AD-2, AD-8, AD-15 |
@@ -415,7 +436,8 @@ flowchart TB
 | Automatyczna obsługa awarii (popupy, wylogowanie, sieć) | MVP ręcznie. `screen{limit\|error}` daje już sygnał |
 | Tryb uruchomienia jako PWA ze Store (osobna sesja SMTC) | Nie jest potrzebny w MVP, bo pauza idzie przez stronę |
 | Prewarm aplikacji przy starcie | MVP startuje leniwie (AD-10) |
-| UX ekranu limitu, `ratingPendingDays`, domyślne `back` i `pointer`, mapowanie `AppMenu` | Decyzje `bmad-ux`. Mechanizm już ustalony |
+| Action `Keyboard` z pilota (OSK w Moonlight i aplikacjach natywnych) | Nowa Action w AD-8 i ścieżka `SendInput` Unicode w AD-9 |
+| Undo po „Pomiń” / „Ocenione” | Rekordy nie są usuwane (AD-12), więc undo to tylko zmiana `status` |
 | Mechanizm ustalenia `lastInSeason` i `seriesId` | Wewnętrzna sprawa drivera. Kontrakt jest stały |
 
 **Otwarte pytania z miejscem rozstrzygnięcia:**
@@ -425,4 +447,4 @@ flowchart TB
 - **Hook LL we własnym wątku dostaje „down”** także przy MediaStation na wierzchu: prototyp InputHub.
 - **Nowe sesje audio po zmianie odcinka:** AudioRouter (AD-5).
 - **Pauza dłuższa niż kilka godzin lub przez noc.**
-- **Kontrole z forge:** czy QR otwiera aplikację, czy przeglądarkę; język tytułu w wyszukiwarce Filmwebu.
+- **Kontrole z forge i UX:** czy QR otwiera aplikację, czy przeglądarkę; język tytułu w wyszukiwarce Filmwebu; skanowanie QR (ECC L) z 3 m na prawdziwym TV dwoma telefonami. Wszystkie w story „Do oceny”.
