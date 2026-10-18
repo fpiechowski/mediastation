@@ -1,0 +1,117 @@
+# MediaStation MVP — epiki w kolejności budowy. tickets.py reads it.
+# Kolejność tabel = kolejność budowy; `id` nie jest kolejnością.
+
+[[epic]]
+id = 1
+slug = "epic-foundation-contracts"
+title = "Foundation & contracts"
+covers = ["CAP-1", "CAP-12"]
+
+[[epic]]
+id = 2
+slug = "epic-orchestrator-lifecycle"
+title = "Orchestrator & app lifecycle"
+covers = ["CAP-2"]
+after = [{ epic = 1, needs = "rekordy Commands/Events/ErrorCode w Core, projekt testów z FakeTimeProvider, composition root" }]
+
+[[epic]]
+id = 3
+slug = "epic-input"
+title = "Remote, keyboard & gamepad input"
+covers = ["CAP-3"]
+after = [{ epic = 1, needs = "rekordy Action i SetInputRouting, schemat input.json, logger, wejście CLI dla --calibrate-input" }]
+
+[[epic]]
+id = 4
+slug = "epic-home-screen"
+title = "Home screen"
+covers = ["CAP-6"]
+after = [
+  { epic = 1, needs = "host Shell (WPF + WebView2 + most postMessage), generowane typy view-modelu" },
+  { epic = 2, needs = "snapshot z rev i focusRequest, stany cyklu życia, obsługa Intents" },
+  { epic = 3, needs = "Actions z pilota, w tym phase long dla OK" },
+]
+
+[[epic]]
+id = 5
+slug = "epic-windows-audio"
+title = "Windows & audio focus"
+covers = ["CAP-4", "CAP-5"]
+after = [
+  { epic = 2, needs = "AppWindowAttached i ForegroundChanged obsługiwane w Orchestratorze" },
+  { epic = 3, needs = "Action Home z InputHub" },
+  { epic = 4, needs = "okno shella z ekranem głównym (wspólny kod Shell host)" },
+  { epic = 6, needs = "story 1 BrowserHost: flaga trybu okna przeglądarki" },
+]
+
+[[epic]]
+id = 6
+slug = "epic-browserhost"
+title = "BrowserHost"
+covers = ["CAP-7", "CAP-2"]
+after = [
+  { epic = 2, needs = "stany cyklu życia, ProbeExisting/adopcja, RenewSession po wybudzeniu" },
+  { epic = 4, needs = "AppMenu (Zamknij / Uruchom ponownie) dla J4" },
+  { epic = 5, needs = "minimize i mute okna przeglądarki bez CDP (AD-5)" },
+]
+
+[[epic]]
+id = 7
+slug = "epic-netflix-dpad"
+title = "Netflix by D-pad"
+covers = ["CAP-8"]
+after = [
+  { epic = 3, needs = "routing app + web: action/back do strony" },
+  { epic = 5, needs = "sekwencja pause → mute → minimize" },
+  { epic = 6, needs = "minimalny PageRuntime (hello, binding), build page bundle, Input.dispatchKeyEvent" },
+]
+
+[[epic]]
+id = 8
+slug = "epic-osk"
+title = "On-screen keyboard (OSK)"
+covers = ["CAP-9"]
+after = [
+  { epic = 3, needs = "tryb osk w routingu, pointer i ClipCursor" },
+  { epic = 5, needs = "WindowManager dla nakładki topmost WS_EX_NOACTIVATE" },
+  { epic = 6, needs = "story 1: flaga trybu okna; Input.insertText" },
+  { epic = 7, needs = "textFocus z drivera i obsługa komunikatu osk w PageRuntime" },
+]
+
+[[epic]]
+id = 9
+slug = "epic-do-oceny"
+title = "„Do oceny”"
+covers = ["CAP-11", "CAP-6"]
+after = [
+  { epic = 2, needs = "TimerElapsed dla dobowego sprawdzenia pending, buforowanie do StoreLoaded" },
+  { epic = 4, needs = "ekran główny i model fokusu kluczowany stabilnymi id" },
+  { epic = 7, needs = "fakty playback z title serialu, seriesId, lastInSeason, position/duration" },
+]
+
+[[epic]]
+id = 10
+slug = "epic-moonlight-native"
+title = "Moonlight & native apps"
+covers = ["CAP-10", "CAP-5"]
+after = [
+  { epic = 2, needs = "cykl życia i adopcja przez ProbeExisting" },
+  { epic = 3, needs = "routing app + moonlight/native, polityka back, kombinacja Home z pada" },
+  { epic = 4, needs = "kafelki i AppMenu" },
+  { epic = 5, needs = "WindowManager i AudioRouter" },
+  { epic = 7, needs = "ścieżka pauzy Netflixa dla produktowego sprawdzenia audio" },
+  { epic = 8, needs = "wspólny kod polityki pointer w InputHub" },
+  { epic = 9, needs = "kolejność ze specu (CAP-11 → CAP-10); wspólne rozszerzenia Orchestratora" },
+]
+
+[[epic]]
+id = 11
+slug = "epic-deploy-resilience"
+title = "Deploy & resilience"
+covers = ["CAP-12"]
+after = [
+  { epic = 4, needs = "AppMenu „Uruchom ponownie” dla hotfixu drivera" },
+  { epic = 6, needs = "ErrorCode CdpUnavailable/PortInUse/ProfileInUse i odczyt wersji przed startem" },
+  { epic = 7, needs = "--smoke netflix i page bundle czytany z dysku przy wstrzyknięciu" },
+  { epic = 10, needs = "adopcja żywego Moonlighta po restarcie" },
+]
