@@ -19,6 +19,7 @@ sources:
   - ../ux-mediastation/DESIGN.md
   - ../change-mediastation/change-mediastation.md
   - ../spec-mediastation/spec-mediastation.md
+  - ../change-osk-everywhere-github-update/change-osk-everywhere-github-update.md
   - ../../../spike/
 companions: []
 ---
@@ -27,14 +28,14 @@ companions: []
 
 ## Design Paradigm
 
-**Hexagonal (ports & adapters) z jednowątkowym actor core.** `Orchestrator` to jedyny writer stanu sesji. Wykonawcy (AppHosts, WindowManager, AudioRouter, InputHub, SystemEvents, Store) implementują porty: wykonują komendy i raportują fakty jako zdarzenia, ale niczego nie decydują. Shell UI jest widokiem: wysyła intencje i renderuje snapshot stanu.
+**Hexagonal (ports & adapters) z jednowątkowym actor core.** `Orchestrator` to jedyny writer stanu sesji. Wykonawcy (AppHosts, WindowManager, AudioRouter, InputHub, SystemEvents, Store, Updater) implementują porty: wykonują komendy i raportują fakty jako zdarzenia, ale niczego nie decydują. Shell UI jest widokiem: wysyła intencje i renderuje snapshot stanu.
 
 | Warstwa | Gdzie | Zawiera |
 | --- | --- | --- |
 | Core | `src/MediaStation.Core` (`net10.0`, bez referencji do Windows) | Orchestrator, stan sesji, polityki (`RatingPolicy`, `BackPolicy`), wszystkie kontrakty: Actions, Intents, Commands, Events, view-model, protokół strony, schematy konfiguracji i `data/`, `ErrorCode` |
 | Platform (adaptery portów) | `src/MediaStation.App/Platform/*` | Win32 interop: Input, Window, Audio, System |
 | Hosts (adaptery portów) | `src/MediaStation.App/Hosts/*` | BrowserHost (CDP), MoonlightHost, NativeAppHost |
-| Store / Config | `src/MediaStation.App/Store`, `Config` | pliki JSON |
+| Store / Config / Update | `src/MediaStation.App/Store`, `Config`, `Update` | pliki JSON; sprawdzanie i pobieranie release'ów (AD-17) |
 | Shell | `src/MediaStation.App/Shell` + `web/shell` | host WPF + WebView2, UI w React |
 | Page bundle | `web/page/runtime` + `web/page/drivers/<service>` | PageRuntime + ServiceDriver wstrzykiwane do strony serwisu |
 
@@ -47,6 +48,7 @@ flowchart LR
     WM["WindowManager"]
     AR["AudioRouter"]
     ST["Store + Config"]
+    UP["Updater<br/>GitHub Releases"]
     SH["Shell host<br/>WPF + WebView2"]
   end
   subgraph Core["MediaStation.Core (net10.0)"]
@@ -56,11 +58,13 @@ flowchart LR
   SE -- Event --> O
   AH -- Event --> O
   ST -- Event --> O
+  UP -- Event --> O
   SH -- Intent --> O
   O -- Command --> AH
   O -- Command --> WM
   O -- Command --> AR
   O -- Command --> ST
+  O -- Command --> UP
   O -- "SetInputRouting" --> IH
   O -- "ViewModel snapshot" --> SH
   AH <-. "CDP ws://127.0.0.1 / bridge" .-> PB["Page bundle<br/>PageRuntime + ServiceDriver"]
@@ -86,7 +90,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 - **Prevents:** drugi proces z IPC i osobnym cyklem życia; logika natywna w JS; Home zależny od wątku UI; dwie instancje z dwoma hookami i dwoma klientami CDP
 - **Rule:**
   - Logika MediaStation działa w jednym procesie `MediaStation.exe` (C#, .NET 10 LTS). WPF jest wyłącznie pustym hostem okna dla WebView2, a UI powstaje w HTML/TS.
-  - Jedyny dodatkowy proces to ten sam exe w trybie `--supervise`: minimalny rodzic, który restartuje dziecko po awarii z backoffem i nie ma żadnej innej logiki.
+  - Jedyny dodatkowy proces to ten sam exe w trybie `--supervise`: minimalny rodzic, który restartuje dziecko po awarii z backoffem i wykonuje przełączenie wersji z rollbackiem (AD-17). Nie ma żadnej innej logiki.
   - Wątki:
     - **UI**: WebView2 i WPF;
     - **Input**: hook `WH_KEYBOARD_LL` + Raw Input + XInput, z własną pętlą komunikatów, nigdy w wątku UI;
@@ -181,7 +185,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 - **Binds:** InputHub, Orchestrator, Shell UI, OSK, PageRuntime
 - **Prevents:** dwie ścieżki D-pada w webie; hook czekający na Orchestrator (Windows usuwa hook po `LowLevelHooksTimeout`); zawieszone klawisze; podwójne Actions; pętla własnych `SendInput`; UI czytający surowe klawisze
 - **Rule:**
-  - InputHub zamienia źródła na **Actions** `{ kind: Up|Down|Left|Right|Ok|Back|Home|AppMenu, phase: press|repeat|long, source, tsMono }`. Action `Keyboard` jest deferred.
+  - InputHub zamienia źródła na **Actions** `{ kind: Up|Down|Left|Right|Ok|Back|Home|AppMenu|Keyboard, phase: press|repeat|long, source, tsMono }`. `Keyboard` daje przycisk pilota z `input.json` (wybrany w `--calibrate-input`) i klawisz konfigurowalny dla klawiatury i pada.
   - **Jedno naciśnięcie daje jedną Action.** Wyzwalaczem jest VK z hooka LL, a Raw Input służy tylko do identyfikacji urządzenia.
   - Własne `SendInput` (OSK, `back: key:<VK>`, odblokowanie foreground) mają znacznik w `dwExtraInfo` i hook je ignoruje. Flagi `LLKHF_INJECTED` samej w sobie nie ignorujemy, bo Home z pilota ją ma.
   - InputHub jest właścicielem timingu (repeat, long-press).
@@ -190,12 +194,12 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
   - Orchestrator wysyła `SetInputRouting{ mode, appType, pointer, epoch }`. Hook decyduje na podstawie lokalnej kopii, bez blokowania. Key-up idzie za decyzją podjętą dla swojego key-down.
   - Tabela routingu:
 
-    | Tryb / typ aktywnej aplikacji | D-pad, OK | Back | Home | Mysz/żyroskop |
-    | --- | --- | --- | --- | --- |
-    | `shell` (ekran główny) | połykane → Action do Shell | połykane → Action | połykane | wg `pointer` (domyślnie blokowana, kursor ukryty) |
-    | `osk` | połykane → OSK | połykane → OSK (zamyka rząd wariantów, a gdy go nie ma, OSK) | połykane → zamyka OSK i pokazuje ekran główny | dozwolona, kursor ograniczony do okna OSK (`ClipCursor`); kliknięcie poza OSK połykane |
-    | `app` + `web` | połykane → `action` do strony | połykane → `back` do strony | połykane | wg `pointer` (domyślnie blokowana) |
-    | `app` + `moonlight` / `native` | przechodzą do aplikacji | połykane → polityka `back` (`home` \| `key:<VK>`) | połykane | wg `pointer` (domyślnie dozwolona) |
+    | Tryb / typ aktywnej aplikacji | D-pad, OK | Back | Home | Keyboard | Mysz/żyroskop |
+    | --- | --- | --- | --- | --- | --- |
+    | `shell` (ekran główny) | połykane → Action do Shell | połykane → Action | połykane | połykane → OSK, gdy Shell zgłosił `textFocus{active:true}`; inaczej nic | wg `pointer` (domyślnie blokowana, kursor ukryty) |
+    | `osk` | połykane → OSK | połykane → OSK (zamyka rząd wariantów, a gdy go nie ma, OSK) | połykane → zamyka OSK i pokazuje ekran główny | połykane → zamyka OSK | dozwolona, kursor ograniczony do okna OSK (`ClipCursor`); kliknięcie poza OSK połykane |
+    | `app` + `web` | połykane → `action` do strony | połykane → `back` do strony | połykane | połykane → OSK, gdy strona zgłosiła `textFocus{active:true}`; inaczej nic | wg `pointer` (domyślnie blokowana) |
+    | `app` + `moonlight` / `native` | przechodzą do aplikacji | połykane → polityka `back` (`home` \| `key:<VK>`) | połykane | połykane → OSK | wg `pointer` (domyślnie dozwolona) |
 
   - `AppMenu` istnieje tylko w trybie `shell`. Wyzwalacze:
     - long-press OK (`phase: long`) na kafelku aplikacji w stanie `Background` albo `Failed`;
@@ -206,17 +210,22 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 
 ### AD-9: Jedna klawiatura ekranowa w MediaStation
 
-- **Binds:** OSK, InputHub, BrowserHost, PageRuntime
-- **Prevents:** dwie implementacje klawiatury; kradzież fokusu z pola tekstowego; wyciek wpisywanego tekstu
+- **Binds:** OSK, InputHub, BrowserHost, PageRuntime, Shell UI, Orchestrator
+- **Prevents:** dwie implementacje klawiatury; kradzież fokusu z pola tekstowego; wyciek wpisywanego tekstu; tekst płynący przez kolejkę Orchestratora
 - **Rule:**
-  - OSK to okno nakładki MediaStation (topmost, `WS_EX_NOACTIVATE`). Fokus zostaje w aplikacji docelowej.
-  - Pokazanie OSK przełącza tryb na `osk`, a Back ją zamyka (AD-8).
-  - Każdy znak trafia do aplikacji od razu, bez bufora, przez CDP `Input.insertText`. Tekst nie trafia do logów, Intents ani view-modelu.
-  - OSK pokazuje się wyłącznie automatycznie, na `textFocus{active:true}` aktywnej aplikacji webowej. W Moonlight i aplikacjach natywnych tekst wpisuje się z klawiatury albo gamepada. Wywołanie OSK z pilota (Action `Keyboard`, `SendInput` Unicode) jest deferred.
-  - Pokazanie i schowanie OSK host ogłasza stronie komunikatem `osk{active}` (AD-7). Przy `active:true` PageRuntime przełącza pole docelowe na styl `input-active` (DESIGN.md) i nie rysuje własnego fokusu. Jedyny fokus na ekranie jest na klawiszu OSK.
+  - OSK to okno nakładki MediaStation (topmost, `WS_EX_NOACTIVATE`), jedno dla wszystkich aplikacji. Fokus zostaje w aplikacji docelowej.
+  - O pokazaniu decyduje Orchestrator, wysyłając `ShowOsk{ target }` i `HideOsk`. Pokazanie przełącza tryb na `osk`, a Back, Home i `Keyboard` ją zamykają (AD-8). Wyzwalacze:
+    - `textFocus{active:true}` aktywnej aplikacji webowej (automatycznie, AD-7);
+    - Action `Keyboard` w `app` + `web`, gdy pole strony ma `textFocus`, oraz zawsze w `app` + `moonlight` / `native`;
+    - Action `Keyboard` w `shell`, gdy Shell UI zgłosił Intent `textFocus{active}` (bez treści pola). W MVP Shell nie ma pól tekstowych.
+  - `target` wskazuje drogę wpisywania (`TextSink`):
+    - `web(appId)`: BrowserHost, CDP `Input.insertText`;
+    - `foreground`: `Platform/Input`, `SendInput` z `KEYEVENTF_UNICODE` do okna na pierwszym planie (Plex, UI Moonlighta, pole Shell). Wstrzyknięcia mają znacznik w `dwExtraInfo`, więc hook je ignoruje (AD-8).
+  - OSK wysyła znaki bezpośrednio do `TextSink` z `target`, od razu i bez bufora. To jedyny kanał, który omija kolejkę Orchestratora: tekst nie trafia do logów, Intents, Events ani view-modelu.
+  - Pokazanie i schowanie OSK nad aplikacją webową host ogłasza stronie komunikatem `osk{active}` (AD-7). Przy `active:true` PageRuntime przełącza pole docelowe na styl `input-active` (DESIGN.md) i nie rysuje własnego fokusu. Pole aplikacji natywnej zachowuje własny styl, a jedyny fokus MediaStation stoi na klawiszu OSK.
   - OSK konsumuje OK według fazy: `press` wstawia znak, a `long` otwiera rząd polskich wariantów bez wstawiania litery bazowej (AD-8).
   - Pointer w `osk` przenosi fokus OSK na klawisz pod kursorem, a OK albo klik zatwierdza (AD-8).
-  - Fallback, jeśli nakładka nad pełnoekranowym Edge zawiedzie: dla webu OSK rysowana przez PageRuntime, z tym samym trybem `osk` i tymi samymi Actions.
+  - Fallback, jeśli nakładka nad pełnoekranowym Edge zawiedzie: dla webu OSK rysowana przez PageRuntime, z tym samym trybem `osk` i tymi samymi Actions. Dla aplikacji natywnych fallbacku nie ma: jeśli nakładka nie działa nad pełnoekranową aplikacją, rozwiązaniem jest jej tryb okna bez ramki z `apps.json`.
 
 ### AD-10: Cykl życia aplikacji i odporność
 
@@ -288,14 +297,15 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
   - **Build:**
     - `global.json` przypina SDK 10.0.4xx (`rollForward: latestFeature`);
     - build web (Node 24 LTS, npm) działa jako target MSBuild przed `dotnet publish` self-contained win-x64;
-    - page bundle trafia jako pliki do `<install>/page/`.
+    - page bundle trafia jako pliki do `page/` katalogu wersji;
+    - **release:** tag `v<semver>` uruchamia `.github/workflows/release.yml` na runnerze Windows: `dotnet test`, testy web, `dotnet publish` self-contained win-x64 z `Version` z tagu, zip `MediaStation-<wersja>-win-x64.zip` i plik `.sha256`, publikacja jako GitHub Release. To jedyny CI w projekcie.
   - **Deploy:**
-    - `tools/install.ps1` kopiuje build do `%LOCALAPPDATA%\Programs\MediaStation`;
-    - rejestruje zadanie Task Scheduler „at logon” (tylko zalogowany użytkownik), które uruchamia `MediaStation.exe --supervise`;
-    - aktualizacja = ponowne uruchomienie skryptu.
+    - `tools/install.ps1` (pierwsza instalacja) rozpakowuje paczkę release'u do `%LOCALAPPDATA%\Programs\MediaStation\<wersja>\`;
+    - rejestruje zadanie Task Scheduler „at logon” (tylko zalogowany użytkownik), które uruchamia `<wersja>\MediaStation.exe --supervise`;
+    - kolejne aktualizacje idą z ekranu głównego (AD-17). Skrypt zostaje do pierwszej instalacji i naprawy.
   - **Podział z autorem:** autologowanie, ukrycie pulpitu i polityka Windows Update są poza produktem.
   - **Środowiska:** Debug ładuje shell z Vite dev servera w WebView2, a Release z plików lokalnych. Jedna maszyna docelowa (UM760). Maszyna deweloperska służy do buildu i testów bez Netflixa.
-  - **Hotfix drivera:** page bundle jest czytany z dysku przy każdym wstrzyknięciu. Hotfix = podmiana pliku w `<install>/page/` + „uruchom ponownie” z pilota.
+  - **Hotfix drivera:** page bundle jest czytany z dysku przy każdym wstrzyknięciu. Hotfix = podmiana pliku w `page/` bieżącej wersji + „uruchom ponownie” z pilota. Następna aktualizacja go nadpisuje, więc poprawka musi trafić też do repo.
   - **Testy:**
     - Core: xunit (polityki i Orchestrator na fake'ach portów z `FakeTimeProvider`);
     - drivery: vitest na zapisanych fixture'ach DOM Netflixa;
@@ -352,11 +362,25 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
   - Snapshot niesie `focusRequest { target: default|<appId>, seq }`. UI stosuje każde nowe `seq` dokładnie raz, potem fokus znów należy do UI. `default` = zakładka Video, pierwszy kafelek (zimny start, restart, wybudzenie). `<appId>` = kafelek tej aplikacji (`Failed` z pierwszego planu, AD-10).
   - View-model niesie `category` każdej aplikacji, więc Shell sam grupuje kafelki w zakładki i liczy wskaźnik „działa w tle” per zakładka.
 
+### AD-17: Aktualizacja z GitHub Releases
+
+- **Binds:** Updater, Orchestrator, Shell UI, `--supervise`, `tools/install.ps1`, `.github/workflows/release.yml`
+- **Prevents:** nadpisywanie działającego exe; aktualizacja, która zostawia Elizę przed pulpitem; przycisk, który nic nie robi; ręczne kopiowanie buildów na UM760
+- **Rule:**
+  - Updater to wykonawca (AD-4). `CheckForUpdate` wysyła Orchestrator przy starcie i raz na dobę (`TimerElapsed`, AD-14). Updater pyta publiczne API `releases/latest` repo z `settings.json` (`update.repo`), bez tokenu, i porównuje semver z własną wersją. Wynik: Event `UpdateAvailable{ version }` albo nic. Błąd sieci trafia tylko do logu.
+  - Snapshot niesie `update{ available: bool, version, phase: idle|downloading|applying|failed }`. Shell pokazuje przycisk aktualizacji wyłącznie przy `available:true` (EXPERIENCE.md).
+  - Intent `InstallUpdate` → Command `DownloadUpdate` → Updater pobiera zip i `.sha256` do `%LOCALAPPDATA%\MediaStation\staging\`, weryfikuje sumę i rozpakowuje do `Programs\MediaStation\<wersja>\`. Wynik: `UpdateStaged{ version, path }` albo `CommandFailed{ UpdateDownloadFailed | UpdateChecksumMismatch }`.
+  - Po `UpdateStaged` Orchestrator wysyła `ApplyUpdate`. Dziecko kończy się kodem wyjścia „zastosuj wersję <path>”, a przeglądarki i Moonlight żyją dalej (adopcja, AD-10).
+  - `--supervise` robi **handoff**: przepina akcję zadania Task Scheduler na `<wersja>\MediaStation.exe --supervise`, uruchamia nowego supervisora z flagą `--rollback-to <poprzednia>` i sam się kończy. Działający exe nigdy nie jest nadpisywany, bo każda wersja ma własny katalog.
+  - **Gotowość:** dziecko sygnalizuje supervisorowi gotowość (named event) po pierwszym wyrenderowanym snapshotcie ekranu głównego. Jeśli nowa wersja 3 razy z rzędu nie zgłosi gotowości, supervisor robi rollback tym samym handoffem do poprzedniej wersji. Zła wersja nie jest ponownie proponowana.
+  - Na dysku zostają bieżąca i poprzednia wersja. Starsze katalogi usuwa supervisor po zgłoszeniu gotowości. `config/`, `data/`, `profiles/` i `logs/` leżą poza katalogami wersji i aktualizacja ich nie rusza.
+  - Debug (Vite dev server) nie sprawdza aktualizacji.
+
 ## Consistency Conventions
 
 | Concern | Convention |
 | --- | --- |
-| Nazwy komponentów | Orchestrator, InputHub, WindowManager, AudioRouter, SystemEvents, BrowserHost, MoonlightHost, NativeAppHost, Store, Shell, OSK, PageRuntime, ServiceDriver. Słowo „Adapter” nie oznacza kodu serwisu |
+| Nazwy komponentów | Orchestrator, InputHub, WindowManager, AudioRouter, SystemEvents, BrowserHost, MoonlightHost, NativeAppHost, Store, Updater, Shell, OSK, TextSink, PageRuntime, ServiceDriver. Słowo „Adapter” nie oznacza kodu serwisu |
 | Komunikaty w Core | `Action` (z wejścia), `Intent` (z UI), `Command` (z Orchestratora, tryb rozkazujący: `MinimizeWindow`), `Event` (fakty, czas przeszły: `ProcessExited`); rekordy C# w `MediaStation.Core` |
 | Koperta JSON | `{ v, type, id?, payload }`, `type` w camelCase; ten sam kształt w moście WebView2 i w protokole strony |
 | Identyfikatory | `appId` z `apps.json` (kebab-case, np. `netflix`); klucze „Do oceny” `<service>:<kind>:<id>`; `cmdId`, `transitionId` generuje Orchestrator |
@@ -396,7 +420,7 @@ mediastation/
       Platform/Input|Window|Audio|System/
       Hosts/Browser|Moonlight|Native/
       Shell/                    # WPF + WebView2, most postMessage, okno OSK
-      Store/  Config/  Logging/  Smoke/
+      Store/  Config/  Logging/  Smoke/  Update/
   web/
     contracts/                  # typy TS generowane z JSON Schema Core (nie edytować)
     shell/                      # React + Vite → zasoby Shell
@@ -404,6 +428,7 @@ mediastation/
     page/drivers/netflix/       # ServiceDriver + manifest.json + fixtures/
   tests/MediaStation.Core.Tests/
   tools/install.ps1
+  .github/workflows/release.yml # release na tagu v<semver> (AD-13, AD-17)
   spike/                        # zamrożona referencja, nie budowana
 ```
 
@@ -429,7 +454,8 @@ flowchart TB
 | Kilka aplikacji naraz, przełączanie bez zamykania | Orchestrator, AppHosts, WindowManager | AD-3, AD-5, AD-10, AD-14, AD-15 |
 | Audio focus | AudioRouter | AD-5, AD-15 |
 | Pełna integracja Netflixa | BrowserHost, PageRuntime, driver `netflix` | AD-1, AD-6, AD-7 |
-| Klawiatura ekranowa (automatyczna w serwisach webowych) | OSK, InputHub, PageRuntime | AD-7, AD-8, AD-9 |
+| Klawiatura ekranowa (Netflix automatycznie; Plex, UI Moonlighta i pola shella przyciskiem Klawiatura) | OSK, TextSink, InputHub, PageRuntime | AD-7, AD-8, AD-9 |
+| Aktualizacja z ekranu głównego (GitHub Releases) | Updater, `--supervise`, Shell UI, `release.yml` | AD-13, AD-17 |
 | Moonlight: start, Home chowa i wycisza | MoonlightHost | AD-5, AD-10 |
 | Plex i natywne: start i powrót | NativeAppHost | AD-8 (`back`), AD-11 |
 | Home zawsze działa, także przy ukradzionym fokusie | InputHub (wątek), WindowManager | AD-2, AD-8, AD-15 |
@@ -451,13 +477,14 @@ flowchart TB
 | Automatyczna obsługa awarii (popupy, wylogowanie, sieć) | MVP ręcznie. `screen{limit\|error}` daje już sygnał |
 | Tryb uruchomienia jako PWA ze Store (osobna sesja SMTC) | Nie jest potrzebny w MVP, bo pauza idzie przez stronę |
 | Prewarm aplikacji przy starcie | MVP startuje leniwie (AD-10) |
-| Action `Keyboard` z pilota (OSK w Moonlight i aplikacjach natywnych) | Nowa Action w AD-8 i ścieżka `SendInput` Unicode w AD-9 |
+| OSK w trakcie sesji streamu Moonlight | Działa bez gwarancji. Wymagałaby wykrywania sesji i przekazania tekstu do hosta |
 | Undo po „Pomiń” / „Ocenione” | Rekordy nie są usuwane (AD-12), więc undo to tylko zmiana `status` |
 | Mechanizm ustalenia `lastInSeason` i `seriesId` | Wewnętrzna sprawa drivera. Kontrakt jest stały |
 
 **Otwarte pytania z miejscem rozstrzygnięcia:**
 - **Tryb okna przeglądarki** (`--app` / `--start-fullscreen` / `--kiosk`): pierwsza story epiki BrowserHost, przed stories WindowManager i OSK.
-- **G20S Pro BT:** kody przycisków oraz wybudzanie PC przez Bluetooth (dotąd sprawdzone tylko przez dongle). Pierwsza story epiki wejścia: powtórzenie S10 z `--calibrate-input`.
+- **Przycisk Klawiatura na G20S Pro (dongle USB 2.4G):** pierwsza story epiki wejścia, `--calibrate-input`. Bluetooth nie jest wymagany.
+- **OSK nad pełnoekranowym Plexem i polskie znaki przez `SendInput` w Plexie i UI Moonlighta:** story „OSK w Plexie i UI Moonlighta” w epice Moonlight & native.
 - **Nakładka nad pełnoekranowym Edge:** pierwsza story epiki OSK.
 - **Hook LL we własnym wątku dostaje „down”** także przy MediaStation na wierzchu: prototyp InputHub.
 - **Nowe sesje audio po zmianie odcinka:** AudioRouter (AD-5).

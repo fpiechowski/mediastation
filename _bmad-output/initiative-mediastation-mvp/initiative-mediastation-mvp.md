@@ -36,6 +36,7 @@ Granica: capabilities specu, jedna na epikę, poza CAP-4 + CAP-5 (jeden właści
 - Touch point: Plex HTPC (uruchamiany przez `Process.Start`) — owner: epic-moonlight-native
 - Touch point: Windows Task Scheduler (zadanie „at logon”) — owner: epic-deploy-resilience
 - Touch point: `spike/` (zamrożona referencja zachowania, nie budowana) — owner: epic-foundation-contracts
+- Touch point: GitHub Releases i Actions repo `fpiechowski/mediastation` (publiczne; źródło aktualizacji) — owner: epic-deploy-resilience
 
 ## References
 
@@ -51,6 +52,6 @@ Granica: capabilities specu, jedna na epikę, poza CAP-4 + CAP-5 (jeden właści
 - Decision: story 1 epiki BrowserHost (tryb okna przeglądarki i źródło wersji poza CDP) wyprzedza stories epik Windows & audio focus i OSK, zgodnie ze specem. `tickets.py` zgłosi `order_conflict` epic-windows-audio → epic-browserhost; jest zamierzony, kolejność epik zostaje ze specu (2026-10-18).
 - Decision: weryfikacja J4 na UM760 z CAP-2 przechodzi do epiki BrowserHost, bo wymaga AppMenu (CAP-6) i prawdziwego hosta (CAP-7); Core testy CAP-2 zostają w epic-orchestrator-lifecycle (2026-10-18).
 - Decision: logger JSON Lines (UTC, rotacja dzienna) z CAP-12 dostarcza epic-foundation-contracts, bo checki CAP-3 i CAP-9 czytają logi; epic-deploy-resilience go nie powtarza (2026-10-18).
-- Decision: bez CI; do epiki Deploy & resilience build trafia na UM760 przez ręczne `dotnet publish` i kopię (2026-10-18).
+- Decision: jedyny CI to `release.yml` w GitHub Actions na tagu `v<semver>` (change-osk-everywhere-github-update, 2026-10-18); do jego powstania w epice Deploy & resilience build trafia na UM760 przez ręczne `dotnet publish` i kopię. Repo publiczne od 2026-10-18.
 - Decision: CAP-2 i CAP-3 idą równolegle po E1 — rekord `SetInputRouting` żyje w kontraktach Core z E1 (2026-10-18).
 - Open question: osiem Open Questions specu ma przypisane epiki i wczesne stories spike/pomiarowe — szczegóły w Notes każdej epiki.

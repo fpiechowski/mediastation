@@ -12,6 +12,7 @@ sources:
   - ../forge-filmweb-rating-prompt/forge-filmweb-rating-prompt.md
   - ../research-browser-control-for-streaming-services/research-browser-control-for-streaming-services.md
   - ../ux-mediastation/ux-mediastation.md
+  - ../change-osk-everywhere-github-update/change-osk-everywhere-github-update.md
 ---
 
 > **Canonical contract.** Ten SPEC i pliki z `companions:` to kompletny kontrakt tego, co budujemy, testujemy i walidujemy. Kontrakt komunikatów, schematy konfiguracji i Stack żyją w architecture spine. Zachowanie, flow i copy żyją w `EXPERIENCE.md`, a wygląd i tokeny w `DESIGN.md`. Zmierzone zachowanie Netflixa, Edge i Windows jest w digeście spike'a. Pliki z `sources:` służą tylko do traceability.
@@ -44,11 +45,12 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
   - **AD:** AD-3, AD-4, AD-10, AD-14
 
 - **CAP-3**: Wejście z pilota, klawiatury i gamepada
-  - **intent:** Pilot G20S Pro BT, klawiatura i gamepad sterują MediaStation jednym zestawem Actions, kierowanych według bieżącego trybu (`shell`, `app`, `osk`). Home działa zawsze.
+  - **intent:** Pilot G20S Pro przez dongle USB 2.4G, klawiatura i gamepad sterują MediaStation jednym zestawem Actions, kierowanych według bieżącego trybu (`shell`, `app`, `osk`). Home działa zawsze, a przycisk Klawiatura otwiera OSK.
   - **success:**
     - Jedno naciśnięcie daje jedną Action.
     - Klawisz z przypisanym `long` (OK w `shell` i `osk`) daje `press` dopiero na key-up przed progiem albo samo `long`. Ta reguła wchodzi w pierwszej story epiki.
-    - Home jest połykany i obsłużony nad Edge, Moonlightem, pulpitem i przy zawieszonym UI shella. Powtórzenie S10 przez Bluetooth daje 16/16.
+    - Home jest połykany i obsłużony nad Edge, Moonlightem, pulpitem i przy zawieszonym UI shella. Powtórzenie S10 z pilotem na dongle USB 2.4G daje 16/16.
+    - Przycisk pilota wybrany w `--calibrate-input` daje Action `Keyboard`.
     - Logi zawierają tylko Actions. Surowe kody pojawiają się wyłącznie w `--calibrate-input`.
   - **AD:** AD-2, AD-8
 
@@ -96,13 +98,15 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
   - **AD:** AD-5, AD-6, AD-7, AD-12
 
 - **CAP-9**: Klawiatura ekranowa (OSK)
-  - **intent:** Gdy w serwisie webowym trzeba coś wpisać, pojawia się jedna klawiatura ekranowa MediaStation, obsługiwana D-padem, a opcjonalnie także kursorem pilota. Polskie znaki są dostępne.
+  - **intent:** Gdy trzeba coś wpisać w Netflixie, w Plexie, w UI klienta Moonlight albo w polu MediaStation, pojawia się jedna klawiatura ekranowa MediaStation, obsługiwana D-padem, a opcjonalnie także kursorem pilota. Polskie znaki są dostępne. W Netflixie OSK otwiera się sama na polu tekstowym, a wszędzie indziej przyciskiem Klawiatura.
   - **success:**
     - OSK pojawia się automatycznie na `textFocus` w Netflixie i nie zabiera fokusu z pola.
     - Każdy znak od razu trafia do strony i wyniki `/search?q=` się aktualizują. Long OK wstawia polski wariant bez litery bazowej.
     - Na ekranie jest jeden fokus. Kursor nie wychodzi poza okno OSK.
     - Back zamyka rząd wariantów, a potem OSK. Home zamyka OSK i pokazuje ekran główny.
     - Wpisany tekst nie pojawia się w logach, Intents ani w view-modelu.
+    - Przycisk Klawiatura otwiera OSK nad Plexem i nad UI klienta Moonlight. Znaki trafiają do pola aplikacji, w tym polskie warianty, a fokus systemowy zostaje w aplikacji.
+    - Kontrakt przewiduje pola tekstowe w UI MediaStation (`textFocus` z Shell). W MVP takich pól nie ma.
   - **AD:** AD-7, AD-8, AD-9
 
 - **CAP-10**: Moonlight i aplikacje natywne
@@ -130,12 +134,15 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
 - **CAP-12**: Deploy i odporność
   - **intent:** MediaStation instaluje się skryptem, startuje po zalogowaniu i sama wraca po awarii, więc nocny restart przez Windows Update nie zostawia Elizy przed pulpitem.
   - **success:**
-    - `tools/install.ps1` instaluje build i rejestruje zadanie „at logon” z `--supervise`.
+    - `tools/install.ps1` instaluje pierwszą wersję z paczki release'u i rejestruje zadanie „at logon” z `--supervise`.
+    - Tag `v<semver>` w repo uruchamia GitHub Actions, które buduje, testuje i publikuje paczkę `win-x64` z sumą sha256 jako GitHub Release.
+    - Gdy na GitHub Releases jest nowsza wersja, na ekranie głównym pojawia się przycisk aktualizacji. Jedno OK pobiera ją, weryfikuje i uruchamia nową wersję, z adopcją żywych aplikacji. Bez nowszej wersji przycisku nie ma.
+    - Nowa wersja, która 3 razy z rzędu nie dojdzie do ekranu głównego, wraca automatycznie do poprzedniej (AD-17).
     - Zabicie procesu dziecka kończy się restartem z backoffem i powrotem na ekran główny, z adopcją żywych aplikacji.
     - Logi to JSON Lines (UTC, rotacja dzienna).
-    - Podmiana pliku drivera w `<install>/page/` i „Uruchom ponownie” z pilota wdrażają hotfix bez ponownej instalacji.
+    - Podmiana pliku drivera w `page/` bieżącej wersji i „Uruchom ponownie” z pilota wdrażają hotfix bez ponownej instalacji.
     - `--smoke` zgłasza osobnymi kodami wyjścia `CdpUnavailable` (trigger planu C, AD-1), `PortInUse` i `ProfileInUse`. Nie przechodzi, gdy `Browser.getVersion` różni się od wersji odczytanej przed startem (AD-13).
-  - **AD:** AD-2, AD-13
+  - **AD:** AD-2, AD-13, AD-17
 
 ## Constraints
 
@@ -149,8 +156,9 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
 - Prywatność:
   - tekst z OSK nie trafia do logów, Intents ani view-modelu;
   - MediaStation nie przechowuje konta Filmwebu;
-  - QR powstaje lokalnie, bez zewnętrznego skracacza.
-- Stan sesji nie jest trwały. Jedyny trwały stan w `data/` to kolejka „Do oceny”: jeden dokument, w którym rekordy `pending` są zwykłym statusem, a żadnego rekordu się nie usuwa. Poza `data/` MediaStation trwale trzyma tylko poprzednią wersję przeglądarki w `profiles\<appId>\` (AD-13).
+  - QR powstaje lokalnie, bez zewnętrznego skracacza;
+  - sprawdzanie aktualizacji łączy się wyłącznie z publicznym API GitHub Releases repo z `settings.json`, bez tokenu i bez telemetrii.
+- Stan sesji nie jest trwały. Jedyny trwały stan w `data/` to kolejka „Do oceny”: jeden dokument, w którym rekordy `pending` są zwykłym statusem, a żadnego rekordu się nie usuwa. Poza `data/` MediaStation trwale trzyma tylko poprzednią wersję przeglądarki w `profiles\<appId>\` (AD-13) i poprzednią wersję instalacji do rollbacku (AD-17).
 - Konfiguracja to ręcznie edytowany JSON, bez UI ustawień. Nowa aplikacja albo nowy serwis to wpis w `apps.json` i katalog drivera, bez zmian w kodzie hosta.
 - Awarie w MVP obsługuje się ręcznie, poza „Zamknij” i „Uruchom ponownie” z pilota. Kruchość UI Netflixa jest akceptowana, a autor dostarcza hotfix drivera.
 - UI jest po polsku, w ciepłym głosie na ty, z etykietami neutralnymi rodzajowo. Wartości wyglądu żyją wyłącznie w `DESIGN.md`.
@@ -159,7 +167,7 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
 
 - Kolejne serwisy streamingowe (Prime Video, HBO Max, Disney+, S12).
 - Nawigacja D-padem w Plexie i aplikacjach natywnych.
-- Wywołanie klawiatury ekranowej z pilota (Action `Keyboard`, `SendInput` Unicode) w Moonlight i aplikacjach natywnych.
+- Klawiatura ekranowa w trakcie sesji streamu Moonlight (może działać, bez gwarancji) i automatyczne otwieranie OSK w aplikacjach natywnych.
 - Przełącznik otwartych aplikacji pod przytrzymaniem Home.
 - Widgety rekomendacji i „continue watching” na ekranie głównym.
 - Kafelki Moonlight per host i per gra, z własną grafiką, także Vibepollo per gra.
@@ -174,7 +182,7 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
 - Tryb PWA ze Store (osobna sesja SMTC) i prewarm aplikacji przy starcie.
 - Autologowanie do Windows, ukrycie pulpitu i polityka Windows Update. Konfiguruje je autor, poza produktem.
 - HDMI-CEC, którego UM760 nie obsługuje.
-- Wydanie open source.
+- Wydanie open source (licencja, społeczność, wsparcie). Repo jest publiczne od 2026-10-18 tylko jako źródło GitHub Releases.
 
 ## Success signal
 
@@ -188,7 +196,8 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
 
 - **Tryb okna przeglądarki** (`--app`, `--start-fullscreen` czy `--kiosk`): rozstrzyga pierwsza story epiki BrowserHost (CAP-7), przed stories CAP-4 i CAP-9.
 - **Źródło wersji przeglądarki poza CDP** (bieżącej przed startem i poprzedniej w `profiles\<appId>\`): rozstrzyga story epiki BrowserHost (CAP-7). Kontrakt jest w AD-13. Kandydaci z weryfikacji architektury: `FileVersion` binarki i plik `Last Version` w `user-data-dir`.
-- **G20S Pro BT:** kody przycisków i wybudzanie PC przez Bluetooth (dotąd sprawdzone tylko przez dongle). Rozstrzyga pierwsza story epiki wejścia (CAP-3): powtórzenie S10 z `--calibrate-input`.
+- **Przycisk Klawiatura na G20S Pro:** który przycisk pilota (na dongle USB 2.4G) mapuje się na Action `Keyboard`. Rozstrzyga pierwsza story epiki wejścia (CAP-3) z `--calibrate-input`. Bluetooth nie jest wymagany (decyzja 2026-10-18).
+- **OSK w aplikacjach natywnych:** czy nakładka działa nad pełnoekranowym Plexem i czy polskie znaki przez `SendInput` Unicode dochodzą do Plexa i UI Moonlighta. Rozstrzyga story „OSK w Plexie i UI Moonlighta” w epice CAP-10.
 - **Nakładka OSK nad pełnoekranowym Edge** (fallback: OSK rysowana przez PageRuntime): rozstrzyga pierwsza story epiki OSK (CAP-9).
 - **Czy hook LL we własnym wątku dostaje „down” Home i Back,** także gdy MediaStation jest na wierzchu: rozstrzyga prototyp InputHub (CAP-3).
 - **Nowe sesje audio po zmianie odcinka:** rozstrzyga AudioRouter (CAP-5).
