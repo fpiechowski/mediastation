@@ -2,7 +2,7 @@
 name: MediaStation
 status: final
 created: 2026-10-16
-updated: 2026-10-17
+updated: 2026-10-18
 sources:
   - ../brief-mediastation/brief-mediastation.md
   - ../brief-mediastation/addendum.md
@@ -24,7 +24,7 @@ sources:
 | Użytkownicy | Eliza — codzienna użytkowniczka, nietechniczna. Autor — konfiguruje i naprawia |
 | Form-factor | Jedna powierzchnia: TV Hisense 1920×1080, 10-foot UI, kanapa ~3 m, wieczór, słabe ciepłe światło |
 | Wejście | Pilot G20S Pro BT (strzałki, OK, Back, Home), klawiatura, gamepad. Bez myszy, kursor ukryty. Żyroskop pilota w UI MediaStation tylko w OSK |
-| Model wejścia | InputHub → Actions `{kind: Up\|Down\|Left\|Right\|Ok\|Back\|Home\|Keyboard\|AppMenu, phase: press\|repeat\|long}`; Orchestrator zmienia tryby `shell\|app\|osk` (AD-8). Action `Keyboard` bez mapowania na pilocie w MVP |
+| Model wejścia | InputHub → Actions `{kind: Up\|Down\|Left\|Right\|Ok\|Back\|Home\|AppMenu, phase: press\|repeat\|long}`; Orchestrator zmienia tryby `shell\|app\|osk` (AD-8). Action `Keyboard` jest deferred (AD-8, R10) |
 | UI system | React w WebView2 (`web/shell`), brak design systemu — tokeny od zera w `DESIGN.md` |
 | Okna / platforma | Stały viewport 1920×1080, bez responsive i breakpointów; title-safe 5%. Shell w WebView2; Netflix w osobnym procesie Edge; OSK jako osobne okno topmost NOACTIVATE (fallback: OSK rysowana przez PageRuntime w stronie — otwarte w architekturze). Weryfikacja wizualna tylko w 1920×1080 |
 | Netflix | Osobny proces Edge (CDP); fokus rysuje PageRuntime, kontrakt ekranów od ServiceDriver (AD-7) |
@@ -85,7 +85,7 @@ Behawioralne. Wygląd: `DESIGN.md` → Components (te same nazwy komponentów).
 | **Card „Do oceny”** | Fokus stoi na przyciskach karty; Lewo/Prawo przechodzi między przyciskami i kartami. QR nieaktywny. „Ocenione” → `rated`, „Pomiń” → `skipped`; karta znika bez potwierdzenia i bez undo w MVP (kolejka nie usuwa kluczy, więc undo można dodać później bez utraty danych); fokus na sąsiednią kartę po kluczu (prawa, potem lewa, potem kafelki) |
 | **QR** | Nigdy nie dostaje fokusu; payload: minimalny URL wyszukiwarki filmweb.pl z tytułem, bez zewnętrznego skracacza (AD-12). Otwarte: test skanu z 3 m na prawdziwym TV dwoma telefonami — w story „Do oceny” |
 | **Button** | OK = akcja. Bez long-press |
-| **OSK** | Patrz Interaction Primitives → OSK. Znaki trafiają od razu do aplikacji (CDP insertText / SendInput); tekst nie trafia do view-modelu (AD-9) |
+| **OSK** | Patrz Interaction Primitives → OSK. Znaki trafiają od razu do aplikacji przez CDP `Input.insertText` (AD-9); tekst nie trafia do view-modelu. `SendInput` Unicode jest deferred razem z Action `Keyboard` |
 | **AppMenu** | Otwiera się nad kafelkiem; Góra/Dół między pozycjami; OK wykonuje; Back zamyka i wraca na kafelek. Dostępne dla aplikacji uruchomionej lub Failed; na NotRunning long-press nic nie robi. Przy Failed otwiera się z fokusem na „Uruchom ponownie”, w pozostałych stanach z fokusem na pierwszej pozycji |
 | **Empty state** | Jedno zdanie w pasie kafelków; nie fokusowalny — fokus zostaje na zakładce, Dół nic nie robi |
 | **Logo** | Dekoracja, bez fokusu |
@@ -101,7 +101,7 @@ Chip + linia stanu: copy, ikony i wygląd ma jedno źródło — `DESIGN.md` →
 | Stan | Zachowanie |
 |---|---|
 | NotRunning | OK = start |
-| Starting | Ikona statyczna; po timeoucie startu → Failed (AD-10). Aplikacja wychodzi na pierwszy plan po starcie (Moonlight 1–2 s). Klawisz Home w trakcie → aplikacja minimalizowana po starcie (AD-15), kafelek przechodzi w Background |
+| Starting | Ikona statyczna; po timeoucie startu → Failed (AD-10). Aplikacja wychodzi na pierwszy plan po starcie (Moonlight 1–2 s). Klawisz Home w trakcie → aplikacja minimalizowana po starcie komendą kompensującą po nowszym `transitionId` (AD-14), kafelek przechodzi w Background |
 | Foreground | Home niewidoczny |
 | Background | Aplikacja schowana i wyciszona (Netflix: pause → mute → minimize; Moonlight: mute → minimize, sesja żyje); kropka na zakładce. OK przywraca; Netflix stoi na pauzie, OK wznawia (nigdy autowznowienie) |
 | Stopping | Fokus zostaje na kafelku |
@@ -112,7 +112,7 @@ Chip + linia stanu: copy, ikony i wygląd ma jedno źródło — `DESIGN.md` →
 | Stan | Zachowanie |
 |---|---|
 | Aplikacja pada na pierwszym planie (Foreground → Failed) | MediaStation sama wraca na Home, na zakładkę tej aplikacji; fokus staje na kafelku w stanie Failed, więc jedno OK otwiera AppMenu z fokusem na „Uruchom ponownie”. Bez dodatkowego dialogu |
-| Zerwane CDP przy żywym procesie Netflixa | Brak osobnego UI; driver robi reconnect. D-pad nie jest buforowany. Klawisz Home zawsze ratuje. Jeśli reconnect nie uda się w `cdpReconnectTimeout` (30 s, `settings.json`) → Failed i zachowanie jak wyżej (AD-10, AD-11) |
+| Zerwane CDP przy żywym procesie Netflixa | Brak osobnego UI; BrowserHost robi reconnect z backoffem (AD-4, AD-10). Strona (PageRuntime + driver) nie ma wtedy kanału do hosta i tylko buforuje własne komunikaty (AD-6). D-pad nie jest buforowany: `action` do strony są odrzucane. Klawisz Home zawsze ratuje. Jeśli reconnect nie uda się w `cdpReconnectTimeout` (30 s, `settings.json`) → Failed i zachowanie jak wyżej (AD-10, AD-11) |
 
 ### Powierzchnie
 
@@ -137,7 +137,7 @@ Chip + linia stanu: copy, ikony i wygląd ma jedno źródło — `DESIGN.md` →
 
 **Model fokusu**
 - Jeden fokus, nawigacja przestrzenna D-padem (Góra/Dół/Lewo/Prawo); `phase: repeat` przewija wiersze.
-- Pamięć fokusu per zakładka i per wiersz, oparta na kluczach (`id` aplikacji, klucz tytułu w kolejce), nie na indeksach (AD-12).
+- Pamięć fokusu per zakładka i per wiersz, oparta na kluczach (`id` aplikacji, klucz tytułu w kolejce), nie na indeksach (AD-16).
 - Powrót na Home → ostatni kafelek. Zimny start/wybudzenie → pierwszy kafelek Video. Awaria na pierwszym planie → kafelek Failed.
 - W Netflixie: w modalu akcje mają pierwszeństwo przed geometrią, fokus zawężony do dialogu; na `/watch` klawisze przepuszczane (OK pauza, ←/→ ±10 s).
 - Przejście fokusu ok. 150 ms ease-out.

@@ -83,16 +83,17 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
     - `navigator.webdriver` ma wartość `false`.
     - Binding wraca po każdej nawigacji głównej ramki.
     - Zerwane CDP przy żywym procesie wraca przez reconnect, a po `cdpReconnectTimeout` (30 s) aplikacja przechodzi w `Failed`.
-    - Zmiana wersji przeglądarki daje `BrowserVersionChanged` w logu.
+    - Wersja przeglądarki jest odczytywana spoza CDP przed każdym startem (nie przy adopcji). Zmiana wobec poprzedniego startu daje w logu `BrowserVersionChanged{appId, from, to}`, także gdy port CDP nie odpowiada (AD-13).
+    - Żywy proces, którego port CDP nie odpowie w `cdpConnectTimeout`, daje `CdpUnavailable`, odróżnialne od timeoutu startu i od `ProcessExited`. Jego okno jest mimo to podpięte, wyciszone i zminimalizowane, a kafelek pokazuje zwykły `Failed`. Zajęty port albo profil daje `PortInUse` albo `ProfileInUse`, a przeglądarka nie startuje (AD-13).
   - **AD:** AD-1, AD-4, AD-10, AD-13
 
 - **CAP-8**: Netflix D-padem
   - **intent:** Cały wieczór z Netflixem obsługuje się D-padem, z wstrzykniętym fokusem i z Back zachowującym się jak na TV. Pauza, wznowienie i fakty o odtwarzaniu idą przez protokół strony.
   - **success:**
-    - Vitest na fixture'ach DOM Netflixa pokrywa rozpoznanie ekranów, regułę Back (`watch`, `modal`, `title`, `search`, `root`) oraz fokus na profilu bez wyboru i na głównej akcji ekranów `limit` i `error`.
+    - Vitest na fixture'ach DOM Netflixa pokrywa rozpoznanie ekranów, regułę Back (`watch`, `modal`, `title`, `search`, `root`) oraz fokus na profilu bez wyboru i na głównej akcji ekranów `limit` i `error`. Fakt `playback` odcinka niesie w `title` tytuł serialu (AD-12).
     - Smoke `--smoke netflix` przechodzi: start, `hello`, profil, odtwarzanie ≥ 1080p bez błędu DRM, pauza i reguła Back.
     - Powrót do Netflixa zastaje odcinek na pauzie, a OK go wznawia.
-  - **AD:** AD-5, AD-6, AD-7
+  - **AD:** AD-5, AD-6, AD-7, AD-12
 
 - **CAP-9**: Klawiatura ekranowa (OSK)
   - **intent:** Gdy w serwisie webowym trzeba coś wpisać, pojawia się jedna klawiatura ekranowa MediaStation, obsługiwana D-padem, a opcjonalnie także kursorem pilota. Polskie znaki są dostępne.
@@ -119,7 +120,9 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
       - film trafia do niej przy ≥ 0.9;
       - serial trafia przy `lastInSeason == true` i ≥ 0.9;
       - przy `lastInSeason == null` powstaje rekord `pending`, który po `ratingPendingDays` (7) dniach bez kolejnego odcinka daje kartę;
-      - klucz trafia do kolejki raz na zawsze, także po „Pomiń”.
+      - klucz trafia do kolejki raz na zawsze, także po „Pomiń”;
+      - serial widziany raz z `seriesId`, a raz bez niego (w obu kolejnościach) to jeden serial: nie powstaje druga karta ani fałszywy `pending`, a rekord dostaje `seriesId`. Tytuł nie łączy seriali o różnych znanych `seriesId` (AD-12).
+    - Fakt `playback` sprzed `StoreLoaded` trafia do `RatingPolicy` po wczytaniu kolejki (AD-12).
     - „Ocenione” i „Pomiń” usuwają kartę bez undo.
     - Story niesie test skanu QR z 3 m na prawdziwym TV dwoma telefonami.
   - **AD:** AD-7, AD-12, AD-14
@@ -131,6 +134,7 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
     - Zabicie procesu dziecka kończy się restartem z backoffem i powrotem na ekran główny, z adopcją żywych aplikacji.
     - Logi to JSON Lines (UTC, rotacja dzienna).
     - Podmiana pliku drivera w `<install>/page/` i „Uruchom ponownie” z pilota wdrażają hotfix bez ponownej instalacji.
+    - `--smoke` zgłasza osobnymi kodami wyjścia `CdpUnavailable` (trigger planu C, AD-1), `PortInUse` i `ProfileInUse`. Nie przechodzi, gdy `Browser.getVersion` różni się od wersji odczytanej przed startem (AD-13).
   - **AD:** AD-2, AD-13
 
 ## Constraints
@@ -146,7 +150,7 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
   - tekst z OSK nie trafia do logów, Intents ani view-modelu;
   - MediaStation nie przechowuje konta Filmwebu;
   - QR powstaje lokalnie, bez zewnętrznego skracacza.
-- Stan sesji nie jest trwały. Jedyny trwały stan to kolejka „Do oceny”: jeden dokument, w którym rekordy `pending` są zwykłym statusem, a żadnego rekordu się nie usuwa.
+- Stan sesji nie jest trwały. Jedyny trwały stan w `data/` to kolejka „Do oceny”: jeden dokument, w którym rekordy `pending` są zwykłym statusem, a żadnego rekordu się nie usuwa. Poza `data/` MediaStation trwale trzyma tylko poprzednią wersję przeglądarki w `profiles\<appId>\` (AD-13).
 - Konfiguracja to ręcznie edytowany JSON, bez UI ustawień. Nowa aplikacja albo nowy serwis to wpis w `apps.json` i katalog drivera, bez zmian w kodzie hosta.
 - Awarie w MVP obsługuje się ręcznie, poza „Zamknij” i „Uruchom ponownie” z pilota. Kruchość UI Netflixa jest akceptowana, a autor dostarcza hotfix drivera.
 - UI jest po polsku, w ciepłym głosie na ty, z etykietami neutralnymi rodzajowo. Wartości wyglądu żyją wyłącznie w `DESIGN.md`.
@@ -183,16 +187,10 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
 ## Open Questions
 
 - **Tryb okna przeglądarki** (`--app`, `--start-fullscreen` czy `--kiosk`): rozstrzyga pierwsza story epiki BrowserHost (CAP-7), przed stories CAP-4 i CAP-9.
-- **Wykrycie zablokowanego portu CDP po aktualizacji przeglądarki:** jak BrowserHost wykrywa zmianę wersji i niedostępność portu bez użycia CDP? `Browser.getVersion` (AD-13) idzie przez CDP, więc w tym scenariuszu nie zadziała. Autor ma dostać sygnał odróżnialny od zwykłego `Failed`, żeby wiedzieć, kiedy włączyć plan C (AD-1). Rozstrzyga story epiki BrowserHost (CAP-7). Zmiana AD-13 idzie do `bmad-architecture`.
+- **Źródło wersji przeglądarki poza CDP** (bieżącej przed startem i poprzedniej w `profiles\<appId>\`): rozstrzyga story epiki BrowserHost (CAP-7). Kontrakt jest w AD-13. Kandydaci z weryfikacji architektury: `FileVersion` binarki i plik `Last Version` w `user-data-dir`.
 - **G20S Pro BT:** kody przycisków i wybudzanie PC przez Bluetooth (dotąd sprawdzone tylko przez dongle). Rozstrzyga pierwsza story epiki wejścia (CAP-3): powtórzenie S10 z `--calibrate-input`.
 - **Nakładka OSK nad pełnoekranowym Edge** (fallback: OSK rysowana przez PageRuntime): rozstrzyga pierwsza story epiki OSK (CAP-9).
 - **Czy hook LL we własnym wątku dostaje „down” Home i Back,** także gdy MediaStation jest na wierzchu: rozstrzyga prototyp InputHub (CAP-3).
 - **Nowe sesje audio po zmianie odcinka:** rozstrzyga AudioRouter (CAP-5).
 - **Pauza wielogodzinna bez uśpienia PC** (S8 zmierzył 30 min): rozstrzyga story pomiarowa w epice CAP-8. Powtarza S8 dla kilku godzin, w dwóch wariantach pauzy i chowania okna, i dodaje fixture'y nowych ekranów błędu. Jeśli wynik wymaga polityki w Core, wraca do `bmad-architecture` jako change. Ścieżka po Modern Standby jest już ustalona: wraca ekran profili, a nie dokładne miejsce (AD-10).
 - **Kontrole z forge i UX:** czy QR otwiera aplikację Filmweb, czy przeglądarkę; czy wyszukiwarka Filmwebu znajduje tytuł w języku profilu; skan QR (ECC L) z 3 m dwoma telefonami. Rozstrzyga story „Do oceny” (CAP-11).
-- **Stabilność klucza serialu:** gdy serial trafi do „Do oceny” z kluczem z tytułu (brak `seriesId`), a później driver poda `seriesId`, powstaje drugi klucz tego samego serialu. AD-12 akceptuje duplikat tylko przy różnych językach profilu. Rozstrzyga `bmad-architecture` (AD-12), przed story `RatingPolicy` w CAP-11.
-- **Konflikt źródeł: czeka na Update w `bmad-ux`, który poprawi `EXPERIENCE.md` na korzyść architektury.** Zachowanie MVP jest zgodne we wszystkich źródłach. Rozbieżności w `EXPERIENCE.md` wobec architektury po change proposalu:
-  - enum Actions nadal ma `Keyboard`, który AD-8 usuwa;
-  - OSK wymienia `SendInput`, a AD-9 dopuszcza tylko `insertText`;
-  - reconnect CDP przypisuje driverowi, a AD-4 i AD-10 przypisują go BrowserHostowi;
-  - pamięć fokusu odwołuje się do AD-12 zamiast AD-16, a minimalizacja po `Starting` do AD-15 zamiast AD-14.

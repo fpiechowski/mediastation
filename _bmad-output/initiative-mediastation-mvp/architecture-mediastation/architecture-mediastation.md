@@ -7,7 +7,7 @@ paradigm: 'hexagonal (ports & adapters) z jednowątkowym actor core (Orchestrato
 scope: 'MediaStation MVP: pełnoekranowy shell TV na Windows 11 (UM760), sterowanie Netflixem w Edge przez CDP, wejście z pilota/klawiatury/gamepada, audio focus, Moonlight, aplikacje natywne, „Do oceny”'
 status: final
 created: '2026-10-16'
-updated: '2026-10-17'
+updated: '2026-10-18'
 binds: [brief-mediastation, forge-filmweb-rating-prompt, ux-mediastation]
 sources:
   - ../brief-mediastation/brief-mediastation.md
@@ -18,6 +18,7 @@ sources:
   - ../ux-mediastation/EXPERIENCE.md
   - ../ux-mediastation/DESIGN.md
   - ../change-mediastation/change-mediastation.md
+  - ../spec-mediastation/spec-mediastation.md
   - ../../../spike/
 companions: []
 ---
@@ -258,22 +259,30 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 - **Binds:** Orchestrator, RatingPolicy, Store, ServiceDriver, Shell UI
 - **Prevents:** dwóch writerów; duplikaty kart; fałszywe karty w trakcie sezonu; utrata „raz na zawsze” po „Pomiń”
 - **Rule:**
-  - Driver dostarcza fakty (`playback`, AD-7) i **musi** podawać `seriesId`, gdy da się go ustalić. Decyduje `RatingPolicy` w Core:
+  - Driver dostarcza fakty (`playback`, AD-7) i **musi** podawać `seriesId`, gdy da się go ustalić. Przy `kind: episode` pole `title` niesie tytuł serialu, nie odcinka. Decyduje `RatingPolicy` w Core:
     - film trafia do kolejki, gdy `position/duration ≥ 0.9`;
     - serial trafia, gdy `lastInSeason == true` i odcinek osiągnie `≥ 0.9`;
     - `lastInSeason == null` → rekord `pending`. Karta pojawia się po `ratingPendingDays` dniach bez kolejnego odcinka ≥ 0.9. Sprawdzenie odbywa się przy starcie i raz na dobę (AD-14).
-  - Klucz `<service>:<kind>:<id>` (`kind` = `film|series`) liczy i normalizuje **wyłącznie** `RatingPolicy`. Dla filmu `id` = `videoId`, dla serialu `seriesId`, a gdy go brak, znormalizowany tytuł. Duplikat przy różnych językach profilu to zaakceptowane ryzyko.
+  - Klucz `<service>:<kind>:<id>` (`kind` = `film|series`) liczy i normalizuje **wyłącznie** `RatingPolicy`. Dla filmu `id` = `videoId`, dla serialu `seriesId`, a gdy go brak, znormalizowany tytuł. Klucz ustala się przy pierwszym zapisie rekordu i nigdy się nie zmienia.
+  - Tożsamość serialu:
+    - rekord serialu trzyma `seriesId` (albo `null`), surowy `title` (do karty i QR) i `titleNorm`. `titleNorm` liczy jedna funkcja normalizacji w Core. Zmiana tej funkcji podnosi `schemaVersion` dokumentu, a migracja przelicza `titleNorm` bez zmiany kluczy;
+    - `RatingPolicy` dopasowuje fakt do rekordów tego samego `service`, we wszystkich statusach. Fakt z `seriesId` S pasuje do rekordów z `seriesId` S oraz do rekordów bez `seriesId` z tym samym `titleNorm`. Fakt bez `seriesId` pasuje do rekordów z tym samym `titleNorm`. Tytuł nigdy nie łączy faktu i rekordu o znanych, różnych `seriesId`;
+    - zbiór dopasowanych rekordów obejmuje też wszystkie rekordy o tym samym `seriesId` co którykolwiek z nich. Dopasowanie po tytule uzupełnia w rekordzie `seriesId`;
+    - dopasowane rekordy to jeden serial. Reset `pending` („kolejny odcinek”) i zmiana statusu dotyczą każdego z nich. Status serialu to najdalszy status w zbiorze (`pending` < `queued` < `rated`|`skipped`), a kartę pokazuje tylko najstarszy rekord.
+  - Zaakceptowane ryzyka: duplikat przy różnych językach profilu, dopóki żaden fakt nie połączy rekordów przez `seriesId`; scalenie dwóch różnych seriali o tym samym `titleNorm`, gdy `seriesId` któregoś z nich jest nieznane.
   - Rekordy mają `status: pending|queued|rated|skipped` i **nigdy nie są usuwane**. Klucz trafia do kolejki raz na zawsze.
+  - Orchestrator buforuje fakty `playback` do `StoreLoaded` i dopiero potem przekazuje je do `RatingPolicy`.
   - Store to tylko persystencja:
     - przy starcie emituje `StoreLoaded`;
-    - potem przyjmuje wyłącznie komendę `Persist` z całym dokumentem: `data/rating-queue.json` z `schemaVersion`, zapis atomowy (temp + replace).
+    - potem przyjmuje wyłącznie komendę `Persist` z całym dokumentem: `data/rating-queue.json` z `schemaVersion`, zapis atomowy (temp + replace);
+    - wykonuje `Persist` w kolejności otrzymania, więc na dysku zostaje najnowszy dokument.
   - MediaStation nie przechowuje żadnego konta Filmwebu.
   - Karta niesie QR z URL-em wyszukiwarki filmweb.pl z tytułem, budowanym lokalnie: minimalny URL, bez zewnętrznego skracacza, ECC L. Dokładny format URL-a ustala story.
   - Akcje karty: „Ocenione” → `rated`, „Pomiń” → `skipped`. W MVP bez undo; undo jest deferred i sprowadza się do zmiany `status`.
 
 ### AD-13: Envelope operacyjny
 
-- **Binds:** build, deploy, środowiska, testy, logi, smoke, bezpieczeństwo
+- **Binds:** build, deploy, środowiska, testy, logi, smoke, bezpieczeństwo, BrowserHost, Orchestrator (`ErrorCode` w Core)
 - **Prevents:** wymóg pełnego wydania przy poprawce drivera; harness rozjechany z produktem; logowanie wpisywanego tekstu; niezauważona aktualizacja przeglądarki
 - **Rule:**
   - **Build:**
@@ -301,7 +310,13 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
     - `MediaStation.exe --smoke <appId>` wymaga zatrzymanej instancji głównej (mutex, AD-2);
     - używa prawdziwego BrowserHost i drivera: start, `hello`, profil, odtworzenie ≥ 1080p bez błędu DRM, pauza, reguła Back;
     - zwraca raport i kod wyjścia.
-  - **Aktualizacja przeglądarki:** BrowserHost zapisuje `Browser.getVersion` przy podpięciu, a zmiana wersji daje wpis `BrowserVersionChanged` w logu. Po takiej zmianie autor uruchamia smoke.
+  - **Aktualizacja przeglądarki i dostępność CDP:**
+    - przed każdym startem przeglądarki (nie przy adopcji) BrowserHost odczytuje wersję przeglądarki ze źródła poza CDP i ją loguje. Poprzednią wersję czyta z `profiles\<appId>\`, nie z `data/` ani `config/`. Różnica daje wpis w logu (nie Event Core) `BrowserVersionChanged{ appId, from, to }`. Źródło obu wersji ustala story epiki BrowserHost;
+    - przed startem BrowserHost sprawdza, czy `cdpPort` jest wolny i czy żaden proces nie używa `profiles\<appId>`. Jeśli nie, odpowiada `CommandFailed` z `PortInUse` albo `ProfileInUse` i niczego nie uruchamia;
+    - `AppWindowAttached` (AD-15) nie czeka na CDP, więc żywa przeglądarka bez CDP jest wyciszana i minimalizowana jak każda nieaktywna aplikacja (AD-5);
+    - BrowserHost czeka na port CDP najwyżej `cdpConnectTimeout` (`settings.json`, krótszy niż timeout `Starting`; walidacja przy starcie). Gdy uruchomiony proces (`rootPid`) żyje, a port nie przyjął połączenia, BrowserHost odpowiada `CommandFailed{ cmdId, errorCode: CdpUnavailable }`, odróżnialnym od timeoutu startu i od `ProcessExited`. Wpis w logu niesie wersję przeglądarki. Timeout `Starting` w Orchestratorze (AD-14) zostaje zabezpieczeniem. Kafelek pokazuje zwykły `Failed`;
+    - `Browser.getVersion` przy podpięciu potwierdza wersję odczytaną przed startem;
+    - po `BrowserVersionChanged` albo `Failed` autor uruchamia smoke. Smoke zgłasza osobnymi kodami wyjścia `CdpUnavailable` (trigger planu C, AD-1) oraz `PortInUse` / `ProfileInUse`. Smoke nie przechodzi, gdy `Browser.getVersion` różni się od wersji odczytanej przed startem.
   - **Port CDP** tylko na loopbacku. Ryzyko przejęcia profilu przez lokalny proces jest zaakceptowane.
 
 ### AD-14: Przejścia, korelacja i czas w Core
@@ -432,7 +447,7 @@ flowchart TB
 | Przełącznik aplikacji pod przytrzymaniem Home | Nowa Action z `phase: long`. Stan aplikacji już ma Orchestrator |
 | Widgety, kafelki Moonlight per host i gra | Rozszerzenie `apps.json` i Shell |
 | Toast z QR nad playerem | Wykorzysta mechanizm nakładki z AD-9 i WindowManager (AD-15) |
-| Mapowanie przez Wikidata | Zmienia tylko cel URL karty. Wymaga `seriesId`, które protokół ma, ale które może być `null` |
+| Mapowanie przez Wikidata | Zmienia tylko cel URL karty. Wymaga `seriesId`, które rekordy zbierają przez dopasowanie (AD-12), ale które może zostać `null` |
 | Automatyczna obsługa awarii (popupy, wylogowanie, sieć) | MVP ręcznie. `screen{limit\|error}` daje już sygnał |
 | Tryb uruchomienia jako PWA ze Store (osobna sesja SMTC) | Nie jest potrzebny w MVP, bo pauza idzie przez stronę |
 | Prewarm aplikacji przy starcie | MVP startuje leniwie (AD-10) |
@@ -446,5 +461,5 @@ flowchart TB
 - **Nakładka nad pełnoekranowym Edge:** pierwsza story epiki OSK.
 - **Hook LL we własnym wątku dostaje „down”** także przy MediaStation na wierzchu: prototyp InputHub.
 - **Nowe sesje audio po zmianie odcinka:** AudioRouter (AD-5).
-- **Pauza dłuższa niż kilka godzin lub przez noc.**
+- **Pauza wielogodzinna bez uśpienia PC** (S8 zmierzył 30 min): story pomiarowa w epice Netflix (spec CAP-8). Powtarza S8 dla kilku godzin, w dwóch wariantach pauzy i chowania okna, i dodaje fixture'y nowych ekranów błędu. Jeśli wynik wymaga polityki w Core, wraca tu jako change. Ścieżka po Modern Standby jest ustalona w AD-10: ekran profili, a nie dokładne miejsce.
 - **Kontrole z forge i UX:** czy QR otwiera aplikację, czy przeglądarkę; język tytułu w wyszukiwarce Filmwebu; skanowanie QR (ECC L) z 3 m na prawdziwym TV dwoma telefonami. Wszystkie w story „Do oceny”.
