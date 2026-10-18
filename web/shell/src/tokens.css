@@ -1,0 +1,182 @@
+/*
+  Tokeny z DESIGN.md (frontmatter). Źródłem prawdy jest DESIGN.md — tu tylko ich odbicie dla shella.
+*/
+:root {
+  /* colors */
+  --ground: #0f1012;
+  --ground-glow: #8ab4f812;
+  --text: #ffffff;
+  --text-2: #c4c7cc;
+  --text-3: #9aa0a6;
+
+  /* typography */
+  --font-family: 'Roboto Flex Variable', 'Roboto Flex', Roboto, 'Segoe UI', system-ui, sans-serif;
+  --wordmark-size: 32px;
+  --wordmark-weight: 600;
+  --wordmark-tracking: -0.01em;
+  --card-title-size: 34px;
+  --card-title-weight: 600;
+  --card-title-line: 1.15;
+  --card-title-tracking: -0.01em;
+  --body-size: 26px;
+  --body-weight: 400;
+  --body-line: 1.3;
+
+  /* spacing */
+  --space-2: 12px;
+  --space-4: 24px;
+  --space-5: 36px;
+  --space-6: 48px;
+  --gutter: 112px;
+  --title-safe-y: 54px;
+  --bar-top: 56px;
+
+  /* components.logo */
+  --logo-size: 48px;
+  --logo-gap: 18px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  /* Bez kursora: shell steruje się wyłącznie pilotem (DESIGN.md → Do's and Don'ts). */
+  cursor: none !important;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ground);
+}
+
+body {
+  color: var(--text);
+  font-family: var(--font-family);
+  font-variation-settings: 'opsz' 32;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/*
+  Jedna powierzchnia 1920×1080 (DESIGN.md → Layout & Spacing), skalowana do okna niezależnie od DPI Windows;
+  --stage-* ustawia main.tsx. Przy innych proporcjach — letterbox na ground.
+*/
+.stage {
+  position: absolute;
+  left: var(--stage-x, 0px);
+  top: var(--stage-y, 0px);
+  width: 1920px;
+  height: 1080px;
+  transform: scale(var(--stage-scale, 1));
+  transform-origin: 0 0;
+  overflow: hidden;
+}
+
+.screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ground);
+}
+
+/* Poświata tła (DESIGN.md → Colors). */
+.screen::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 520px;
+  pointer-events: none;
+  background: radial-gradient(1200px 520px at 30% -10%, var(--ground-glow), transparent 70%);
+}
+
+/* components.logo */
+.brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--logo-gap);
+  color: var(--text);
+}
+
+.brand svg {
+  width: var(--logo-size);
+  height: var(--logo-size);
+  display: block;
+}
+
+.brand b {
+  font-size: var(--wordmark-size);
+  font-weight: var(--wordmark-weight);
+  letter-spacing: var(--wordmark-tracking);
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* components.config-error: pełny ekran na ground, logo w lewym górnym rogu. */
+.config-error .brand {
+  position: absolute;
+  top: var(--bar-top);
+  left: var(--gutter);
+}
+
+.config-error__content {
+  position: absolute;
+  top: calc(var(--bar-top) + var(--logo-size) + 2 * var(--space-6));
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: var(--title-safe-y);
+  overflow: hidden;
+}
+
+.config-error h1 {
+  font-size: var(--card-title-size);
+  font-weight: var(--card-title-weight);
+  line-height: var(--card-title-line);
+  letter-spacing: var(--card-title-tracking);
+}
+
+.config-error__hint,
+.config-error li {
+  font-size: var(--body-size);
+  font-weight: var(--body-weight);
+  line-height: var(--body-line);
+}
+
+.config-error__hint {
+  margin-top: var(--space-2);
+  color: var(--text-2);
+}
+
+.config-error ul {
+  list-style: none;
+  margin-top: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.config-error__file {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.config-error__path {
+  color: var(--text-3);
+  margin-left: var(--space-2);
+}
+
+.config-error__reason {
+  display: block;
+  color: var(--text-2);
+}

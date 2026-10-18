@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>MediaStation</AssemblyName>
+    <RootNamespace>MediaStation.App</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MediaStation.Core\MediaStation.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    Build web jako target MSBuild (AD-13): SchemaExport → npm ci (gdy brak node_modules) →
+    Debug: npm run contracts (shell z Vite dev servera), inne konfiguracje: npm run build i web/shell/dist → <exe>/shell.
+  -->
+  <PropertyGroup>
+    <MediaStationRepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</MediaStationRepoRoot>
+    <MediaStationWebDir>$(MediaStationRepoRoot)web\</MediaStationWebDir>
+    <MediaStationSchemaDir>$(MediaStationWebDir)contracts\schema</MediaStationSchemaDir>
+    <MediaStationShellDist>$(MediaStationWebDir)shell\dist\</MediaStationShellDist>
+    <MediaStationSchemaExportProject>$(MediaStationRepoRoot)tools\MediaStation.SchemaExport\MediaStation.SchemaExport.csproj</MediaStationSchemaExportProject>
+    <MediaStationShellFromDevServer Condition="'$(Configuration)' == 'Debug'">true</MediaStationShellFromDevServer>
+    <DefineConstants Condition="'$(MediaStationShellFromDevServer)' == 'true'">$(DefineConstants);SHELL_DEV_SERVER</DefineConstants>
+  </PropertyGroup>
+
+  <Target Name="BuildWeb" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipWebBuild)' != 'true'">
+    <MSBuild Projects="$(MediaStationSchemaExportProject)"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishReadyToRun;PublishSingleFile;_IsPublishing;TargetFramework">
+      <Output TaskParameter="TargetOutputs" ItemName="_MediaStationSchemaExportAssembly" />
+    </MSBuild>
+
+    <Exec Command="dotnet &quot;@(_MediaStationSchemaExportAssembly)&quot; &quot;$(MediaStationSchemaDir)&quot;" />
+
+    <Exec Command="npm ci" WorkingDirectory="$(MediaStationWebDir)" Condition="!Exists('$(MediaStationWebDir)node_modules')" />
+
+    <Exec Command="npm run contracts" WorkingDirectory="$(MediaStationWebDir)" Condition="'$(MediaStationShellFromDevServer)' == 'true'" />
+
+    <Exec Command="npm run build" WorkingDirectory="$(MediaStationWebDir)" Condition="'$(MediaStationShellFromDevServer)' != 'true'" />
+
+    <ItemGroup Condition="'$(MediaStationShellFromDevServer)' != 'true'">
+      <_MediaStationShellFile Include="$(MediaStationShellDist)**\*" />
+      <Content Include="@(_MediaStationShellFile)"
+               Link="shell\%(RecursiveDir)%(Filename)%(Extension)"
+               CopyToOutputDirectory="PreserveNewest"
+               CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <Error Condition="'$(MediaStationShellFromDevServer)' != 'true' and !Exists('$(MediaStationShellDist)index.html')"
+           Text="Build web nie wyprodukował $(MediaStationShellDist)index.html." />
+  </Target>
+
+</Project>

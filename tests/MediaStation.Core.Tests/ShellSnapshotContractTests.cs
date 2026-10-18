@@ -1,0 +1,113 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using MediaStation.Core.Contracts;
+
+namespace MediaStation.Core.Tests;
+
+public class ShellSnapshotContractTests
+{
+    private static readonly ShellSnapshot ErrorSnapshot = new(
+        7,
+        ShellScreen.ConfigError,
+        [new ConfigError("settings.json", null, "brak pliku"), new ConfigError("input.json", "$.a", "nieczytelny JSON")]);
+
+    [Fact]
+    public void Serializes_camel_case_enum_as_string_and_explicit_null()
+    {
+        var json = ContractJson.Serialize(ErrorSnapshot);
+
+        Assert.Equal(
+            """{"rev":7,"screen":"configError","configErrors":[{"file":"settings.json","path":null,"reason":"brak pliku"},{"file":"input.json","path":"$.a","reason":"nieczytelny JSON"}]}""",
+            json);
+    }
+
+    [Fact]
+    public void Round_trips()
+    {
+        var back = ContractJson.Deserialize<ShellSnapshot>(ContractJson.Serialize(ErrorSnapshot));
+
+        Assert.NotNull(back);
+        Assert.Equal(ErrorSnapshot.Rev, back.Rev);
+        Assert.Equal(ErrorSnapshot.Screen, back.Screen);
+        Assert.Equal(ErrorSnapshot.ConfigErrors, back.ConfigErrors);
+    }
+
+    [Fact]
+    public void Placeholder_screen_serializes_as_string()
+    {
+        var json = ContractJson.Serialize(new ShellSnapshot(1, ShellScreen.Placeholder, []));
+
+        Assert.Equal("""{"rev":1,"screen":"placeholder","configErrors":[]}""", json);
+    }
+
+    [Fact]
+    public void Envelope_wraps_snapshot()
+    {
+        var json = ContractJson.Serialize(Envelope.Snapshot(new ShellSnapshot(1, ShellScreen.Placeholder, [])));
+
+        Assert.Equal("""{"v":1,"type":"snapshot","payload":{"rev":1,"screen":"placeholder","configErrors":[]}}""", json);
+    }
+
+    [Fact]
+    public void Ready_envelope_parses_with_null_payload()
+    {
+        var envelope = ContractJson.Deserialize<Envelope<JsonElement?>>("""{"v":1,"type":"ready","payload":null}""");
+
+        Assert.NotNull(envelope);
+        Assert.Equal(Envelope.Version, envelope.V);
+        Assert.Equal(Envelope.ReadyType, envelope.Type);
+        Assert.Null(envelope.Payload);
+    }
+
+    [Fact]
+    public void Envelope_with_additional_id_field_is_accepted()
+    {
+        var envelope = ContractJson.Deserialize<Envelope<JsonElement?>>("""{"v":1,"type":"ready","id":"x1","payload":null}""");
+
+        Assert.NotNull(envelope);
+        Assert.Equal(Envelope.ReadyType, envelope.Type);
+    }
+
+    [Fact]
+    public void Missing_property_is_rejected()
+    {
+        Assert.Throws<JsonException>(() => ContractJson.Deserialize<ShellSnapshot>("""{"rev":1,"screen":"placeholder"}"""));
+    }
+
+    [Fact]
+    public void Integer_enum_is_rejected()
+    {
+        Assert.Throws<JsonException>(() => ContractJson.Deserialize<ShellSnapshot>("""{"rev":1,"screen":0,"configErrors":[]}"""));
+    }
+
+    [Fact]
+    public void Schema_requires_rev_screen_and_config_errors()
+    {
+        var schema = JsonNode.Parse(ContractJson.ExportSchema())!.AsObject();
+
+        var properties = schema["properties"]!.AsObject();
+        Assert.True(properties.ContainsKey("rev"));
+        Assert.True(properties.ContainsKey("screen"));
+        Assert.True(properties.ContainsKey("configErrors"));
+
+        var required = schema["required"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
+        Assert.Equal(["rev", "screen", "configErrors"], required);
+
+        Assert.Equal("integer", properties["rev"]!["type"]!.GetValue<string>());
+        var screens = properties["screen"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
+        Assert.Equal(["placeholder", "configError"], screens);
+    }
+
+    [Fact]
+    public void Schema_marks_config_error_path_as_nullable_and_required()
+    {
+        var schema = JsonNode.Parse(ContractJson.ExportSchema())!;
+        var item = schema["properties"]!["configErrors"]!["items"]!;
+
+        Assert.Equal("ConfigError", item["title"]!.GetValue<string>());
+        var pathTypes = item["properties"]!["path"]!["type"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
+        Assert.Equal(["string", "null"], pathTypes);
+        var required = item["required"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
+        Assert.Equal(["file", "path", "reason"], required);
+    }
+}

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MediaStation.Core/MediaStation.Core.csproj" />
+    <Project Path="src/MediaStation.App/MediaStation.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MediaStation.Core.Tests/MediaStation.Core.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/MediaStation.SchemaExport/MediaStation.SchemaExport.csproj" />
+  </Folder>
+</Solution>
