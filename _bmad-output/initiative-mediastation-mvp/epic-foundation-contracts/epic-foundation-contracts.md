@@ -42,3 +42,7 @@ Scaffold, kontrakty i konfiguracja. Nie: Orchestrator i jego logika (epic-orches
 - Decision: logger JSON Lines (UTC, rotacja dzienna) z CAP-12 powstaje tutaj, bo checki CAP-3 i CAP-9 czytają logi (2026-10-18).
 - Decision: rekord `SetInputRouting` i `Action` są w kontraktach Core tej epiki, żeby epiki Orchestrator i Input szły równolegle (2026-10-18).
 - Decision: tracer bullet tej epiki: `MediaStation.exe` na UM760 → Core → WebView2 shell z buildu React pokazuje placeholder albo ekran błędu konfiguracji (2026-10-18).
+- Decision: lane'y Core (kontrakty → config) i App (logger → jedna instancja i CLI); kontrakty i logger idą równolegle po tracerze (2026-10-18).
+- Decision: rotacja i nazwa pliku logu to czysta logika w Core testowana w `MediaStation.Core.Tests` z FakeTimeProvider; bez projektu `App.Tests` (2026-10-18).
+- Decision: parser CLI zna `--smoke` i `--calibrate-input` (implementacje w epikach 3 i 11, do tego czasu kod „nieobsługiwane”); `--supervise` poza tą epiką (2026-10-18).
+- Decision: bez osobnej story end-to-end; każdy punkt Done when sprawdza `verify` swojej entry na UM760 (2026-10-18).

@@ -1,0 +1,71 @@
+# Foundation & contracts — entries w kolejności budowy. tickets.py reads it.
+# Kolejność tabel = kolejność budowy; `id` nie jest kolejnością.
+# Lane'y: Core (2 → 4), App (3 → 5); 2 i 3 mogą iść równolegle po tracerze.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Tracer bullet: MediaStation.exe → Core → WebView2 shell"
+description = "Zakłada solution wg Structural Seed (global.json, MediaStation.Core, MediaStation.App z composition root, tests/MediaStation.Core.Tests na xunit.v3, web/shell na React + Vite, web/contracts) z buildem web jako targetem MSBuild, eksportem JSON Schema jednego rekordu snapshotu i wygenerowanym z niego typem TS; pusty host WPF + WebView2 dostaje snapshot przez most postMessage w kopercie { v, type, payload } i pokazuje placeholder, a przy braku albo nieczytelnym pliku w config/ ekran błędu konfiguracji przyjmujący listę błędów (plik, ścieżka, powód); Debug ładuje shell z Vite dev servera, Release z plików lokalnych."
+verify = "`dotnet publish` self-contained win-x64 skopiowany ręcznie na UM760 pokazuje placeholder z plików lokalnych, a po zepsuciu `settings.json` ekran błędu konfiguracji zamiast crasha; `dotnet test` przechodzi, a typ snapshotu w web/contracts powstaje w buildzie web."
+covers = ["CAP-1"]
+after = []
+hitl = true
+risk = "medium"
+notes = ["MediaStation.exe na UM760 → Core → WebView2 shell z buildu React pokazuje placeholder albo ekran błędu konfiguracji."]
+
+[[entry]]
+id = 2
+type = "story"
+title = "Kontrakty Core dla Orchestratora i InputHub"
+description = "Dodaje do Core tylko rekordy potrzebne epikom 2 i 3: Action { kind, phase, source, tsMono }, SetInputRouting { mode, appType, pointer, epoch }, bazy Intent, Command (z cmdId) i Event, CommandCompleted i CommandFailed z enumem ErrorCode, z serializacją camelCase, enumami jako stringi, jawnym null i polimorficznym `type` w kopercie, eksportowane do JSON Schema i generowane do TS, plus egzekwowanie granicy Core (referencje projektów i BannedApiAnalyzers dla Win32, WebView2, WPF i systemu plików)."
+verify = "Testy xunit round-trip serializacji każdego rekordu i test granicy `MediaStation.Core` przechodzą, a build web generuje ich typy TS w web/contracts bez ręcznej edycji."
+covers = ["CAP-1"]
+after = [1]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-4", "architecture-mediastation/architecture-mediastation.md, AD-8", "architecture-mediastation/architecture-mediastation.md, Consistency Conventions"]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Logger JSON Lines"
+description = "Dodaje logger JSON Lines w %LOCALAPPDATA%\\MediaStation\\logs (czas UTC, rotacja dzienna, pole `src`) za portem w Core, z rotacją i nazwą pliku jako czystą logiką w Core testowaną z FakeTimeProvider (dodaje FakeTimeProvider do tests/MediaStation.Core.Tests), zapisem w App/Logging i podpięciem w composition root dla startu i nieobsłużonych wyjątków."
+verify = "Test z FakeTimeProvider przekraczający północ UTC kieruje zapisy do dwóch plików dziennych, każda linia parsuje się jako JSON z `ts` w UTC, a build na UM760 zostawia log startu w %LOCALAPPDATA%\\MediaStation\\logs."
+covers = ["CAP-12"]
+after = [1]
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 4
+type = "story"
+title = "Schematy i walidacja config/ z ekranem błędu"
+description = "Dodaje do Core rekordy apps.json, input.json (mapowanie: sygnatura urządzenia → kod → Action kind, plus kombinacja Home z pada) i settings.json z odrzucaniem nieznanych pól, unikalnym cdpPort z zakresu 9220–9239 i wartościami domyślnymi settings jako czystą walidację bez I/O z eksportem JSON Schema, a App/Config ładuje trzy pliki z %LOCALAPPDATA%\\MediaStation\\config i przekazuje listę błędów (plik, ścieżka, powód) do ekranu błędu w shellu i do logu."
+verify = "Testy xunit dla nieznanego pola w każdym z trzech plików oraz zduplikowanego cdpPort i portu spoza 9220–9239 w apps.json przechodzą, a na UM760 każdy z tych błędów daje ekran błędu konfiguracji z nazwą pliku zamiast crasha i wpis w logu."
+covers = ["CAP-1"]
+after = [2, 3]
+hitl = true
+risk = "medium"
+
+[[entry]]
+id = 5
+type = "story"
+title = "Jedna instancja i wejście CLI"
+description = "Dodaje parser trybów CLI (`--smoke <appId>`, `--calibrate-input`; ich implementacje należą do epik 3 i 11 i do tego czasu kończą się kodem „nieobsługiwane”) z dispatch w composition root i named mutex sprawdzany przed trybem, tak że druga instancja, także `--smoke`, kończy się zdefiniowanym kodem wyjścia i wpisem w logu."
+verify = "Przy działającej instancji głównej drugie uruchomienie `MediaStation.exe` i `MediaStation.exe --smoke netflix` kończą się kodem wyjścia „instancja już działa” bez otwierania okna, a log zawiera wpis o odrzuceniu."
+covers = ["CAP-1"]
+after = [3, 4]
+hitl = true
+risk = "low"
+
+[[entry]]
+id = 6
+type = "story"
+title = "Refactor sweep"
+description = "Sprząta kod epiki według planów i odłożonych findingów z review; zakres ustalany przy starcie, tylko cleanup."
+verify = "`dotnet test` i build web przechodzą, a `dotnet publish` na UM760 nadal spełnia checki Done when 1–5 epiki."
+covers = ["CAP-1", "CAP-12"]
+after = [1, 2, 3, 4, 5]
+hitl = true
+risk = "low"
