@@ -72,7 +72,7 @@ slug = "epic-osk"
 title = "On-screen keyboard (OSK)"
 covers = ["CAP-9"]
 after = [
-  { epic = 3, needs = "tryb osk w routingu, pointer i ClipCursor" },
+  { epic = 3, needs = "tryb osk w routingu, pointer i ClipCursor, Action Keyboard z mapowaniem z input.json" },
   { epic = 5, needs = "WindowManager dla nakładki topmost WS_EX_NOACTIVATE" },
   { epic = 6, needs = "story 1: flaga trybu okna; Input.insertText" },
   { epic = 7, needs = "textFocus z drivera i obsługa komunikatu osk w PageRuntime" },
@@ -93,14 +93,14 @@ after = [
 id = 10
 slug = "epic-moonlight-native"
 title = "Moonlight & native apps"
-covers = ["CAP-10", "CAP-5"]
+covers = ["CAP-10", "CAP-5", "CAP-9"]
 after = [
   { epic = 2, needs = "cykl życia i adopcja przez ProbeExisting" },
   { epic = 3, needs = "routing app + moonlight/native, polityka back, kombinacja Home z pada" },
   { epic = 4, needs = "kafelki i AppMenu" },
   { epic = 5, needs = "WindowManager i AudioRouter" },
   { epic = 7, needs = "ścieżka pauzy Netflixa dla produktowego sprawdzenia audio" },
-  { epic = 8, needs = "wspólny kod polityki pointer w InputHub" },
+  { epic = 8, needs = "wspólny kod polityki pointer w InputHub; okno OSK, TextSink foreground i obsługa Action Keyboard" },
   { epic = 9, needs = "kolejność ze specu (CAP-11 → CAP-10); wspólne rozszerzenia Orchestratora" },
 ]
 
@@ -110,7 +110,7 @@ slug = "epic-deploy-resilience"
 title = "Deploy & resilience"
 covers = ["CAP-12"]
 after = [
-  { epic = 4, needs = "AppMenu „Uruchom ponownie” dla hotfixu drivera" },
+  { epic = 4, needs = "AppMenu „Uruchom ponownie” dla hotfixu drivera; nagłówek Home i model fokusu dla przycisku aktualizacji" },
   { epic = 6, needs = "ErrorCode CdpUnavailable/PortInUse/ProfileInUse i odczyt wersji przed startem" },
   { epic = 7, needs = "--smoke netflix i page bundle czytany z dysku przy wstrzyknięciu" },
   { epic = 10, needs = "adopcja żywego Moonlighta po restarcie" },

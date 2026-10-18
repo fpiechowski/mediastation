@@ -28,7 +28,7 @@ Pierwsze demo na TV: ekran główny obsługiwany pilotem, zgodny z `DESIGN.md`; 
 
 ## Boundaries
 
-`web/shell` i obsługa Intents z UI. Nie: karta „Do oceny” i check „nowa karta nie kradnie fokusu” (epic-do-oceny), Z-order okna shella (epic-windows-audio), widgety i tło ze zdjęć (Non-goals).
+`web/shell` i obsługa Intents z UI. Nie: karta „Do oceny” i check „nowa karta nie kradnie fokusu” (epic-do-oceny), Z-order okna shella (epic-windows-audio), przycisk aktualizacji w nagłówku (epic-deploy-resilience; nagłówek ma do niego miejsce w layoucie z DESIGN.md), widgety i tło ze zdjęć (Non-goals).
 
 ## References
 
