@@ -3,7 +3,7 @@ title: 'Jedna instancja i wejście CLI'
 type: 'feature'
 ticket: '5'
 created: '2026-10-20'
-status: 'built'
+status: done
 baseline_revision: '7567ec4ccca764b90039ad12b15ca50445347d1a'
 route: 'full'
 route_source: 'auto'
