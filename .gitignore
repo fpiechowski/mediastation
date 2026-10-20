@@ -6,3 +6,7 @@ web/contracts/generated/
 web/contracts/schema/
 .vs/
 *.user
+.idea/
+.worktrees/
+_bmad/render/
+in-memoria.db
