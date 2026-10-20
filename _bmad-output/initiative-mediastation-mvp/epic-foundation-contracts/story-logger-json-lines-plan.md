@@ -3,7 +3,7 @@ title: 'Logger JSON Lines'
 type: 'feature'
 ticket: '3'
 created: '2026-10-20'
-status: 'built'
+status: done
 baseline_revision: 'cd8b650bdb2dc881af20805d6026c2b62abf5530'
 route: 'full'
 route_source: 'auto'
