@@ -48,3 +48,4 @@ Eliza po każdym restarcie PC zastaje ekran główny, autor poprawia driver bez 
 - Decision: logi JSON Lines z success CAP-12 dostarcza epic-foundation-contracts; ta epika ich nie powtarza (2026-10-18).
 - Waits on epic-home-screen because: AppMenu „Uruchom ponownie” dla hotfixu drivera; nagłówek Home i model fokusu dla przycisku aktualizacji.
 - Waits on epic-moonlight-native because: adopcja żywego Moonlighta po restarcie przez `--supervise`.
+- Deferred: `update.repo` w `settings.json` przyjmuje `owner/..`. Źródło: F18 w retro epic-foundation-contracts (`_bmad-output/initiative-mediastation-mvp/epic-foundation-contracts/epic-foundation-contracts-retrospective.md`). Warunek: story „Updater i przycisk aktualizacji na Home”, zanim Updater zbuduje z `update.repo` URL (2026-10-20).

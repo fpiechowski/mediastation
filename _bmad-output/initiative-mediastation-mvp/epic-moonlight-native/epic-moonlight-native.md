@@ -45,3 +45,4 @@ UM760 zostaje klientem Moonlight i uruchamia Plexa bez wychodzenia z MediaStatio
 - Waits on epic-osk because: wspólny kod polityki pointer w InputHub; okno OSK, `TextSink` `foreground` i obsługa Action `Keyboard`.
 - Waits on epic-do-oceny because: kolejność specu (CAP-11 → CAP-10) i wspólne rozszerzenia Orchestratora.
 - Waits on epic-netflix-dpad because: ścieżka pauzy Netflixa w checku audio.
+- Deferred: `exe`, `host` i `app` w `apps.json` mogą być puste albo z samych spacji. Źródło: F18 w retro epic-foundation-contracts (`_bmad-output/initiative-mediastation-mvp/epic-foundation-contracts/epic-foundation-contracts-retrospective.md`). Warunek: story MoonlightHost albo NativeAppHost, która pierwsza startuje proces z tych pól (2026-10-20).

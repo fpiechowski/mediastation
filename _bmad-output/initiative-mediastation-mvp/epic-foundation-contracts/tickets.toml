@@ -1,6 +1,7 @@
 # Foundation & contracts — entries w kolejności budowy. tickets.py reads it.
 # Kolejność tabel = kolejność budowy; `id` nie jest kolejnością.
 # Lane'y: Core (2 → 4), App (3 → 5); 2 i 3 mogą iść równolegle po tracerze.
+# Po retro: 7 (zmiany zachowania) → 6 (sweep); obie dotykają composition root, więc sekwencyjnie.
 
 [[entry]]
 id = 1
@@ -60,12 +61,25 @@ hitl = true
 risk = "low"
 
 [[entry]]
-id = 6
+id = 7
 type = "story"
-title = "Refactor sweep"
-description = "Sprząta kod epiki według planów i odłożonych findingów z review; zakres ustalany przy starcie, tylko cleanup."
-verify = "`dotnet test` i build web przechodzą, a `dotnet publish` na UM760 nadal spełnia checki Done when 1–5 epiki."
+title = "Ścisła koperta i diagnostyka hosta"
+description = "Wprowadza zmiany zachowania z retro epiki (A1–A4): odczyt koperty jest ścisły (osobne opcje odczytu ze ścisłym konwerterem enumów, wydzielonym z walidacji configu do pliku wspólnego z kontraktami, i z rozróżnianiem wielkości liter; serializacja i eksport schematu bez zmian, dodatkowe pola koperty, w tym `id`, i payloadu nadal dozwolone), awaria startu WebView2 kończy proces nowym kodem `ExitCode.ShellStartFailed = 5` zamiast 0, most loguje odrzucone wiadomości jako `bridgeMessageRejected` z `v`, `type` i powodem, host loguje nieudane `NavigationCompleted`, `ProcessFailed` i `NewWindowRequested` i nie otwiera nowych okien, a zapis logu jest atomowym appendem między procesami (`FileSystemRights.AppendData`)."
+verify = "Testy xunit odrzucają w kopercie `\"kind\":\"up, down\"`, `\"UP\"` i `\"Kind\"`, a test dodatkowego `id` dalej przechodzi; skrypt w repo z dwoma procesami piszącymi do jednego logu nie gubi ani nie psuje linii; build Release uruchomiony przez autora na maszynie dev przy `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` ustawionym na nieistniejący folder kończy się po zamknięciu komunikatu błędu kodem 5 z `stop {exitCode: 5}` w logu, przy usuniętym `shell/index.html` loguje nieudaną nawigację, a bez zmian pokazuje shell po handshake'u `ready` bez `bridgeMessageRejected` w logu."
 covers = ["CAP-1", "CAP-12"]
 after = [1, 2, 3, 4, 5]
 hitl = true
+risk = "medium"
+references = ["epic-foundation-contracts/epic-foundation-contracts-retrospective.md, Action items A1–A4, Findings F1, F3, F7–F10, Open questions Q1, Q2"]
+
+[[entry]]
+id = 6
+type = "story"
+title = "Refactor sweep"
+description = "Sprząta kod epiki według retro (A5–A7, F23, F25): czysta decyzja startu, fabryka `ShellSnapshot` z `ConfigResult` i mapowanie wyjątków I/O na `ConfigFileState` przechodzą do Core z testami, a test przypina wartości `ExitCode` (A5); guard konstruktora `Mutex`, jeden wpis logu na nieobsłużony wyjątek UI, `LogError` odporne na rzucający wyjątek, `never` w `switch` ekranów shella i typecheck web w buildzie Debug (A6); lista zakazanych API Core obejmuje też AD-14 i obiekty OS, a doc `ConfigJson` mówi tylko o zgodności struktury ze schematem, z opcjonalnym przeniesieniem eksportu schematów configu do `Config` (A7); globalne aliasy `<Using Include=\"MediaStation.Core.Contracts.Action\" Alias=\"Action\" />` i `<Using Include=\"MediaStation.Core.Contracts.InputMode\" Alias=\"InputMode\" />` w `MediaStation.App.csproj` i w projekcie testów usuwają kolizję z `System.Action` i `System.Windows.Input.InputMode`, a lokalny alias w testach kontraktów znika (F23); rejestr `MessageTypes` odrzuca nazwy `snapshot` i `ready` koperty shella (F25)."
+verify = "`dotnet test` przechodzi z nowymi testami A5 i F25, build Debug uruchamia typecheck web, a `dotnet publish` na UM760 spełnia checki Done when 1–5 epiki i sprawdza trzy ścieżki, których retro nie wykonało: tryb główny pokazuje okno shella, drugie uruchomienie `MediaStation.exe` i `MediaStation.exe --smoke netflix` przy działającej instancji głównej kończy się kodem 3 (`AlreadyRunning`) z `instanceRejected` w logu, a błędny `apps.json`, `input.json` albo `settings.json` daje ekran błędu konfiguracji zamiast crasha."
+covers = ["CAP-1", "CAP-12"]
+after = [1, 2, 3, 4, 5, 7]
+hitl = true
 risk = "low"
+references = ["epic-foundation-contracts/epic-foundation-contracts-retrospective.md, Action items A5–A7, Findings F4, F5, F13–F16, F19, F20, F23, F25, Open questions Q3, Q4"]
