@@ -3,7 +3,7 @@ title: 'Tracer bullet: MediaStation.exe → Core → WebView2 shell'
 type: 'feature'
 ticket: '1'
 created: '2026-10-18'
-status: 'in-review'
+status: done
 baseline_revision: '7292f5d32e18657310b7e870c2987e9056c5b1d7'
 route: 'full'
 route_source: 'auto'
