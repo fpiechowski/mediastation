@@ -141,6 +141,26 @@ public class CoreMessageContractTests
         Assert.Equal(new Action(ActionKind.Ok, ActionPhase.Press, ActionSource.Keyboard, 42), action);
     }
 
+    [Theory]
+    [InlineData("""{"v":1,"type":"action","payload":{"kind":"up, down","phase":"press","source":"keyboard","tsMono":1}}""")]
+    [InlineData("""{"v":1,"type":"action","payload":{"kind":"UP","phase":"press","source":"keyboard","tsMono":1}}""")]
+    [InlineData("""{"v":1,"type":"action","payload":{"Kind":"ok","phase":"press","source":"keyboard","tsMono":1}}""")]
+    [InlineData("""{"V":1,"type":"action","payload":{"kind":"ok","phase":"press","source":"keyboard","tsMono":1}}""")]
+    [InlineData("""{"v":1,"Type":"action","payload":{"kind":"ok","phase":"press","source":"keyboard","tsMono":1}}""")]
+    public void Strict_envelope_row_from_matrix_is_rejected(string json)
+    {
+        Assert.Throws<JsonException>(() => ContractJson.DeserializeEnvelope<Action>(json));
+    }
+
+    [Fact]
+    public void Additional_payload_field_is_accepted()
+    {
+        var action = ContractJson.DeserializeEnvelope<Action>(
+            """{"v":1,"type":"action","payload":{"kind":"ok","phase":"press","source":"keyboard","tsMono":42,"extra":true}}""");
+
+        Assert.Equal(new Action(ActionKind.Ok, ActionPhase.Press, ActionSource.Keyboard, 42), action);
+    }
+
     // ── Rejestr ───────────────────────────────────────────────────────────────
 
     [Fact]

@@ -376,10 +376,9 @@ public static class ConfigValidation
 }
 
 /// <summary>
-/// Ścisła deserializacja plików configu (AD-11): runtime przyjmuje dokładnie to, co eksportowany schemat.
-/// Kopia <see cref="ContractJson.Options"/> bez jego pobłażliwości: nieznane pole i zduplikowany klucz to błąd,
-/// nazwy pól i wartości enumów tylko w dokładnej postaci camelCase, <c>type</c> nie musi być pierwszy.
-/// <see cref="ContractJson.Options"/> zostaje bez zmian (koperta nadal ignoruje dodatkowe <c>id</c>).
+/// Ścisła deserializacja plików configu (AD-11): struktura zgodna ze schematem (pola i nazwy enumów), a reguły
+/// semantyczne — zakresy, kebab-case, VK, unikalność — tylko w runtime. Baza to <see cref="ContractJson.ReadOptions"/>,
+/// do tego reguły plików: nieznane pole i zduplikowany klucz to błąd, a <c>type</c> nie musi być pierwszy.
 /// </summary>
 public static class ConfigJson
 {
@@ -387,65 +386,13 @@ public static class ConfigJson
 
     private static JsonSerializerOptions CreateOptions()
     {
-        var options = new JsonSerializerOptions(ContractJson.Options)
+        var options = new JsonSerializerOptions(ContractJson.ReadOptions)
         {
             UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
             AllowDuplicateProperties = false,
             AllowOutOfOrderMetadataProperties = true,
-            PropertyNameCaseInsensitive = false,
         };
-
-        // Przed odziedziczonym JsonStringEnumConverter, który czyta bez względu na wielkość liter i sumuje listy po przecinku.
-        options.Converters.Insert(0, new StrictEnumConverterFactory());
         options.MakeReadOnly(populateMissingResolver: true);
         return options;
-    }
-
-    /// <summary>Enum tylko jako string z dokładną nazwą camelCase; wszystko inne to <see cref="JsonException"/>.</summary>
-    private sealed class StrictEnumConverterFactory : JsonConverterFactory
-    {
-        public override bool CanConvert(Type typeToConvert) => typeToConvert.IsEnum;
-
-        public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options) =>
-            (JsonConverter)Activator.CreateInstance(typeof(StrictEnumConverter<>).MakeGenericType(typeToConvert))!;
-    }
-
-    private sealed class StrictEnumConverter<T> : JsonConverter<T>
-        where T : struct, Enum
-    {
-        private readonly Dictionary<string, T> _byName = new(StringComparer.Ordinal);
-
-        private readonly Dictionary<T, string> _names = [];
-
-        public StrictEnumConverter()
-        {
-            foreach (var value in Enum.GetValues<T>())
-            {
-                var name = JsonNamingPolicy.CamelCase.ConvertName(value.ToString());
-                _byName.Add(name, value);
-                _names.Add(value, name);
-            }
-        }
-
-        public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            // Pusty JsonException: STJ dopisuje „could not be converted to <typ>. Path: …”.
-            if (reader.TokenType == JsonTokenType.String && _byName.TryGetValue(reader.GetString()!, out var value))
-            {
-                return value;
-            }
-
-            throw new JsonException();
-        }
-
-        public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
-        {
-            if (!_names.TryGetValue(value, out var name))
-            {
-                throw new JsonException($"Wartość {value} spoza enuma {typeof(T).Name}.");
-            }
-
-            writer.WriteStringValue(name);
-        }
     }
 }

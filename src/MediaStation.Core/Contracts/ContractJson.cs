@@ -12,10 +12,17 @@ namespace MediaStation.Core.Contracts;
 
 /// <summary>
 /// Wspólna serializacja kontraktów (AD-16): camelCase, enumy jako stringi, jawne <c>null</c>.
+/// <see cref="Options"/> służy zapisowi i schematom; odczyt idzie przez ścisłe <see cref="ReadOptions"/>.
 /// </summary>
 public static class ContractJson
 {
     public static JsonSerializerOptions Options { get; } = CreateOptions();
+
+    /// <summary>
+    /// Ścisły odczyt kontraktów: nazwy pól z rozróżnieniem wielkości liter, enum tylko jako dokładna nazwa camelCase.
+    /// Dodatkowe pola koperty i payloadu nadal są ignorowane.
+    /// </summary>
+    public static JsonSerializerOptions ReadOptions { get; } = CreateReadOptions();
 
     private static JsonSerializerOptions CreateOptions()
     {
@@ -31,9 +38,22 @@ public static class ContractJson
         return options;
     }
 
+    private static JsonSerializerOptions CreateReadOptions()
+    {
+        var options = new JsonSerializerOptions(Options)
+        {
+            PropertyNameCaseInsensitive = false,
+        };
+
+        // Przed odziedziczonym JsonStringEnumConverter, który czyta bez względu na wielkość liter i sumuje listy po przecinku.
+        options.Converters.Insert(0, new StrictEnumConverterFactory());
+        options.MakeReadOnly(populateMissingResolver: true);
+        return options;
+    }
+
     public static string Serialize<T>(T value) => JsonSerializer.Serialize(value, Options);
 
-    public static T? Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, Options);
+    public static T? Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, ReadOptions);
 
     /// <summary>
     /// Zapisuje komunikat w kopercie <c>{ v, type, payload }</c>: <c>type</c> z <see cref="MessageTypes"/>,
@@ -78,7 +98,7 @@ public static class ContractJson
             throw new JsonException($"Typ komunikatu '{envelope.Type}' nie jest {typeof(TBase).Name}.");
         }
 
-        return envelope.Payload.Deserialize(type, Options) as TBase
+        return envelope.Payload.Deserialize(type, ReadOptions) as TBase
             ?? throw new JsonException($"Payload komunikatu '{envelope.Type}' jest null.");
     }
 
@@ -104,7 +124,7 @@ public static class ContractJson
         return schemas;
     }
 
-    /// <summary>Korzenie plików <c>config/</c>; runtime czyta je ściśle przez <see cref="ConfigJson.Options"/>.</summary>
+    /// <summary>Korzenie plików <c>config/</c>; runtime czyta je ściśle przez <see cref="ConfigJson.Options"/> (ReadOptions + reguły plików).</summary>
     private static readonly Type[] ConfigTypes = [typeof(AppsConfig), typeof(InputConfig), typeof(Settings)];
 
     /// <summary>Nazwa pliku schematu dla typu, np. <c>set-input-routing.schema.json</c>.</summary>

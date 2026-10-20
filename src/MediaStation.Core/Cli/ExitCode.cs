@@ -20,4 +20,7 @@ public enum ExitCode
 
     /// <summary>Tryb rozpoznany, ale niezaimplementowany (dziś <c>--smoke</c> i <c>--calibrate-input</c>).</summary>
     Unsupported = 4,
+
+    /// <summary>WebView2 albo pliki shella nie wystartowały; proces kończy się po komunikacie błędu.</summary>
+    ShellStartFailed = 5,
 }

@@ -69,6 +69,21 @@ public class ShellSnapshotContractTests
     }
 
     [Fact]
+    public void Envelope_with_pascal_case_type_is_rejected()
+    {
+        Assert.Throws<JsonException>(() => ContractJson.Deserialize<Envelope<JsonElement?>>("""{"v":1,"Type":"ready","payload":null}"""));
+    }
+
+    [Fact]
+    public void Read_options_are_strict_and_writing_options_stay_lenient()
+    {
+        Assert.NotSame(ContractJson.Options, ContractJson.ReadOptions);
+        Assert.True(ContractJson.Options.PropertyNameCaseInsensitive);
+        Assert.False(ContractJson.ReadOptions.PropertyNameCaseInsensitive);
+        Assert.True(ContractJson.ReadOptions.IsReadOnly);
+    }
+
+    [Fact]
     public void Missing_property_is_rejected()
     {
         Assert.Throws<JsonException>(() => ContractJson.Deserialize<ShellSnapshot>("""{"rev":1,"screen":"placeholder"}"""));

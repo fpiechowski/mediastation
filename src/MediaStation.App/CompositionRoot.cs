@@ -101,7 +101,7 @@ public static class CompositionRoot
             Screen: result.Errors.Count == 0 ? ShellScreen.Placeholder : ShellScreen.ConfigError,
             ConfigErrors: result.Errors);
 
-        var bridge = new ShellBridge(snapshot);
+        var bridge = new ShellBridge(snapshot, log);
         var window = new ShellWindow(bridge, WebView2UserDataDir, log);
         app.MainWindow = window;
         window.Show();

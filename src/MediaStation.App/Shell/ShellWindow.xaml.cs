@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Windows;
+using MediaStation.Core.Cli;
 using MediaStation.Core.Logging;
 using Microsoft.Web.WebView2.Core;
 
@@ -55,15 +57,53 @@ public partial class ShellWindow : Window
                 CoreWebView2HostResourceAccessKind.DenyCors);
 #endif
 
+            core.NavigationCompleted += OnNavigationCompleted;
+            core.ProcessFailed += OnProcessFailed;
+            core.NewWindowRequested += OnNewWindowRequested;
             _bridge.Attach(core);
             core.Navigate(ShellUri.ToString());
         }
         catch (Exception ex)
         {
-            // Bez WebView2 albo plików shella nie ma UI; logujemy i pokazujemy powód zamiast crasha procesu.
+            // Bez WebView2 albo plików shella nie ma UI; logujemy, pokazujemy powód i kończymy proces kodem awarii hosta.
             _log.Error("shell", "webView2StartFailed", ex);
             MessageBox.Show(this, $"Nie udało się uruchomić shella:\n{ex.Message}", "MediaStation", MessageBoxButton.OK, MessageBoxImage.Error);
-            Close();
+            Application.Current.Shutdown((int)ExitCode.ShellStartFailed);
         }
+    }
+
+    private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (e.IsSuccess)
+        {
+            return;
+        }
+
+        _log.Error("shell", "navigationFailed", data: new Dictionary<string, object?>
+        {
+            ["uri"] = ShellUri.ToString(),
+            ["webErrorStatus"] = e.WebErrorStatus,
+            ["httpStatusCode"] = e.HttpStatusCode,
+        });
+    }
+
+    private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
+    {
+        _log.Error("shell", "webViewProcessFailed", data: new Dictionary<string, object?>
+        {
+            ["kind"] = e.ProcessFailedKind,
+            ["reason"] = e.Reason,
+            ["exitCode"] = e.ExitCode,
+            ["processDescription"] = e.ProcessDescription,
+        });
+    }
+
+    private void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+    {
+        e.Handled = true;
+        _log.Warn("shell", "newWindowBlocked", new Dictionary<string, object?>
+        {
+            ["uri"] = e.Uri,
+        });
     }
 }
