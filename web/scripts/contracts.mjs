@@ -1,7 +1,7 @@
-// Generuje typy TS z JSON Schema eksportowanej przez Core (AD-16).
+// Generuje typy TS z JSON Schema eksportowanej przez Core (AD-16): <nazwa>.schema.json → <nazwa>.ts.
 // Schema powstaje w `dotnet build` (tools/MediaStation.SchemaExport); wynik w contracts/generated nie jest w gicie.
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileFromFile } from 'json-schema-to-typescript';
@@ -9,8 +9,15 @@ import { compileFromFile } from 'json-schema-to-typescript';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const schemaDir = join(root, 'contracts', 'schema');
 const outDir = join(root, 'contracts', 'generated');
+const schemaSuffix = '.schema.json';
 
-const contracts = [{ schema: 'shell-snapshot.schema.json', out: 'shell-snapshot.ts' }];
+const schemas = existsSync(schemaDir)
+  ? (await readdir(schemaDir)).filter((name) => name.endsWith(schemaSuffix)).sort()
+  : [];
+if (schemas.length === 0) {
+  console.error(`contracts: brak *${schemaSuffix} w ${schemaDir} — uruchom najpierw \`dotnet build\` (eksport schematów z Core).`);
+  process.exit(1);
+}
 
 const banner = `/* eslint-disable */
 /**
@@ -20,14 +27,12 @@ const banner = `/* eslint-disable */
 
 await mkdir(outDir, { recursive: true });
 
-for (const { schema, out } of contracts) {
-  const schemaPath = join(schemaDir, schema);
-  if (!existsSync(schemaPath)) {
-    console.error(`contracts: brak ${schemaPath} — uruchom najpierw \`dotnet build\` (eksport schematu z Core).`);
-    process.exit(1);
-  }
+const outputs = new Set();
+for (const schema of schemas) {
+  const out = `${schema.slice(0, -schemaSuffix.length)}.ts`;
+  outputs.add(out);
 
-  const ts = await compileFromFile(schemaPath, {
+  const ts = await compileFromFile(join(schemaDir, schema), {
     bannerComment: banner,
     additionalProperties: false,
     strictIndexSignatures: true,
@@ -40,4 +45,12 @@ for (const { schema, out } of contracts) {
     await writeFile(outPath, ts, 'utf8');
   }
   console.log(`contracts: ${outPath}`);
+}
+
+// Typ rekordu usuniętego z Core nie może zostać w generated.
+for (const name of await readdir(outDir)) {
+  if (name.endsWith('.ts') && !outputs.has(name)) {
+    await rm(join(outDir, name));
+    console.log(`contracts: usunięto nieaktualny ${join(outDir, name)}`);
+  }
 }

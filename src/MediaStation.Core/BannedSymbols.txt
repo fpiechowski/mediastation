@@ -1,0 +1,33 @@
+T:System.Runtime.InteropServices.DllImportAttribute;AD-3: P/Invoke tylko w MediaStation.App/Platform (CsWin32), nie w Core
+T:System.Runtime.InteropServices.LibraryImportAttribute;AD-3: P/Invoke tylko w MediaStation.App/Platform (CsWin32), nie w Core
+N:Microsoft.Win32;AD-3: Core nie referuje Win32
+N:System.Windows;AD-3: Core nie referuje WPF ani Windows UI
+N:Microsoft.Web.WebView2;AD-3: Core nie referuje WebView2
+T:System.IO.File;AD-3: Core nie robi I/O plikowego; pliki czyta i zapisuje App, Core dostaje treść
+T:System.IO.Directory;AD-3: Core nie robi I/O plikowego
+T:System.IO.FileInfo;AD-3: Core nie robi I/O plikowego
+T:System.IO.DirectoryInfo;AD-3: Core nie robi I/O plikowego
+T:System.IO.FileSystemInfo;AD-3: Core nie robi I/O plikowego
+T:System.IO.FileStream;AD-3: Core nie robi I/O plikowego
+T:System.IO.DriveInfo;AD-3: Core nie robi I/O plikowego
+T:System.IO.FileSystemWatcher;AD-3: Core nie robi I/O plikowego
+T:System.IO.Path;AD-3: Core nie operuje na ścieżkach systemu plików
+M:System.IO.StreamReader.#ctor(System.String);AD-3: Core nie otwiera plików; StreamReader tylko na strumieniu
+M:System.IO.StreamReader.#ctor(System.String,System.Boolean);AD-3: Core nie otwiera plików; StreamReader tylko na strumieniu
+M:System.IO.StreamReader.#ctor(System.String,System.Text.Encoding);AD-3: Core nie otwiera plików; StreamReader tylko na strumieniu
+M:System.IO.StreamReader.#ctor(System.String,System.Text.Encoding,System.Boolean);AD-3: Core nie otwiera plików; StreamReader tylko na strumieniu
+M:System.IO.StreamReader.#ctor(System.String,System.Text.Encoding,System.Boolean,System.Int32);AD-3: Core nie otwiera plików; StreamReader tylko na strumieniu
+M:System.IO.StreamReader.#ctor(System.String,System.IO.FileStreamOptions);AD-3: Core nie otwiera plików; StreamReader tylko na strumieniu
+M:System.IO.StreamReader.#ctor(System.String,System.Text.Encoding,System.Boolean,System.IO.FileStreamOptions);AD-3: Core nie otwiera plików; StreamReader tylko na strumieniu
+M:System.IO.StreamWriter.#ctor(System.String);AD-3: Core nie otwiera plików; StreamWriter tylko na strumieniu
+M:System.IO.StreamWriter.#ctor(System.String,System.Boolean);AD-3: Core nie otwiera plików; StreamWriter tylko na strumieniu
+M:System.IO.StreamWriter.#ctor(System.String,System.Boolean,System.Text.Encoding);AD-3: Core nie otwiera plików; StreamWriter tylko na strumieniu
+M:System.IO.StreamWriter.#ctor(System.String,System.Boolean,System.Text.Encoding,System.Int32);AD-3: Core nie otwiera plików; StreamWriter tylko na strumieniu
+M:System.IO.StreamWriter.#ctor(System.String,System.IO.FileStreamOptions);AD-3: Core nie otwiera plików; StreamWriter tylko na strumieniu
+M:System.IO.StreamWriter.#ctor(System.String,System.Text.Encoding,System.IO.FileStreamOptions);AD-3: Core nie otwiera plików; StreamWriter tylko na strumieniu
+N:System.IO.Enumeration;AD-3: Core nie robi I/O plikowego
+N:System.IO.MemoryMappedFiles;AD-3: Core nie robi I/O plikowego
+N:System.IO.IsolatedStorage;AD-3: Core nie robi I/O plikowego
+T:System.IO.RandomAccess;AD-3: Core nie robi I/O plikowego
+T:System.IO.Compression.ZipFile;AD-3: Core nie robi I/O plikowego
+T:System.IO.Compression.ZipFileExtensions;AD-3: Core nie robi I/O plikowego

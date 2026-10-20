@@ -8,13 +8,28 @@ var outDir = args.Length > 0
     : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "web", "contracts", "schema"));
 
 Directory.CreateDirectory(outDir);
-var path = Path.Combine(outDir, "shell-snapshot.schema.json");
-var schema = ContractJson.ExportSchema() + "\n";
+var schemas = ContractJson.ExportSchemas();
 
-// Zapis tylko przy zmianie, żeby nie psuć inkrementalności buildu web.
-if (!File.Exists(path) || File.ReadAllText(path) != schema)
+foreach (var (fileName, json) in schemas)
 {
-    File.WriteAllText(path, schema, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    var path = Path.Combine(outDir, fileName);
+    var schema = json + "\n";
+
+    // Zapis tylko przy zmianie, żeby nie psuć inkrementalności buildu web.
+    if (!File.Exists(path) || File.ReadAllText(path) != schema)
+    {
+        File.WriteAllText(path, schema, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    Console.WriteLine($"SchemaExport: {path}");
 }
 
-Console.WriteLine($"SchemaExport: {path}");
+// Schemat rekordu usuniętego z Core nie może dalej generować typu TS.
+foreach (var stale in Directory.EnumerateFiles(outDir, "*.schema.json"))
+{
+    if (!schemas.ContainsKey(Path.GetFileName(stale)))
+    {
+        File.Delete(stale);
+        Console.WriteLine($"SchemaExport: usunięto nieaktualny {stale}");
+    }
+}
