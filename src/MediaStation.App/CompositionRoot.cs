@@ -4,6 +4,7 @@ using System.Windows;
 using MediaStation.App.Config;
 using MediaStation.App.Logging;
 using MediaStation.App.Shell;
+using MediaStation.Core.Cli;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
 using MediaStation.Core.Logging;
@@ -51,6 +52,36 @@ public static class CompositionRoot
             ["args"] = args,
         });
 
+        var parsed = CliArgs.Parse(args);
+        if (parsed is CliParseResult.Invalid invalid)
+        {
+            // Złe argumenty to nie tryb: mutex nie jest brany, więc działająca instancja nie blokuje odpowiedzi.
+            log.Error(Src, "invalidArguments", data: new Dictionary<string, object?> { ["reason"] = invalid.Reason });
+            app.Shutdown((int)ExitCode.InvalidArguments);
+            return;
+        }
+
+        var mode = ((CliParseResult.Parsed)parsed).Mode;
+        if (!SingleInstance.TryAcquire(log))
+        {
+            log.Warn(Src, "instanceRejected", new Dictionary<string, object?> { ["mode"] = mode.LogName });
+            app.Shutdown((int)ExitCode.AlreadyRunning);
+            return;
+        }
+
+        if (mode is CliMode.Run)
+        {
+            StartRun(app, log);
+        }
+        else
+        {
+            RejectUnsupportedMode(app, log, mode);
+        }
+    }
+
+    /// <summary>Tryb główny: config (I/O tylko w App), walidacja w Core, snapshot i okno shella.</summary>
+    private static void StartRun(Application app, ILog log)
+    {
         var files = ConfigFileReader.ReadAll(ConfigDir, ConfigPreflight.RequiredFiles);
         var result = ConfigValidation.Validate(files);
         foreach (var error in result.Errors)
@@ -74,6 +105,19 @@ public static class CompositionRoot
         var window = new ShellWindow(bridge, WebView2UserDataDir, log);
         app.MainWindow = window;
         window.Show();
+    }
+
+    /// <summary>Tryb rozpoznany, ale jeszcze niezaimplementowany: wpis z nazwą trybu i kod <see cref="ExitCode.Unsupported"/>.</summary>
+    private static void RejectUnsupportedMode(Application app, ILog log, CliMode mode)
+    {
+        var data = new Dictionary<string, object?> { ["mode"] = mode.LogName };
+        if (mode is CliMode.Smoke smoke)
+        {
+            data["appId"] = smoke.AppId;
+        }
+
+        log.Warn(Src, "modeUnsupported", data);
+        app.Shutdown((int)ExitCode.Unsupported);
     }
 
     private static void AttachLifecycleLogging(Application app, ILog log)
