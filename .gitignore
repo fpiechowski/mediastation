@@ -10,3 +10,4 @@ web/contracts/schema/
 .worktrees/
 _bmad/render/
 in-memoria.db
+.mcp.json
