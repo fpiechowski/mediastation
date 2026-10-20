@@ -11,11 +11,14 @@ using MediaStation.Core.Logging;
 namespace MediaStation.App;
 
 /// <summary>
-/// Składa aplikację: log (pierwszy), odczyt configu (I/O tylko w App), preflight w Core, snapshot dla shella, okno shella.
+/// Składa aplikację: log (pierwszy), odczyt configu (I/O tylko w App), walidacja w Core (każdy błąd w logu),
+/// snapshot dla shella, okno shella.
 /// </summary>
 public static class CompositionRoot
 {
     private const string Src = "app";
+
+    private const string ConfigSrc = "config";
 
     private static ILog? _log;
 
@@ -27,6 +30,11 @@ public static class CompositionRoot
     public static string LogsDir { get; } = Path.Combine(DataRoot, "logs");
 
     public static string WebView2UserDataDir { get; } = Path.Combine(DataRoot, "webview2");
+
+    /// <summary>
+    /// Config po walidacji (AD-11) dla kolejnych epik; <c>null</c>, gdy start pokazał ekran błędu konfiguracji.
+    /// </summary>
+    public static LoadedConfig? Config { get; private set; }
 
     /// <summary>Log aplikacji (AD-13); dostępny od pierwszego kroku <see cref="Start"/>.</summary>
     public static ILog Log => _log ?? throw new InvalidOperationException("Log jest tworzony w CompositionRoot.Start.");
@@ -44,11 +52,23 @@ public static class CompositionRoot
         });
 
         var files = ConfigFileReader.ReadAll(ConfigDir, ConfigPreflight.RequiredFiles);
-        var errors = ConfigPreflight.Check(files);
+        var result = ConfigValidation.Validate(files);
+        foreach (var error in result.Errors)
+        {
+            log.Error(ConfigSrc, "configError", data: new Dictionary<string, object?>
+            {
+                ["file"] = error.File,
+                ["path"] = error.Path,
+                ["reason"] = error.Reason,
+            });
+        }
+
+        Config = result.Config;
+
         var snapshot = new ShellSnapshot(
             Rev: 1,
-            Screen: errors.Count == 0 ? ShellScreen.Placeholder : ShellScreen.ConfigError,
-            ConfigErrors: errors);
+            Screen: result.Errors.Count == 0 ? ShellScreen.Placeholder : ShellScreen.ConfigError,
+            ConfigErrors: result.Errors);
 
         var bridge = new ShellBridge(snapshot);
         var window = new ShellWindow(bridge, WebView2UserDataDir, log);

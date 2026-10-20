@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -24,7 +25,7 @@ public abstract record ConfigFileState
 
 /// <summary>
 /// Wstępne sprawdzenie configu: czy każdy z trzech plików istnieje, da się go odczytać i jest poprawnym JSON.
-/// Czysta funkcja; pełna walidacja schematów przychodzi w story 4 i zastępuje tę funkcję bez zmiany ekranu ani mostu.
+/// Czysta funkcja; pierwszy krok <see cref="ConfigValidation.Validate"/>, który dokłada schemat i reguły semantyczne.
 /// </summary>
 public static class ConfigPreflight
 {
@@ -45,18 +46,7 @@ public static class ConfigPreflight
         foreach (var file in RequiredFiles)
         {
             var state = files.TryGetValue(file, out var s) ? s : new ConfigFileState.Missing();
-            var error = state switch
-            {
-                ConfigFileState.Missing => new ConfigError(file, null, MissingReason),
-                ConfigFileState.Unreadable u => new ConfigError(
-                    file,
-                    null,
-                    string.IsNullOrWhiteSpace(u.Detail) ? UnreadableReason : $"{UnreadableReason}: {u.Detail}"),
-                ConfigFileState.Present p => CheckJson(file, p.Text),
-                _ => null,
-            };
-
-            if (error is not null)
+            if (CheckFile(file, state) is { } error)
             {
                 errors.Add(error);
             }
@@ -64,6 +54,18 @@ public static class ConfigPreflight
 
         return errors;
     }
+
+    /// <summary>Preflight jednego pliku: brak, nieczytelny albo niepoprawny JSON; <c>null</c>, gdy plik przechodzi.</summary>
+    internal static ConfigError? CheckFile(string file, ConfigFileState state) => state switch
+    {
+        ConfigFileState.Missing => new ConfigError(file, null, MissingReason),
+        ConfigFileState.Unreadable u => new ConfigError(
+            file,
+            null,
+            string.IsNullOrWhiteSpace(u.Detail) ? UnreadableReason : $"{UnreadableReason}: {u.Detail}"),
+        ConfigFileState.Present p => CheckJson(file, p.Text),
+        _ => null,
+    };
 
     private static ConfigError? CheckJson(string file, string text)
     {
@@ -167,30 +169,98 @@ internal static class JsonErrorPath
 
     private static string Format(Stack<Frame> frames)
     {
-        var path = new StringBuilder("$");
+        var path = "$";
         foreach (var frame in frames.Reverse())
         {
             if (frame.IsArray)
             {
                 if (frame.Index >= 0)
                 {
-                    path.Append('[').Append(frame.Index).Append(']');
+                    path = Index(path, frame.Index);
                 }
             }
             else if (frame.Property is { } name)
             {
-                if (IsPlainName(name))
-                {
-                    path.Append('.').Append(name);
-                }
-                else
-                {
-                    path.Append("['").Append(name.Replace("'", "\\'")).Append("']");
-                }
+                path = Property(path, name);
             }
         }
 
-        return path.ToString();
+        return path;
+    }
+
+    /// <summary>Ścieżka do właściwości: <c>$.a</c>, a dla nazw spoza identyfikatorów <c>$['a b']</c>.</summary>
+    public static string Property(string parent, string name) =>
+        IsPlainName(name) ? $"{parent}.{name}" : $"{parent}['{name.Replace("'", "\\'")}']";
+
+    /// <summary>Ścieżka do elementu tablicy: <c>$.apps[2]</c>.</summary>
+    public static string Index(string parent, int index) => $"{parent}[{index}]";
+
+    /// <summary>Segment ścieżki: nazwa właściwości (<see cref="Name"/>) albo indeks tablicy (<see cref="Index"/>).</summary>
+    public sealed record Segment(string? Name, int Index);
+
+    /// <summary>
+    /// Rozbiera ścieżkę z <see cref="JsonException.Path"/> (<c>$.devices[0].keys.0x26</c>, <c>$['a b']</c>) na segmenty;
+    /// <c>null</c>, gdy ścieżka ma nieznany kształt.
+    /// </summary>
+    public static IReadOnlyList<Segment>? Parse(string? path)
+    {
+        if (string.IsNullOrEmpty(path) || path[0] != '$')
+        {
+            return null;
+        }
+
+        var segments = new List<Segment>();
+        var i = 1;
+        while (i < path.Length)
+        {
+            if (path[i] == '.')
+            {
+                var end = path.IndexOfAny(['.', '['], i + 1);
+                end = end < 0 ? path.Length : end;
+                segments.Add(new Segment(path[(i + 1)..end], -1));
+                i = end;
+            }
+            else if (path[i] == '[' && i + 1 < path.Length && path[i + 1] == '\'')
+            {
+                var end = path.IndexOf("']", i + 2, StringComparison.Ordinal);
+                if (end < 0)
+                {
+                    return null;
+                }
+
+                segments.Add(new Segment(path[(i + 2)..end], -1));
+                i = end + 2;
+            }
+            else if (path[i] == '[')
+            {
+                var end = path.IndexOf(']', i + 1);
+                if (end < 0 || !int.TryParse(path.AsSpan(i + 1, end - i - 1), NumberStyles.None, CultureInfo.InvariantCulture, out var index))
+                {
+                    return null;
+                }
+
+                segments.Add(new Segment(null, index));
+                i = end + 1;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        return segments;
+    }
+
+    /// <summary>Składa segmenty w ścieżkę w formacie preflight (<see cref="Property"/>, <see cref="Index"/>).</summary>
+    public static string Format(IEnumerable<Segment> segments)
+    {
+        var path = "$";
+        foreach (var segment in segments)
+        {
+            path = segment.Name is { } name ? Property(path, name) : Index(path, segment.Index);
+        }
+
+        return path;
     }
 
     private static bool IsPlainName(string name)

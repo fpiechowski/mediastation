@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using MediaStation.Core.Config;
 
 namespace MediaStation.Core.Contracts;
 
@@ -87,19 +89,23 @@ public static class ContractJson
 
     /// <summary>
     /// Schematy wszystkich eksportowanych kontraktów: nazwa pliku (<c>kebab-case.schema.json</c>) → JSON Schema.
-    /// Obejmuje <see cref="ShellSnapshot"/> i każdy rekord z <see cref="MessageTypes"/>; bazy komunikatów
+    /// Obejmuje <see cref="ShellSnapshot"/>, każdy rekord z <see cref="MessageTypes"/> i trzy pliki configu
+    /// (<see cref="AppsConfig"/>, <see cref="InputConfig"/>, <see cref="Settings"/>, AD-11); bazy komunikatów
     /// (<see cref="Intent"/>, <see cref="Command"/>, <see cref="Event"/>) nie mają własnego schematu.
     /// </summary>
     public static IReadOnlyDictionary<string, string> ExportSchemas()
     {
         var schemas = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach (var type in (Type[])[typeof(ShellSnapshot), .. MessageTypes.All])
+        foreach (var type in (Type[])[typeof(ShellSnapshot), .. MessageTypes.All, .. ConfigTypes])
         {
             schemas.Add(SchemaFileName(type), ExportSchema(type).ToJsonString(IndentedOptions));
         }
 
         return schemas;
     }
+
+    /// <summary>Korzenie plików <c>config/</c>; runtime czyta je ściśle przez <see cref="ConfigJson.Options"/>.</summary>
+    private static readonly Type[] ConfigTypes = [typeof(AppsConfig), typeof(InputConfig), typeof(Settings)];
 
     /// <summary>Nazwa pliku schematu dla typu, np. <c>set-input-routing.schema.json</c>.</summary>
     public static string SchemaFileName(Type type) => JsonNamingPolicy.KebabCaseLower.ConvertName(Name(type)) + ".schema.json";
@@ -146,6 +152,25 @@ public static class ContractJson
                 if (isObject && obj.ContainsKey("properties"))
                 {
                     obj["additionalProperties"] = false;
+                }
+
+                // Typ pochodny polimorficznej bazy: dyskryminator jest wymagany, więc TS dostaje rozłączną unię (`type: "web"`).
+                if (isObject
+                    && context.BaseTypeInfo?.PolymorphismOptions?.TypeDiscriminatorPropertyName is { } discriminator
+                    && context.BaseTypeInfo.Type != type
+                    && obj["properties"] is JsonObject derivedProperties
+                    && derivedProperties.ContainsKey(discriminator))
+                {
+                    if (obj["required"] is not JsonArray required)
+                    {
+                        required = [];
+                        obj["required"] = required;
+                    }
+
+                    if (!required.Any(n => n?.GetValue<string>() == discriminator))
+                    {
+                        required.Insert(0, discriminator);
+                    }
                 }
 
                 return obj;

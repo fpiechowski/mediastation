@@ -163,16 +163,19 @@ public class CoreMessageContractTests
     // ── Schematy ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Export_schemas_covers_shell_snapshot_and_each_registered_record_only()
+    public void Export_schemas_covers_shell_snapshot_registered_records_and_config_files_only()
     {
         var files = ContractJson.ExportSchemas().Keys.Order(StringComparer.Ordinal).ToArray();
 
         Assert.Equal(
             [
                 "action.schema.json",
+                "apps-config.schema.json",
                 "command-completed.schema.json",
                 "command-failed.schema.json",
+                "input-config.schema.json",
                 "set-input-routing.schema.json",
+                "settings.schema.json",
                 "shell-snapshot.schema.json",
             ],
             files);
