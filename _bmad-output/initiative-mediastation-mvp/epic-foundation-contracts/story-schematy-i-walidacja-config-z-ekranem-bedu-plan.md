@@ -3,7 +3,7 @@ title: 'Schematy i walidacja config/ z ekranem błędu'
 type: 'feature'
 ticket: '4'
 created: '2026-10-20'
-status: 'built'
+status: done
 baseline_revision: '65b99d77387ee63ea88f7d3129f21d6952fbfe45'
 route: 'full'
 route_source: 'auto'
