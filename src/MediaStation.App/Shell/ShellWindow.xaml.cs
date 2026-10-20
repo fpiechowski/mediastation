@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using MediaStation.Core.Logging;
 using Microsoft.Web.WebView2.Core;
 
 namespace MediaStation.App.Shell;
@@ -20,11 +21,13 @@ public partial class ShellWindow : Window
 
     private readonly ShellBridge _bridge;
     private readonly string _userDataDir;
+    private readonly ILog _log;
 
-    public ShellWindow(ShellBridge bridge, string userDataDir)
+    public ShellWindow(ShellBridge bridge, string userDataDir, ILog log)
     {
         _bridge = bridge;
         _userDataDir = userDataDir;
+        _log = log;
         InitializeComponent();
         Loaded += OnLoaded;
     }
@@ -57,7 +60,8 @@ public partial class ShellWindow : Window
         }
         catch (Exception ex)
         {
-            // Bez WebView2 albo plików shella nie ma UI; pokazujemy powód zamiast crasha procesu.
+            // Bez WebView2 albo plików shella nie ma UI; logujemy i pokazujemy powód zamiast crasha procesu.
+            _log.Error("shell", "webView2StartFailed", ex);
             MessageBox.Show(this, $"Nie udało się uruchomić shella:\n{ex.Message}", "MediaStation", MessageBoxButton.OK, MessageBoxImage.Error);
             Close();
         }
