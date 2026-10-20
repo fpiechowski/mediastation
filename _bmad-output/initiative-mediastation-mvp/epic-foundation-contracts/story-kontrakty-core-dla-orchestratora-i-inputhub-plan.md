@@ -3,7 +3,7 @@ title: 'Kontrakty Core dla Orchestratora i InputHub'
 type: 'feature'
 ticket: '2'
 created: '2026-10-20'
-status: 'built'
+status: done
 baseline_revision: 'dfe666c3a7cf2926d3fbd5fa4b4ebc8c6c6a6b64'
 route: 'full'
 route_source: 'auto'
