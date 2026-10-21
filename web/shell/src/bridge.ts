@@ -1,5 +1,6 @@
 // Most WebView2 postMessage z kopertą { v, type, payload } (AD-16).
 // UI → host: `ready` po starcie. Host → UI: `snapshot` z pełnym stanem; starszy `rev` jest odrzucany.
+// Guard sprawdza też `apps[]` i `focusRequest`, bo UI kluczuje fokus po `appId`, nie po indeksach.
 import type { ShellSnapshot } from '../../contracts/generated/shell-snapshot';
 
 export const PROTOCOL_VERSION = 1;
@@ -30,10 +31,29 @@ function isEnvelope(value: unknown): value is Envelope<unknown> {
   return typeof e.v === 'number' && typeof e.type === 'string' && 'payload' in e;
 }
 
+function isAppSnapshot(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const app = value as Record<string, unknown>;
+  return typeof app.appId === 'string' && typeof app.category === 'string' && typeof app.state === 'string';
+}
+
+function isFocusRequest(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const focus = value as Record<string, unknown>;
+  return typeof focus.target === 'string' && typeof focus.seq === 'number';
+}
+
 function isSnapshot(value: unknown): value is ShellSnapshot {
   if (typeof value !== 'object' || value === null) return false;
   const s = value as Record<string, unknown>;
-  return typeof s.rev === 'number' && typeof s.screen === 'string' && Array.isArray(s.configErrors);
+  return (
+    typeof s.rev === 'number' &&
+    typeof s.screen === 'string' &&
+    Array.isArray(s.configErrors) &&
+    Array.isArray(s.apps) &&
+    s.apps.every(isAppSnapshot) &&
+    (s.focusRequest === null || isFocusRequest(s.focusRequest))
+  );
 }
 
 /**

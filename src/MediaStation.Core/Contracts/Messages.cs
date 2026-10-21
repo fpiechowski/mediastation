@@ -3,9 +3,14 @@ using System.Text.Json.Serialization;
 namespace MediaStation.Core.Contracts;
 
 /// <summary>
+/// Wszystko, co trafia do jednej kolejki Orchestratora (AD-2, AD-3): Intent z UI, Event od wykonawców i Action z InputHub.
+/// </summary>
+public interface IOrchestratorMessage;
+
+/// <summary>
 /// Baza intencji z Shell UI do Orchestratora. Konkretne Intents dopisują epiki 2–4.
 /// </summary>
-public abstract record Intent;
+public abstract record Intent : IOrchestratorMessage;
 
 /// <summary>
 /// Baza komend z Orchestratora do wykonawców (AD-4). Każda komenda ma <see cref="CmdId"/>,
@@ -17,7 +22,12 @@ public abstract record Command([property: JsonPropertyOrder(-1)] long CmdId);
 /// <summary>
 /// Baza zdarzeń: fakty raportowane przez wykonawców do Orchestratora (AD-4), nazwy w czasie przeszłym.
 /// </summary>
-public abstract record Event;
+public abstract record Event : IOrchestratorMessage;
+
+/// <summary>
+/// Pętla Orchestratora wystartowała; pierwszy komunikat kolejki i jedyne źródło pierwszego snapshotu.
+/// </summary>
+public sealed record OrchestratorStarted : Event;
 
 /// <summary>Wykonawca zakończył komendę <see cref="CmdId"/> sukcesem (AD-4).</summary>
 public sealed record CommandCompleted(long CmdId) : Event;

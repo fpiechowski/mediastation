@@ -34,4 +34,4 @@ public enum ActionSource
 /// Jedno naciśnięcie z pilota, klawiatury albo pada zamienione przez InputHub na logiczną akcję (AD-8).
 /// </summary>
 /// <param name="TsMono">Milisekundy zegara monotonicznego (jak <c>time</c> z hooka LL).</param>
-public sealed record Action(ActionKind Kind, ActionPhase Phase, ActionSource Source, long TsMono);
+public sealed record Action(ActionKind Kind, ActionPhase Phase, ActionSource Source, long TsMono) : IOrchestratorMessage;

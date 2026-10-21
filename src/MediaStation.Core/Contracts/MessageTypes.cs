@@ -17,6 +17,7 @@ public static class MessageTypes
         typeof(SetInputRouting),
         typeof(CommandCompleted),
         typeof(CommandFailed),
+        typeof(OrchestratorStarted),
     ];
 
     private static readonly Dictionary<string, Type> ByName = BuildIndex(All);

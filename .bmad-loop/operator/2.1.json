@@ -1,0 +1,15 @@
+{
+  "actions": [
+    "On the dev machine, publish a Release self-contained win-x64 build with `dotnet publish src/MediaStation.App -c Release -r win-x64 --self-contained`.",
+    "Copy the publish directory to the UM760 and run `MediaStation.exe` with valid `config/apps.json`, `config/input.json` and `config/settings.json`.",
+    "Confirm on the UM760 that the shell shows the placeholder screen.",
+    "In `%LOCALAPPDATA%\\MediaStation\\logs\\mediastation-<UTC day>.jsonl`, confirm the last lines contain `snapshotPublished` with `focusRequest {target: \"default\", seq: 1}`.",
+    "Record the dated UM760 result with HEAD and machine name in the epic acceptance note."
+  ],
+  "parked_at": "2026-10-21",
+  "ref": "2.1",
+  "run_id": "20261021-232838-4db8",
+  "source": "tickets",
+  "spec_file": "_bmad-output/initiative-mediastation-mvp/epic-orchestrator-lifecycle/story-tracer-bullet-orchestrator-na-wasnym-watku-publikuje-snapsho-plan.md",
+  "story_key": "2.1"
+}

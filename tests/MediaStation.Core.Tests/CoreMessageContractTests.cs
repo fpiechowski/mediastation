@@ -76,10 +76,30 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Orchestrator_started_envelope_serializes_exactly_and_round_trips()
+    {
+        Event started = new OrchestratorStarted();
+
+        var json = ContractJson.SerializeEnvelope(started);
+
+        Assert.Equal("""{"v":1,"type":"orchestratorStarted","payload":{}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Event>(json);
+        Assert.IsType<OrchestratorStarted>(back);
+    }
+
+    [Fact]
+    public void Orchestrator_messages_share_the_orchestrator_queue_base()
+    {
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new OrchestratorStarted());
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new CommandCompleted(1));
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+    }
+
+    [Fact]
     public void Serializing_unregistered_type_is_rejected()
     {
         Assert.Throws<ArgumentException>(() =>
-            ContractJson.SerializeEnvelope<object>(new ShellSnapshot(1, ShellScreen.Placeholder, [])));
+            ContractJson.SerializeEnvelope<object>(new ShellSnapshot(1, ShellScreen.Placeholder, [], [], null)));
     }
 
     // ── Macierz I/O: odrzucane koperty ────────────────────────────────────────
@@ -189,7 +209,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "setInputRouting", "commandCompleted", "commandFailed"], names);
+        Assert.Equal(["action", "setInputRouting", "commandCompleted", "commandFailed", "orchestratorStarted"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -215,6 +235,7 @@ public class CoreMessageContractTests
                 "command-completed.schema.json",
                 "command-failed.schema.json",
                 "input-config.schema.json",
+                "orchestrator-started.schema.json",
                 "set-input-routing.schema.json",
                 "settings.schema.json",
                 "shell-snapshot.schema.json",
@@ -282,6 +303,15 @@ public class CoreMessageContractTests
             schema["properties"]!["errorCode"],
             "ErrorCode",
             ["unexpected", "portInUse", "profileInUse", "cdpUnavailable", "updateDownloadFailed", "updateChecksumMismatch"]);
+    }
+
+    [Fact]
+    public void Orchestrator_started_schema_has_title()
+    {
+        var schema = Schema("orchestrator-started.schema.json");
+
+        Assert.Equal("OrchestratorStarted", schema["title"]!.GetValue<string>());
+        Assert.Equal("object", schema["type"]!.GetValue<string>());
     }
 
     [Fact]
