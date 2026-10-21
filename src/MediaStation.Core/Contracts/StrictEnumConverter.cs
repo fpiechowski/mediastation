@@ -23,11 +23,12 @@ internal sealed class StrictEnumConverter<T> : JsonConverter<T>
 
     public StrictEnumConverter()
     {
-        foreach (var value in Enum.GetValues<T>())
+        foreach (var name in Enum.GetNames<T>())
         {
-            var name = JsonNamingPolicy.CamelCase.ConvertName(value.ToString());
-            _byName.Add(name, value);
-            _names.Add(value, name);
+            var value = Enum.Parse<T>(name);
+            var jsonName = JsonNamingPolicy.CamelCase.ConvertName(name);
+            _byName[jsonName] = value;
+            _names[value] = jsonName;
         }
     }
 

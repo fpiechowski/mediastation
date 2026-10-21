@@ -43,6 +43,7 @@ public static class ContractJson
         var options = new JsonSerializerOptions(Options)
         {
             PropertyNameCaseInsensitive = false,
+            AllowDuplicateProperties = false,
         };
 
         // Przed odziedziczonym JsonStringEnumConverter, który czyta bez względu na wielkość liter i sumuje listy po przecinku.

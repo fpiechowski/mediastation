@@ -152,6 +152,28 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Duplicate_envelope_key_is_rejected()
+    {
+        Assert.Throws<JsonException>(() => ContractJson.Deserialize<Envelope<JsonElement?>>(
+            """{"v":1,"type":"snapshot","type":"ready","payload":null}"""));
+    }
+
+    [Fact]
+    public void Duplicate_payload_key_is_rejected()
+    {
+        Assert.Throws<JsonException>(() => ContractJson.DeserializeEnvelope<Action>(
+            """{"v":1,"type":"action","payload":{"kind":"up","kind":"down","phase":"press","source":"keyboard","tsMono":1}}"""));
+    }
+
+    [Fact]
+    public void Aliased_enum_names_are_read_deterministically()
+    {
+        Assert.Equal(AliasedEnum.First, ContractJson.Deserialize<AliasedEnum>("\"first\""));
+        Assert.Equal(AliasedEnum.First, ContractJson.Deserialize<AliasedEnum>("\"second\""));
+        Assert.Throws<JsonException>(() => ContractJson.Deserialize<AliasedEnum>("\"third\""));
+    }
+
+    [Fact]
     public void Additional_payload_field_is_accepted()
     {
         var action = ContractJson.DeserializeEnvelope<Action>(
@@ -266,6 +288,12 @@ public class CoreMessageContractTests
     public void Shell_snapshot_schema_in_export_matches_single_export()
     {
         Assert.Equal(ContractJson.ExportSchema(), ContractJson.ExportSchemas()["shell-snapshot.schema.json"]);
+    }
+
+    private enum AliasedEnum
+    {
+        First = 1,
+        Second = 1,
     }
 
     private static JsonNode Schema(string file) => JsonNode.Parse(ContractJson.ExportSchemas()[file])!;
