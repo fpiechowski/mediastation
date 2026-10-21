@@ -37,8 +37,8 @@ public sealed class Orchestrator
     }
 
     /// <summary>
-    /// Przetwarza jeden komunikat z kolejki. Snapshot powstaje wyłącznie z <see cref="OrchestratorStarted"/>:
-    /// <c>rev</c> rośnie monotonicznie, a <c>seq</c> tylko przy nowym żądaniu fokusu.
+    /// Przetwarza jeden komunikat z kolejki. Snapshot powstaje wyłącznie z <see cref="OrchestratorStarted"/>
+    /// i <see cref="SystemResumed"/>: <c>rev</c> rośnie monotonicznie, a <c>seq</c> tylko przy nowym żądaniu fokusu.
     /// </summary>
     public OrchestratorResult Handle(IOrchestratorMessage message)
     {
@@ -46,12 +46,17 @@ public sealed class Orchestrator
 
         return message switch
         {
-            OrchestratorStarted => OnStarted(),
+            OrchestratorStarted => OnDefaultFocus(),
+            SystemResumed => OnDefaultFocus(),
             _ => OrchestratorResult.None,
         };
     }
 
-    private OrchestratorResult OnStarted()
+    /// <summary>
+    /// Wspólny widok startu i wybudzenia: ten sam <c>apps</c>, placeholder i nowy <c>seq</c> fokusu.
+    /// Story 7 (sondowanie istniejących hostów) dokłada osobną gałąź <c>switch</c>, nie warunek tutaj.
+    /// </summary>
+    private OrchestratorResult OnDefaultFocus()
     {
         _rev++;
         _focusSeq++;

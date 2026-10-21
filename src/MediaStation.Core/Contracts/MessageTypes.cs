@@ -18,6 +18,7 @@ public static class MessageTypes
         typeof(CommandCompleted),
         typeof(CommandFailed),
         typeof(OrchestratorStarted),
+        typeof(SystemResumed),
     ];
 
     private static readonly Dictionary<string, Type> ByName = BuildIndex(All);

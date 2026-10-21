@@ -22,7 +22,7 @@ public sealed class OrchestratorLoop : IDisposable
     private readonly BlockingCollection<IOrchestratorMessage> _queue = new();
     private readonly Thread _thread;
     private bool _started;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     public OrchestratorLoop(CoreOrchestrator orchestrator, Action<ShellSnapshot> publish, ILog log)
     {
@@ -54,6 +54,30 @@ public sealed class OrchestratorLoop : IDisposable
         _queue.Add(new OrchestratorStarted());
     }
 
+    /// <summary>
+    /// Wkłada komunikat do kolejki: jedyne wejście dla źródeł spoza pętli (adaptery, wykonawcy).
+    /// Po <see cref="Dispose"/> jest no-opem, a wyścig z <see cref="BlockingCollection{T}.CompleteAdding"/>
+    /// nie wypuszcza wyjątku z wywołania.
+    /// </summary>
+    public void Post(IOrchestratorMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            _queue.Add(message);
+        }
+        catch (InvalidOperationException)
+        {
+            // CompleteAdding/Dispose wygrało wyścig (ObjectDisposedException też jest InvalidOperationException):
+            // komunikat odpada razem z zamkniętą kolejką, bez wyjątku u wołającego.
+        }
+    }
+
     /// <summary>Kończy kolejkę i czeka na konsumenta; wywoływane na <c>Application.Exit</c>.</summary>
     public void Dispose()
     {
@@ -80,7 +104,8 @@ public sealed class OrchestratorLoop : IDisposable
             {
                 var result = _orchestrator.Handle(message);
 
-                // Komendy są fire-and-forget (AD-14); story 1 nie produkuje jeszcze żadnej.
+                // Komendy są fire-and-forget (AD-14); porty wykonawców dochodzą w story 3,
+                // więc pętla nie ma tu jeszcze do kogo ich wysłać.
                 if (result.Snapshot is { } snapshot)
                 {
                     _publish(snapshot);

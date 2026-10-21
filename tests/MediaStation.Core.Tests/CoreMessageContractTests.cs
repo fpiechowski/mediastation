@@ -88,6 +88,21 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void System_resumed_envelope_serializes_exactly_and_round_trips()
+    {
+        Event resumed = new SystemResumed("PBT_APMRESUMEAUTOMATIC");
+
+        var json = ContractJson.SerializeEnvelope(resumed);
+
+        Assert.Equal(
+            """{"v":1,"type":"systemResumed","payload":{"source":"PBT_APMRESUMEAUTOMATIC"}}""",
+            json);
+        var back = ContractJson.DeserializeEnvelope<Event>(json);
+        Assert.IsType<SystemResumed>(back);
+        Assert.Equal(resumed, back);
+    }
+
+    [Fact]
     public void Orchestrator_messages_share_the_orchestrator_queue_base()
     {
         Assert.IsAssignableFrom<IOrchestratorMessage>(new OrchestratorStarted());
@@ -209,7 +224,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "setInputRouting", "commandCompleted", "commandFailed", "orchestratorStarted"], names);
+        Assert.Equal(["action", "setInputRouting", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -239,6 +254,7 @@ public class CoreMessageContractTests
                 "set-input-routing.schema.json",
                 "settings.schema.json",
                 "shell-snapshot.schema.json",
+                "system-resumed.schema.json",
             ],
             files);
     }
@@ -312,6 +328,18 @@ public class CoreMessageContractTests
 
         Assert.Equal("OrchestratorStarted", schema["title"]!.GetValue<string>());
         Assert.Equal("object", schema["type"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void System_resumed_schema_has_title_required_and_string_source()
+    {
+        var schema = Schema("system-resumed.schema.json");
+
+        Assert.Equal("SystemResumed", schema["title"]!.GetValue<string>());
+        Assert.Equal("object", schema["type"]!.GetValue<string>());
+        Assert.Equal(["source"], Strings(schema["required"]));
+        Assert.False(schema["additionalProperties"]!.GetValue<bool>());
+        Assert.Equal("string", schema["properties"]!["source"]!["type"]!.GetValue<string>());
     }
 
     [Fact]

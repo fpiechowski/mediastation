@@ -101,6 +101,21 @@ public class CoreBoundaryTests
         Assert.Empty(pinvoke);
     }
 
+    [Fact]
+    public void Core_has_no_wake_signal_rule()
+    {
+        // Reguła deduplikacji wybudzenia mieszka w adapterze (App/Platform/System), nie w Core:
+        // Orchestrator widzi wyłącznie gotowy SystemResumed.
+        var typeNames = Read(CorePath, reader => reader.TypeDefinitions
+            .Select(reader.GetTypeDefinition)
+            .Select(type => reader.GetString(type.Name))
+            .ToArray());
+
+        Assert.Contains("SystemResumed", typeNames);
+        Assert.DoesNotContain("WakeSignalGate", typeNames);
+        Assert.DoesNotContain(typeNames, name => name.Contains("WakeSignal", StringComparison.Ordinal));
+    }
+
     private static bool IsForbiddenType(string fullName) =>
         ForbiddenFileSystemTypes.Contains(fullName)
         || ForbiddenNamespaces.Any(ns => fullName.StartsWith(ns + ".", StringComparison.Ordinal));

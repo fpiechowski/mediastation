@@ -29,6 +29,12 @@ public abstract record Event : IOrchestratorMessage;
 /// </summary>
 public sealed record OrchestratorStarted : Event;
 
+/// <summary>
+/// Komputer wrócił z uśpienia; adapter power raportuje fakt, a Orchestrator przechodzi na ekran główny
+/// z nowym <c>seq</c> fokusu. <see cref="Source"/> niesie nazwę sygnału Windows 1:1 do logu i JSON-a.
+/// </summary>
+public sealed record SystemResumed(string Source) : Event;
+
 /// <summary>Wykonawca zakończył komendę <see cref="CmdId"/> sukcesem (AD-4).</summary>
 public sealed record CommandCompleted(long CmdId) : Event;
 

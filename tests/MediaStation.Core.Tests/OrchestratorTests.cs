@@ -57,6 +57,23 @@ public class OrchestratorTests
         Assert.Equal(new FocusRequest(FocusRequest.DefaultTarget, 2), second.FocusRequest);
     }
 
+    [Fact]
+    public void System_resumed_yields_default_focus_with_new_rev_and_seq()
+    {
+        var orchestrator = new CoreOrchestrator(TwoApps());
+        var started = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
+
+        var result = orchestrator.Handle(new SystemResumed("PBT_APMRESUMEAUTOMATIC"));
+
+        Assert.Empty(result.Commands);
+        var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
+        Assert.Equal(2, snapshot.Rev);
+        Assert.Equal(ShellScreen.Placeholder, snapshot.Screen);
+        Assert.Equal(started.Apps, snapshot.Apps);
+        Assert.Empty(snapshot.ConfigErrors);
+        Assert.Equal(new FocusRequest(FocusRequest.DefaultTarget, 2), snapshot.FocusRequest);
+    }
+
     [Theory]
     [InlineData("completed")]
     [InlineData("failed")]

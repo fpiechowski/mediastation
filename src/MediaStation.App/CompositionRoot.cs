@@ -1,9 +1,11 @@
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Interop;
 using MediaStation.App.Config;
 using MediaStation.App.Logging;
 using MediaStation.App.Orchestrator;
+using MediaStation.App.Platform.System;
 using MediaStation.App.Shell;
 using MediaStation.Core.Cli;
 using MediaStation.Core.Config;
@@ -21,6 +23,8 @@ public static class CompositionRoot
     private const string Src = "app";
 
     private const string ConfigSrc = "config";
+
+    private const string SystemSrc = "system";
 
     private static ILog? _log;
 
@@ -45,7 +49,8 @@ public static class CompositionRoot
 
     public static void Start(Application app, string[] args)
     {
-        var log = new JsonLinesLog(TimeProvider.System, new FileLogSink(LogsDir));
+        var time = TimeProvider.System;
+        var log = new JsonLinesLog(time, new FileLogSink(LogsDir));
         _log = log;
         AttachLifecycleLogging(app, log, DispatcherExceptions);
         log.Info(Src, "start", new Dictionary<string, object?>
@@ -63,11 +68,11 @@ public static class CompositionRoot
             return;
         }
 
-        StartRun(app, log);
+        StartRun(app, log, time);
     }
 
     /// <summary>Tryb główny: config (I/O tylko w App), walidacja w Core, snapshot i okno shella.</summary>
-    private static void StartRun(Application app, ILog log)
+    private static void StartRun(Application app, ILog log, TimeProvider time)
     {
         var files = ConfigFileReader.ReadAll(ConfigDir, ConfigPreflight.RequiredFiles);
         var result = ConfigValidation.Validate(files);
@@ -97,8 +102,45 @@ public static class CompositionRoot
         }
 
         var loop = new OrchestratorLoop(new CoreOrchestrator(config), bridge.Publish, log);
-        app.Exit += (_, _) => loop.Dispose();
         loop.Start();
+
+        PowerSignalReporter? reporter = null;
+        PowerNotifications? notifications = null;
+
+        // Handler przed startem adaptera: wyjątek w konstrukcji nie może zostawić pętli bez zwolnienia.
+        // Kolejność zwolnienia: najpierw adapter (żadnych nowych Eventów), potem pętla.
+        app.Exit += (_, _) =>
+        {
+            try
+            {
+                notifications?.Dispose();
+            }
+            finally
+            {
+                try
+                {
+                    reporter?.Dispose();
+                }
+                finally
+                {
+                    loop.Dispose();
+                }
+            }
+        };
+
+        try
+        {
+            // Adapter po starcie pętli: pierwszy komunikat kolejki to zawsze OrchestratorStarted, a każdy
+            // sygnał wybudzenia trafia już do żywej kolejki. Hook idzie na top-level HWND shella, bo
+            // broadcast nie dociera do okien message-only.
+            reporter = new PowerSignalReporter(log, new WakeSignalGate(time), loop.Post);
+            notifications = PowerNotifications.Start(new WindowInteropHelper(window).Handle, reporter);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Padnięty adapter power nie może zabić startu: aplikacja żyje bez sygnałów wybudzenia.
+            log.Error(SystemSrc, "powerNotificationsStartFailed", ex);
+        }
     }
 
     private static void AttachLifecycleLogging(Application app, ILog log, DispatcherExceptionLog dispatcherExceptions)
