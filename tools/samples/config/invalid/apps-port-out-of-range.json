@@ -1,0 +1,14 @@
+{
+  "apps": [
+    {
+      "type": "web",
+      "id": "netflix",
+      "category": "video",
+      "title": "Netflix",
+      "icon": "netflix.png",
+      "service": "netflix",
+      "browser": "edge",
+      "cdpPort": 9300
+    }
+  ]
+}

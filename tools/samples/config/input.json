@@ -1,0 +1,17 @@
+{
+  "devices": [
+    {
+      "signature": "VID_1915&PID_1025",
+      "source": "remote",
+      "keys": {
+        "0x26": "up",
+        "0x0D": "ok",
+        "0xAC": "home"
+      }
+    }
+  ],
+  "gamepadHome": [
+    "back",
+    "start"
+  ]
+}

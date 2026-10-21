@@ -1,0 +1,24 @@
+{
+  "apps": [
+    {
+      "type": "web",
+      "id": "netflix",
+      "category": "video",
+      "title": "Netflix",
+      "icon": "netflix.png",
+      "service": "netflix",
+      "browser": "edge",
+      "cdpPort": 9222
+    },
+    {
+      "type": "web",
+      "id": "prime",
+      "category": "video",
+      "title": "Prime",
+      "icon": "prime.png",
+      "service": "prime",
+      "browser": "edge",
+      "cdpPort": 9222
+    }
+  ]
+}

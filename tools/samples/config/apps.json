@@ -1,0 +1,31 @@
+{
+  "apps": [
+    {
+      "type": "web",
+      "id": "netflix",
+      "category": "video",
+      "title": "Netflix",
+      "icon": "netflix.png",
+      "service": "netflix",
+      "browser": "edge",
+      "cdpPort": 9222
+    },
+    {
+      "type": "moonlight",
+      "id": "moonlight-pc",
+      "category": "game",
+      "title": "PC",
+      "icon": "pc.png",
+      "host": "desktop",
+      "app": "Desktop"
+    },
+    {
+      "type": "native",
+      "id": "plex",
+      "category": "video",
+      "title": "Plex",
+      "icon": "plex.png",
+      "exe": "C:\\Plex\\Plex.exe"
+    }
+  ]
+}

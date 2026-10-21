@@ -168,6 +168,37 @@ public class ConfigValidationTests
         Assert.Empty(config.Input.Devices);
     }
 
+    [Fact]
+    public void Sample_config_files_are_valid()
+    {
+        var result = ConfigValidation.Validate(SampleFiles());
+
+        Assert.Empty(result.Errors);
+        var config = Assert.IsType<LoadedConfig>(result.Config);
+        Assert.Equal(3, config.Apps.Apps.Count);
+        Assert.Single(config.Input.Devices);
+    }
+
+    public static TheoryData<string, string, string, string> InvalidSamples => new()
+    {
+        { "apps-duplicate-port.json", Apps, "$.apps[1].cdpPort", "port 9222 jest już użyty w $.apps[0]" },
+        { "apps-port-out-of-range.json", Apps, "$.apps[0].cdpPort", "port 9300 poza zakresem 9220–9239" },
+        { "settings-unknown-field.json", SettingsJson, "$.x", "nieznane pole „x”" },
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidSamples))]
+    public void Invalid_sample_is_rejected_with_one_named_error(string sample, string file, string path, string reason)
+    {
+        var files = SampleFiles();
+        files[file] = new ConfigFileState.Present(File.ReadAllText(Path.Combine(SampleDir(), "invalid", sample)));
+
+        var result = ConfigValidation.Validate(files);
+
+        Assert.Null(result.Config);
+        Assert.Equal(new ConfigError(file, path, reason), Assert.Single(result.Errors));
+    }
+
     // ── Nieznane pole ─────────────────────────────────────────────────────────
 
     public static TheoryData<string, string, string, string> UnknownFields => new()
@@ -829,6 +860,32 @@ public class ConfigValidationTests
         Assert.False(ConfigJson.Options.PropertyNameCaseInsensitive);
         Assert.Equal(JsonUnmappedMemberHandling.Disallow, ConfigJson.Options.UnmappedMemberHandling);
         Assert.False(ConfigJson.Options.AllowDuplicateProperties);
+    }
+
+    private static Dictionary<string, ConfigFileState> SampleFiles()
+    {
+        var dir = SampleDir();
+        return new Dictionary<string, ConfigFileState>
+        {
+            [Apps] = new ConfigFileState.Present(File.ReadAllText(Path.Combine(dir, Apps))),
+            [Input] = new ConfigFileState.Present(File.ReadAllText(Path.Combine(dir, Input))),
+            [SettingsJson] = new ConfigFileState.Present(File.ReadAllText(Path.Combine(dir, SettingsJson))),
+        };
+    }
+
+    private static string SampleDir() => Path.Combine(RepoRoot(), "tools", "samples", "config");
+
+    private static string RepoRoot()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "MediaStation.slnx")))
+            {
+                return dir.FullName;
+            }
+        }
+
+        throw new InvalidOperationException("Nie znaleziono MediaStation.slnx.");
     }
 
     private static JsonNode Schema(string file) => JsonNode.Parse(ContractJson.ExportSchemas()[file])!;
