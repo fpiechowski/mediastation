@@ -1,0 +1,152 @@
+using MediaStation.App.Orchestrator;
+using MediaStation.Core.Contracts;
+using MediaStation.Core.Logging;
+using MediaStation.Core.Ports;
+
+namespace MediaStation.Core.Tests;
+
+/// <summary>
+/// Jedno wyjście Orchestratora: komenda trafia do portu po typie, a <c>StartApp</c> do hosta po
+/// <see cref="AppType"/> z mapy <c>appId → AppType</c>. Brak portu i nieznana aplikacja to <c>warn</c>, nie wyjątek.
+/// </summary>
+public class CommandRouterTests
+{
+    [Fact]
+    public void Start_app_goes_to_host_of_its_app_type()
+    {
+        var (router, hosts, _, _, _) = CreateRouter();
+
+        router.Dispatch([new StartApp(1, "netflix"), new StartApp(2, "plex"), new StartApp(3, "moonlight-pc")]);
+
+        Assert.Equal([new StartApp(1, "netflix")], hosts[AppType.Web].Started);
+        Assert.Equal([new StartApp(2, "plex")], hosts[AppType.Native].Started);
+        Assert.Equal([new StartApp(3, "moonlight-pc")], hosts[AppType.Moonlight].Started);
+    }
+
+    [Fact]
+    public void Window_commands_go_to_window_manager()
+    {
+        var (router, _, window, _, _) = CreateRouter();
+
+        router.Dispatch([new ActivateWindow(4, 6699), new MinimizeWindow(5, 6699), new ShowShell(6)]);
+
+        Assert.Equal<WindowCommand>(
+            [new ActivateWindow(4, 6699), new MinimizeWindow(5, 6699), new ShowShell(6)],
+            window.Executed);
+    }
+
+    [Fact]
+    public void Input_routing_goes_to_input_port()
+    {
+        var (router, _, _, input, _) = CreateRouter();
+        var routing = new SetInputRouting(7, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2);
+
+        router.Dispatch([routing]);
+
+        Assert.Equal([routing], input.Executed);
+    }
+
+    [Fact]
+    public void Start_app_for_unknown_app_logs_warn_without_throwing()
+    {
+        var (router, hosts, _, _, log) = CreateRouter();
+
+        router.Dispatch([new StartApp(8, "nope")]);
+
+        Assert.All(hosts.Values, host => Assert.Empty(host.Started));
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Warn, entry.Level);
+        Assert.Equal("commandForUnknownApp", entry.Msg);
+        Assert.Equal(8L, entry.Data!["cmdId"]);
+        Assert.Equal("nope", entry.Data["appId"]);
+    }
+
+    [Fact]
+    public void Start_app_for_known_app_without_host_logs_warn_without_throwing()
+    {
+        var log = new RecordingLog();
+        var web = new FakeHost();
+        var router = new CommandRouter(
+            new Dictionary<string, AppType> { ["netflix"] = AppType.Web, ["plex"] = AppType.Native },
+            new Dictionary<AppType, IAppHostPort> { [AppType.Web] = web },
+            new FakeWindowManager(),
+            new FakeInputRouting(),
+            log);
+
+        router.Dispatch([new StartApp(9, "plex")]);
+
+        Assert.Empty(web.Started);
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Warn, entry.Level);
+        Assert.Equal("commandWithoutPort", entry.Msg);
+        Assert.Equal(9L, entry.Data!["cmdId"]);
+        Assert.Equal("plex", entry.Data["appId"]);
+        Assert.Equal(AppType.Native, entry.Data["appType"]);
+    }
+
+    [Fact]
+    public void Command_without_port_logs_warn_without_throwing()
+    {
+        var (router, hosts, window, input, log) = CreateRouter();
+
+        var exception = Record.Exception(() => router.Dispatch([new UnknownCommand(10)]));
+
+        Assert.Null(exception);
+        Assert.All(hosts.Values, host => Assert.Empty(host.Started));
+        Assert.Empty(window.Executed);
+        Assert.Empty(input.Executed);
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Warn, entry.Level);
+        Assert.Equal("commandWithoutPort", entry.Msg);
+        Assert.Equal(10L, entry.Data!["cmdId"]);
+        Assert.Equal(nameof(UnknownCommand), entry.Data["type"]);
+    }
+
+    private static (CommandRouter Router, Dictionary<AppType, FakeHost> Hosts, FakeWindowManager Window, FakeInputRouting Input, RecordingLog Log) CreateRouter()
+    {
+        var hosts = new Dictionary<AppType, FakeHost>
+        {
+            [AppType.Web] = new FakeHost(),
+            [AppType.Moonlight] = new FakeHost(),
+            [AppType.Native] = new FakeHost(),
+        };
+        var window = new FakeWindowManager();
+        var input = new FakeInputRouting();
+        var log = new RecordingLog();
+        var router = new CommandRouter(
+            new Dictionary<string, AppType>
+            {
+                ["netflix"] = AppType.Web,
+                ["moonlight-pc"] = AppType.Moonlight,
+                ["plex"] = AppType.Native,
+            },
+            hosts.ToDictionary(entry => entry.Key, entry => (IAppHostPort)entry.Value),
+            window,
+            input,
+            log);
+        return (router, hosts, window, input, log);
+    }
+
+    private sealed record UnknownCommand(long CmdId) : Command(CmdId);
+
+    private sealed class FakeHost : IAppHostPort
+    {
+        public List<StartApp> Started { get; } = [];
+
+        public void Start(StartApp command) => Started.Add(command);
+    }
+
+    private sealed class FakeWindowManager : IWindowManagerPort
+    {
+        public List<WindowCommand> Executed { get; } = [];
+
+        public void Execute(WindowCommand command) => Executed.Add(command);
+    }
+
+    private sealed class FakeInputRouting : IInputRoutingPort
+    {
+        public List<SetInputRouting> Executed { get; } = [];
+
+        public void Execute(SetInputRouting command) => Executed.Add(command);
+    }
+}

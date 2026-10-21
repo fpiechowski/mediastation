@@ -30,10 +30,24 @@ public abstract record Event : IOrchestratorMessage;
 public sealed record OrchestratorStarted : Event;
 
 /// <summary>
+/// Wybór kafelka w Shellu (AD-16): Orchestrator uruchamia aplikację <see cref="AppId"/> tylko ze stanu
+/// <c>NotRunning</c>, a pozostałe stany są w tej story ignorowane.
+/// </summary>
+public sealed record LaunchApp(string AppId) : Intent;
+
+/// <summary>
 /// Komputer wrócił z uśpienia; adapter power raportuje fakt, a Orchestrator przechodzi na ekran główny
 /// z nowym <c>seq</c> fokusu. <see cref="Source"/> niesie nazwę sygnału Windows 1:1 do logu i JSON-a.
 /// </summary>
 public sealed record SystemResumed(string Source) : Event;
+
+/// <summary>
+/// Host podpiął okno aplikacji po starcie albo adopcji (AD-15). Orchestrator przechodzi wtedy
+/// w <c>Foreground</c> i wysyła <c>ActivateWindow</c> oraz routing wejścia dla typu aplikacji.
+/// </summary>
+/// <param name="Hwnd">Uchwyt okna; <c>long</c>, bo <c>IntPtr</c> nie jest kontraktem JSON, a HWND nie mieści się w <c>int</c>.</param>
+/// <param name="RootPid">PID korzenia drzewa procesów aplikacji; WindowManager i AudioRouter dostają go w dalszych komendach.</param>
+public sealed record AppWindowAttached(string AppId, long Hwnd, int RootPid) : Event;
 
 /// <summary>Wykonawca zakończył komendę <see cref="CmdId"/> sukcesem (AD-4).</summary>
 public sealed record CommandCompleted(long CmdId) : Event;

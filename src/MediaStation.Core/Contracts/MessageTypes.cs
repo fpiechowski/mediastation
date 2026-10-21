@@ -14,11 +14,17 @@ public static class MessageTypes
     public static IReadOnlyList<Type> All { get; } =
     [
         typeof(Action),
+        typeof(LaunchApp),
         typeof(SetInputRouting),
+        typeof(StartApp),
+        typeof(ActivateWindow),
+        typeof(MinimizeWindow),
+        typeof(ShowShell),
         typeof(CommandCompleted),
         typeof(CommandFailed),
         typeof(OrchestratorStarted),
         typeof(SystemResumed),
+        typeof(AppWindowAttached),
     ];
 
     private static readonly Dictionary<string, Type> ByName = BuildIndex(All);

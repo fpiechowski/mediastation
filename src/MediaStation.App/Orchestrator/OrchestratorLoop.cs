@@ -17,6 +17,7 @@ public sealed class OrchestratorLoop : IDisposable
     private const string Src = "orchestrator";
 
     private readonly CoreOrchestrator _orchestrator;
+    private readonly Action<IReadOnlyList<Command>> _dispatch;
     private readonly Action<ShellSnapshot> _publish;
     private readonly ILog _log;
     private readonly BlockingCollection<IOrchestratorMessage> _queue = new();
@@ -24,13 +25,19 @@ public sealed class OrchestratorLoop : IDisposable
     private bool _started;
     private volatile bool _disposed;
 
-    public OrchestratorLoop(CoreOrchestrator orchestrator, Action<ShellSnapshot> publish, ILog log)
+    public OrchestratorLoop(
+        CoreOrchestrator orchestrator,
+        Action<IReadOnlyList<Command>> dispatch,
+        Action<ShellSnapshot> publish,
+        ILog log)
     {
         ArgumentNullException.ThrowIfNull(orchestrator);
+        ArgumentNullException.ThrowIfNull(dispatch);
         ArgumentNullException.ThrowIfNull(publish);
         ArgumentNullException.ThrowIfNull(log);
 
         _orchestrator = orchestrator;
+        _dispatch = dispatch;
         _publish = publish;
         _log = log;
         _thread = new Thread(Run)
@@ -104,8 +111,20 @@ public sealed class OrchestratorLoop : IDisposable
             {
                 var result = _orchestrator.Handle(message);
 
-                // Komendy są fire-and-forget (AD-14); porty wykonawców dochodzą w story 3,
-                // więc pętla nie ma tu jeszcze do kogo ich wysłać.
+                // Porażka wykonawcy to w tej story tylko ślad w logu; przejście w `Failed` dokłada story 4.
+                if (message is CommandFailed failed)
+                {
+                    _log.Warn(Src, "commandFailed", new Dictionary<string, object?>
+                    {
+                        ["cmdId"] = failed.CmdId,
+                        ["errorCode"] = failed.ErrorCode,
+                    });
+                }
+
+                // Komendy są fire-and-forget (AD-14): dispatcher kieruje je do portów bez czekania na wynik.
+                // Snapshot publikujemy dopiero po wysłaniu komend, żeby wykonawca nie wyprzedził widoku.
+                _dispatch(result.Commands);
+
                 if (result.Snapshot is { } snapshot)
                 {
                     _publish(snapshot);

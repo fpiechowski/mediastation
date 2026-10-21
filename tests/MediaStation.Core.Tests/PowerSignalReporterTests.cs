@@ -118,16 +118,4 @@ public class PowerSignalReporterTests
         var reporter = new PowerSignalReporter(log, new WakeSignalGate(time), posted.Add);
         return (reporter, log, posted, time);
     }
-
-    private sealed record Entry(LogLevel Level, string Src, string Msg, IReadOnlyDictionary<string, object?>? Data);
-
-    private sealed class RecordingLog : ILog
-    {
-        public List<Entry> Entries { get; } = [];
-
-        public string[] Messages() => Entries.Select(entry => entry.Msg).ToArray();
-
-        public void Write(LogLevel level, string src, string msg, IReadOnlyDictionary<string, object?>? data = null, Exception? error = null) =>
-            Entries.Add(new Entry(level, src, msg, data));
-    }
 }

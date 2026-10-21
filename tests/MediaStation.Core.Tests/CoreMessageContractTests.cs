@@ -103,11 +103,93 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Launch_app_intent_envelope_serializes_exactly_and_round_trips()
+    {
+        Intent launch = new LaunchApp("netflix");
+
+        var json = ContractJson.SerializeEnvelope(launch);
+
+        Assert.Equal("""{"v":1,"type":"launchApp","payload":{"appId":"netflix"}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Intent>(json);
+        Assert.IsType<LaunchApp>(back);
+        Assert.Equal(launch, back);
+    }
+
+    [Fact]
+    public void Start_app_command_envelope_serializes_with_cmd_id_first_and_round_trips()
+    {
+        Command start = new StartApp(2, "netflix");
+
+        var json = ContractJson.SerializeEnvelope(start);
+
+        Assert.Equal("""{"v":1,"type":"startApp","payload":{"cmdId":2,"appId":"netflix"}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<StartApp>(back);
+        Assert.Equal(start, back);
+    }
+
+    [Fact]
+    public void App_window_attached_event_envelope_serializes_exactly_and_round_trips()
+    {
+        Event attached = new AppWindowAttached("netflix", 6699, 4321);
+
+        var json = ContractJson.SerializeEnvelope(attached);
+
+        Assert.Equal(
+            """{"v":1,"type":"appWindowAttached","payload":{"appId":"netflix","hwnd":6699,"rootPid":4321}}""",
+            json);
+        var back = ContractJson.DeserializeEnvelope<Event>(json);
+        Assert.IsType<AppWindowAttached>(back);
+        Assert.Equal(attached, back);
+    }
+
+    [Fact]
+    public void Activate_window_command_envelope_serializes_exactly_and_round_trips()
+    {
+        Command activate = new ActivateWindow(3, 6699);
+
+        var json = ContractJson.SerializeEnvelope(activate);
+
+        Assert.Equal("""{"v":1,"type":"activateWindow","payload":{"cmdId":3,"hwnd":6699}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<ActivateWindow>(back);
+        Assert.Equal(activate, back);
+    }
+
+    [Fact]
+    public void Minimize_window_command_envelope_serializes_exactly_and_round_trips()
+    {
+        Command minimize = new MinimizeWindow(4, 6699);
+
+        var json = ContractJson.SerializeEnvelope(minimize);
+
+        Assert.Equal("""{"v":1,"type":"minimizeWindow","payload":{"cmdId":4,"hwnd":6699}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<MinimizeWindow>(back);
+        Assert.Equal(minimize, back);
+    }
+
+    [Fact]
+    public void Show_shell_command_envelope_serializes_exactly_and_round_trips()
+    {
+        Command show = new ShowShell(5);
+
+        var json = ContractJson.SerializeEnvelope(show);
+
+        Assert.Equal("""{"v":1,"type":"showShell","payload":{"cmdId":5}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<ShowShell>(back);
+        Assert.Equal(show, back);
+    }
+
+    [Fact]
     public void Orchestrator_messages_share_the_orchestrator_queue_base()
     {
         Assert.IsAssignableFrom<IOrchestratorMessage>(new OrchestratorStarted());
         Assert.IsAssignableFrom<IOrchestratorMessage>(new CommandCompleted(1));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new LaunchApp("netflix"));
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new AppWindowAttached("netflix", 1, 2));
     }
 
     [Fact]
@@ -224,7 +306,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "setInputRouting", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed"], names);
+        Assert.Equal(["action", "launchApp", "setInputRouting", "startApp", "activateWindow", "minimizeWindow", "showShell", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -246,14 +328,20 @@ public class CoreMessageContractTests
         Assert.Equal(
             [
                 "action.schema.json",
+                "activate-window.schema.json",
+                "app-window-attached.schema.json",
                 "apps-config.schema.json",
                 "command-completed.schema.json",
                 "command-failed.schema.json",
                 "input-config.schema.json",
+                "launch-app.schema.json",
+                "minimize-window.schema.json",
                 "orchestrator-started.schema.json",
                 "set-input-routing.schema.json",
                 "settings.schema.json",
                 "shell-snapshot.schema.json",
+                "show-shell.schema.json",
+                "start-app.schema.json",
                 "system-resumed.schema.json",
             ],
             files);
@@ -340,6 +428,41 @@ public class CoreMessageContractTests
         Assert.Equal(["source"], Strings(schema["required"]));
         Assert.False(schema["additionalProperties"]!.GetValue<bool>());
         Assert.Equal("string", schema["properties"]!["source"]!["type"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("launch-app.schema.json", "LaunchApp", "appId")]
+    [InlineData("start-app.schema.json", "StartApp", "cmdId,appId")]
+    [InlineData("app-window-attached.schema.json", "AppWindowAttached", "appId,hwnd,rootPid")]
+    [InlineData("activate-window.schema.json", "ActivateWindow", "cmdId,hwnd")]
+    [InlineData("minimize-window.schema.json", "MinimizeWindow", "cmdId,hwnd")]
+    [InlineData("show-shell.schema.json", "ShowShell", "cmdId")]
+    public void Launch_path_schemas_have_title_required_fields_and_no_additional_properties(
+        string file,
+        string title,
+        string required)
+    {
+        var schema = Schema(file);
+
+        Assert.Equal(title, schema["title"]!.GetValue<string>());
+        Assert.Equal("object", schema["type"]!.GetValue<string>());
+        Assert.Equal(required.Split(','), Strings(schema["required"]));
+        Assert.False(schema["additionalProperties"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void Launch_path_schemas_type_app_id_as_string_and_window_handles_as_integer()
+    {
+        Assert.Equal("string", Schema("launch-app.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
+        Assert.Equal("string", Schema("start-app.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
+
+        var attached = Schema("app-window-attached.schema.json")["properties"]!;
+        Assert.Equal("string", attached["appId"]!["type"]!.GetValue<string>());
+        Assert.Equal("integer", attached["hwnd"]!["type"]!.GetValue<string>());
+        Assert.Equal("integer", attached["rootPid"]!["type"]!.GetValue<string>());
+
+        Assert.Equal("integer", Schema("activate-window.schema.json")["properties"]!["hwnd"]!["type"]!.GetValue<string>());
+        Assert.Equal("integer", Schema("minimize-window.schema.json")["properties"]!["hwnd"]!["type"]!.GetValue<string>());
     }
 
     [Fact]

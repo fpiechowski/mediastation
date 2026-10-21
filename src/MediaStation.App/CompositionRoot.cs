@@ -3,13 +3,18 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Interop;
 using MediaStation.App.Config;
+using MediaStation.App.Hosts;
 using MediaStation.App.Logging;
 using MediaStation.App.Orchestrator;
+using MediaStation.App.Platform.Input;
 using MediaStation.App.Platform.System;
+using MediaStation.App.Platform.Window;
 using MediaStation.App.Shell;
 using MediaStation.Core.Cli;
 using MediaStation.Core.Config;
+using MediaStation.Core.Contracts;
 using MediaStation.Core.Logging;
+using MediaStation.Core.Ports;
 using CoreOrchestrator = MediaStation.Core.Orchestrator.Orchestrator;
 
 namespace MediaStation.App;
@@ -101,7 +106,31 @@ public static class CompositionRoot
             return;
         }
 
-        var loop = new OrchestratorLoop(new CoreOrchestrator(config), bridge.Publish, log);
+        // Mapa appId → AppType bierze się z tych samych rekordów apps.json, z których Orchestrator bierze pointer.
+        var appTypes = new Dictionary<string, AppType>(StringComparer.Ordinal);
+        foreach (var entry in config.Apps.Apps)
+        {
+            appTypes.Add(entry.Id, AppTypeOf(entry));
+        }
+
+        // Adaptery „brak hosta” odpowiadają w kolejce pętli, a pętla powstaje po routerze, więc delegat czyta ją leniwie.
+        OrchestratorLoop? postsTo = null;
+        var hosts = new Dictionary<AppType, IAppHostPort>
+        {
+            [AppType.Web] = new MissingHostPort(log, message => postsTo?.Post(message)),
+            [AppType.Moonlight] = new MissingHostPort(log, message => postsTo?.Post(message)),
+            [AppType.Native] = new MissingHostPort(log, message => postsTo?.Post(message)),
+        };
+
+        var router = new CommandRouter(
+            appTypes,
+            hosts,
+            new LogWindowManagerPort(log),
+            new LogInputRoutingPort(log),
+            log);
+
+        var loop = new OrchestratorLoop(new CoreOrchestrator(config), router.Dispatch, bridge.Publish, log);
+        postsTo = loop;
         loop.Start();
 
         PowerSignalReporter? reporter = null;
@@ -180,4 +209,13 @@ public static class CompositionRoot
         return assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
             ?? assembly.GetName().Version?.ToString();
     }
+
+    /// <summary>Typ aplikacji z rekordu <c>apps.json</c>; nim router wybiera hosta dla <c>StartApp</c> (AD-11).</summary>
+    private static AppType AppTypeOf(AppEntry app) => app switch
+    {
+        WebApp => AppType.Web,
+        MoonlightApp => AppType.Moonlight,
+        NativeApp => AppType.Native,
+        _ => throw new InvalidOperationException($"Nieznany typ aplikacji {app.GetType().FullName}."),
+    };
 }
