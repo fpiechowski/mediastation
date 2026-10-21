@@ -1,7 +1,7 @@
 ---
 epic: epic-foundation-contracts
-date: 2026-10-20
-verdict: rejected
+date: 2026-10-21
+verdict: accepted
 criteria: declared
 headless: false
 ---
@@ -10,31 +10,21 @@ headless: false
 
 ## Epic summary
 
-Epika `epic-foundation-contracts` (id 1, inicjatywa `initiative-mediastation-mvp`), covers CAP-1 i CAP-12 (tylko logi).
+Ta runda wznawia retro z 2026-10-20 po ukończeniu 1.7 (Ścisła koperta i diagnostyka hosta) i 1.6 (Refactor sweep). Poprzedni zapis został zaktualizowany; bieżące dowody wygrywają z tym, co zapisano wcześniej.
 
-| Ref | Ticket | status / state | Plan baseline |
-|-----|--------|----------------|---------------|
-| 1.1 | Tracer bullet: MediaStation.exe → Core → WebView2 shell | done / done | `7292f5d` |
-| 1.2 | Kontrakty Core dla Orchestratora i InputHub | done / done | `dfe666c` |
-| 1.3 | Logger JSON Lines | done / done | `cd8b650` |
-| 1.4 | Schematy i walidacja config/ z ekranem błędu | done / done | `65b99d7` |
-| 1.5 | Jedna instancja i wejście CLI | done / done | `7567ec4` |
-| 1.6 | Refactor sweep | — / planned | brak planu |
+| Ref | Ticket | status / state | Plan baseline | Zakres | Uwagi |
+|-----|--------|----------------|---------------|--------|-------|
+| 1.1 | Tracer bullet | done / done | `7292f5d` | `7292f5d..cd8b650` | recorded |
+| 1.3 | Logger JSON Lines | done / done | `cd8b650` | `cd8b650..dfe666c` | recorded; build 1.3 leży w zakresie 1.2 (równoległe worktree, rebase) |
+| 1.2 | Kontrakty Core | done / done | `dfe666c` | `dfe666c..65b99d7` | atrybucja z subjectów commitów |
+| 1.4 | Schematy i walidacja config/ | done / done | `65b99d7` | `65b99d7..7567ec4` | recorded |
+| 1.5 | Jedna instancja i CLI | done / done | `7567ec4` | `7567ec4..006eb7a` | recorded |
+| 1.7 | Ścisła koperta i diagnostyka hosta | done / done | `006eb7a` | `006eb7a..45a6d95` | recorded; 2 findings z quick review naprawione |
+| 1.6 | Refactor sweep | done / done | `f68450d` (nieosiągalny z HEAD) | `45a6d95..65222c5` | plan zrebazowany do `65665bd`; baseline nie poprawiony (N6) |
 
-- **Niedokończone (`pending_tickets`): `1.6`.** Użytkownik świadomie zgodził się na retro mimo to (2026-10-20); wymusza to machine verdict **rejected**.
-- Tickety na `built`: brak.
-
-### Zakresy diffów (z `baseline_revision` planów, kolejność wg historii)
-
-| Plan | Zakres | Commity w zakresie | Uwagi |
-|------|--------|--------------------|-------|
-| 1.1 | `7292f5d..cd8b650` | `0f35664`, `2d947ff`, `4efe66c` (planning change proposal, nie kod epiki), `1650ad6` build, `c228ec4` close, `cd8b650` gitignore | recorded |
-| 1.3 | `cd8b650..dfe666c` | `dfe666c` (gitignore `.mcp.json`, z sesji 1.2) | build 1.3 (`65b99d7`) wylądował w zakresie 1.2: równoległe worktree, rebase po 1.2 |
-| 1.2 | `dfe666c..65b99d7` | `145b3db` build 1.2, `65b99d7` build 1.3 | atrybucja z subjectów commitów (`Build story 1.x`) |
-| 1.4 | `65b99d7..7567ec4` | `f299a4a`, `318f704` (close 1.2, 1.3), `bb07f76` build, `7567ec4` close | recorded |
-| 1.5 | `7567ec4..HEAD` (`66aace8`) | `da900b7` build, `66aace8` close | inferred: koniec = HEAD, brak późniejszej pracy |
-
-Merge: 0 (`merge_count` = `merges_measured` = 0), `binary_revisions` = 0. Diff kodu całej epiki (`src/ tests/ tools/ web/`, bez `package-lock.json`) ma 191 KB.
+- **`pending_tickets`: brak.** Wszystkie 7 ticketów ma `state: done` (`tickets.py status`, 2026-10-21). Brak ticketów na `built`.
+- Pełny diff epiki: `7292f5d..HEAD` (22 commity, 0 merge'y). Delta od poprzedniego retro: `66aace8..HEAD` (7 commitów: retro, aktualizacja ticketów, 1.7, 1.6).
+- Poprzednia runda objęła diff `7292f5d..66aace8`; ta runda czyta deltę `66aace8..HEAD` i liczy aggregate views na pełnym diffie epiki. `bmad-review` uruchomiono na delcie (trzy lenses: adversarial, edge-case-hunter, verification-gap); poprzednia runda objęła resztę.
 
 ### Inventory dowodów
 
@@ -42,251 +32,190 @@ Merge: 0 (`merge_count` = `merges_measured` = 0), `binary_revisions` = 0. Diff k
 |-------|------|
 | Epic file z Done when (5 punktów) | jest, więc kryteria są **declared** |
 | Requirements | `initiative-mediastation-mvp.md` nie ma sekcji Requirements; CAP-1/CAP-12 czytane z `spec-mediastation/spec-mediastation.md:30-33, 134-138` |
-| Architektura | `architecture-mediastation/architecture-mediastation.md` (AD-2, AD-3, AD-11, AD-13, AD-16) |
-| Story files | brak (entries nie były pullowane; intent w `description`/`verify` z `tickets.toml` i w blokach frozen planów) |
-| Plany | 5/5, każdy z Review Triage Log (lens `quick`); 1.4 ma Plan Change Log (review loop 1) |
-| Plan 1.6 | brak (ticket `planned`) |
-| Session logs | są: 1.1 `C--Users-fpiec-mediastation/0e39a96b…`, 1.2–1.5 w `C--Users-fpiec-mediastation--worktrees-mediastation-story-1-{2..5}/`, sesja koordynująca `912d7732…` |
-| Poprzednie retro | brak (pierwsza epika inicjatywy) |
+| Architektura | `architecture-mediastation/architecture-mediastation.md` (AD-2, AD-3, AD-11, AD-13, AD-14, AD-16) |
+| Story files | brak (entries nie były pullowane); intent w `description`/`verify` z `tickets.toml` i w blokach frozen planów |
+| Plany | 7/7, każdy z Review Triage Log; 1.6 `quick` bez findings, 1.7 `quick` z 2 findings (oba `patch`) |
+| Session logs | są dla 1.6 (`…story-1-6/9e00ccc4…`) i 1.7 (`…story-1-7/b204ec8e…`); 1.1–1.5 z poprzedniej rundy |
+| Poprzednie retro | brak wcześniejszej epiki; poprzednia runda to ten sam plik (2026-10-20) |
+| Braki | brak re-runu 1.6 na UM760 (N1); brak automatycznego pokrycia ścieżek App-only (N3); brak `tools/samples/config/` (N5) |
 
 ## Findings
 
-Źródła: aggregate views liczone inline (z `git_evidence.py` i odczytu plików) oraz `bmad-review` na diffie kodu `7292f5d..66aace8` z trzema lenses: adversarial (18), edge-case (20), verification-gap (6). Findings z subagentów sprawdziłem w źródle przed routingiem. **CONFIRMED** = sprawdzone w kodzie, probe albo pomiarze. **PLAUSIBLE** = zgodne z kodem, ale nie wywołane w runtime. Disposition: *fix* (proponowana poprawka), *defer* (z adresem), *accept* (świadome odstępstwo, żeby kolejne retro tego nie flagowały).
+### Aggregate views (runda 2026-10-20, stan po 1.7 i 1.6)
 
-### Aggregate views
+| # | Finding | Disposition po 1.7/1.6 | Dowód |
+|---|---------|------------------------|-------|
+| F1 | Koperta czytała pobłażliwie (`"up, down"`, `"UP"`, `"Kind"`), config ściśle | **fixed** | `ContractJson.ReadOptions` (`ContractJson.cs:25,41-52`), `StrictEnumConverter.cs`, testy `CoreMessageContractTests.cs:144-160`, `ShellSnapshotContractTests.cs:72-85` |
+| F2 | `appId` ma dwie reguły (config vs `CliArgs`) | **deferred** | wpis Deferred w `epic-netflix-dpad.md` (commit `006eb7a`); warunek: story implementująca `--smoke` |
+| F3 | `ConfigValidation.cs` 451 linii, trzy odpowiedzialności | **fixed (częściowo)** | konwerter wydzielony do `StrictEnumConverter.cs`; `ConfigJson` zostaje w `ConfigValidation.cs:378-398` (398 linii); brak nowego god-class; plan 1.6 świadomie nie przenosił eksportu schematów (F4) |
+| F4 | Cykl `Contracts` ↔ `Config` i równoważność schematu z runtime | **accepted** | `ConfigValidation.cs:378-381` mówi „struktura zgodna ze schematem, reguły semantyczne tylko w runtime”; przeniesienie eksportu odrzucone w 1.6 (`Never` w planie) |
+| F5 | `BannedSymbols.txt` nie pokrywał AD-14 i obiektów OS | **fixed** | `BannedSymbols.txt:34-45`; nowa luka ambient time w N8 |
+| F6 | Brak `id?` w rekordzie koperty | **deferred** | wpis Deferred w `epic-browserhost.md`; warunek: pierwsza story request/response |
+| F7 | Awaria startu WebView2 kończyła proces kodem 0 | **fixed** | `ExitCode.cs:25`, `ShellWindow.xaml.cs:66-72`; log `webView2StartFailed` i `stop {exitCode:5}` 2026-10-21T11:45:30Z/33Z |
 
-**F1. Koperta czyta pobłażliwie, config ściśle (pattern divergence, styk 1.2 ↔ 1.4).** CONFIRMED (probe).
-- **Problem:** `ContractJson.Options` (`src/MediaStation.Core/Contracts/ContractJson.cs:21-33`) ma `JsonSerializerDefaults.Web`, czyli `PropertyNameCaseInsensitive = true`, oraz `JsonStringEnumConverter`, który przyjmuje dowolną wielkość liter i listy po przecinku. `DeserializeEnvelope<Action>` przyjmuje `"kind":"up, down"` jako `Down`, a także `"UP"` i `"Kind"`. Schemat eksportowany z Core odrzuca wszystkie trzy formy.
-- **Historia:** story 1.4 znalazło dokładnie tę pobłażliwość (plan 1.4, Code Map l.67, Review Triage #1 i #3). Poprawiło ją jednak tylko w kopii `ConfigJson` (`ConfigValidation.cs:997-1015`), a ścieżka odczytu koperty z 1.2 została bez zmian.
-- **Disposition:** *fix* w 1.6. Ścisły konwerter enumów i `PropertyNameCaseInsensitive = false` w odczycie koperty. Dodatkowe pola payloadu zostają dozwolone (AD-7, triage 1.1 #3).
-- **Lekcja:** P3.
+### Diff-scope review (runda 2026-10-20)
 
-**F2. Reguła `appId` istnieje w dwóch wersjach, styk 1.4 ↔ 1.5 (duplication map).** CONFIRMED.
-- **Problem:** kebab-case jest prywatnym regexem w `ConfigValidation.cs:802`. `CliArgs.Parse` (`CliArgs.cs:87-105`) sprawdza tylko pustość i `-` na początku, więc `--smoke " "` albo `--smoke "a b"` dają poprawny tryb Smoke.
-- **Disposition:** *defer* do epic-deploy-resilience, do story implementującej `--smoke`. Do tego czasu `appId` nigdzie nie trafia poza log.
+| # | Finding | Disposition po 1.7/1.6 | Dowód |
+|---|---------|------------------------|-------|
+| F8 | Współbieżny append gubi i psuje linie | **fixed** | `FileLogSink.cs:32-39` (`AppendData`); `LogAppendCheck` exit 0, 10000 linii (2026-10-21) |
+| F9 | `ShellBridge` cicho gubi wiadomości | **fixed** | `ShellBridge.cs:22-25,75-81`; `bridgeMessageRejected` |
+| F10 | Brak `NavigationCompleted`, `ProcessFailed`, `NewWindowRequested` | **fixed** | `ShellWindow.xaml.cs:60-62,75-108` |
+| F11 | Brak guard `e.Source` i blokady nawigacji | **deferred** | wpis Deferred w `epic-home-screen.md`; warunek: pierwsza story z Intents przez most |
+| F12 | `Publish` bez marshallingu na wątek UI, `rev` stałe | **deferred** | wpis Deferred w `epic-orchestrator-lifecycle.md`; warunek: pierwsza story publikująca snapshot z Orchestratora |
+| F13 | `new Mutex` może rzucić przed `WaitOne` | **fixed** | `SingleInstance.cs:28-47`; `mutexUnavailable`; brak testu (N3) |
+| F14 | Nieobsłużony wyjątek UI loguje się dwa razy | **fixed** | `CompositionRoot.cs:26,96-118`; `DispatcherLogged`; brak testu (N3) |
+| F15 | `JsonLinesLog.Format` czyta `Message`/`ToString` przed `try` | **fixed** | `JsonLinesLog.cs:57-86`; testy `JsonLinesLogTests.cs:219-246` |
+| F16 | Brak exhaustiveness w `App.tsx` | **fixed** | `App.tsx:22-25` |
+| F17 | Lista błędów configu ucina się bez informacji | **deferred** | wpis Deferred w `epic-home-screen.md` |
+| F18 | Luki reguł semantycznych configu | **deferred** | wpisy Deferred w `epic-browserhost.md`, `epic-deploy-resilience.md`, `epic-home-screen.md`, `epic-moonlight-native.md`, `epic-orchestrator-lifecycle.md` |
+| F19 | Target `BuildWeb` w Debug nie robi typecheck | **fixed** | `MediaStation.App.csproj:54-57` (`npm run typecheck` w Debug) |
+| F20 | Luki weryfikacji z decyzji „bez App.Tests” | **fixed (częściowo)** | `StartDecision.cs`, `ShellSnapshotFactory.cs`, `ConfigPreflight.cs:31-41` + testy; ścieżki App-only nadal bez pokrycia (N3) |
+| F21 | Handshake `ready` budowany ręcznie po stronie web | **deferred** | warunek: vitest z driverami (architektura l.311) |
+| F22 | Klasyfikacja błędów configu po komunikatach STJ | **accepted** | testy `ConfigValidationTests`; publish self-contained przypina runtime |
+| F23 | `Action`/`InputMode` kolidują z BCL/WPF | **fixed** | aliasy w `MediaStation.App.csproj:22-26` i `MediaStation.Core.Tests.csproj` |
+| F24 | Mutex `Local\` zamiast `Global\` | **accepted** | decyzja z planu 1.5 (jeden użytkownik UM760) |
+| F25 | Nazwy `snapshot`/`ready` mogą kolidować z `MessageTypes` | **fixed** | `MessageTypes.cs:36-55`; `MessageTypesTests.cs` |
+| F26 | Ścieżka `%LOCALAPPDATA%\MediaStation\config` zaszyta w copy ekranu błędu | **accepted** | root danych jest jeden i stały (AD-13) |
 
-**F3. `ConfigValidation.cs` ma 451 linii i trzy odpowiedzialności (size growth).** CONFIRMED.
-- To największy plik produkcyjny epiki (`git_evidence`: +451 netto, w całości z 1.4). Mieści reguły semantyczne, klasyfikację komunikatów STJ regexami (l.723-797) oraz `ConfigJson` ze `StrictEnumConverter` (l.991-1064).
-- To jeszcze nie god-class, ale F1 potrzebuje `StrictEnumConverter` poza tym plikiem.
-- **Disposition:** *fix* w 1.6. Wydzielić `ConfigJson` i ścisły konwerter do osobnego pliku, wspólnego z `ContractJson`.
+### Nowe findings (runda 2026-10-21)
 
-**F4. Cykl namespace'ów `Contracts` ↔ `Config` i niesprawdzona równoważność schematu z runtime (architecture delta).** CONFIRMED.
-- **Cykl:** `ContractJson.cs:10, 100, 109` importuje `MediaStation.Core.Config`, a `Config` używa `ConfigError`, `ActionKind`, `AppType` i `PointerPolicy` z `Contracts`.
-- **Schemat a runtime:** schematy configu eksportuje `ContractJson.Options`, a runtime czyta przez `ConfigJson.Options`. Doc `ConfigValidation.cs:991-996` twierdzi, że runtime przyjmuje dokładnie to, co schemat. Żaden test tego nie sprawdza, a schemat nie ma reguł semantycznych: zakresu `cdpPort`, kebab-case, VK, unikalności ani minimum > 0.
-- **Disposition:** *fix* w 1.6, opcjonalnie. Eksport schematów configu przenieść do `Config`, a doc skorygować na „struktura zgodna ze schematem, reguły semantyczne tylko w runtime”.
+**N1. Re-run 1.6 wykonano na maszynie dev, a plan wymaga UM760; wynik nie trafił do planu.** CONFIRMED.
+- Close commit `65222c5` mówi „Automated HITL run on the dev machine (self-contained Release publish)”, a plan 1.6 w `Manual checks` wymaga UM760 (`story-refactor-sweep-plan.md:104-109`). Log z 2026-10-21 (12:02–12:04Z) potwierdza `instanceRejected` (`run`, `smoke`) i trzy `configError` (`apps.json`, `input.json`, `settings.json`, `$.x`), więc zachowanie jest sprawdzone — ale nie na maszynie produkcyjnej.
+- Plan 1.6 nie ma datowanej linii wyniku w `Verification`; close commit zmienia tylko `status` (`65222c5` diff: 1 linia). To ten sam wzorzec co P2/A10 z poprzedniej rundy.
+- **Disposition:** *fix now* — re-run trzech checks 1.6 na UM760 albo jawne przyjęcie dowodu z dev machine przez autora; wynik dopisać do planu. Lekcja: P2/P7.
 
-**F5. `BannedSymbols.txt` nie pokrywa całego AD-3/AD-14 (architecture delta).** CONFIRMED.
-- Lista (`src/MediaStation.Core/BannedSymbols.txt:1-33`) nie zakazuje `DateTime.Now`/`UtcNow` (AD-14: czas tylko przez `TimeProvider`), `System.Diagnostics.Process`, `System.Net.*`, nazwanych `Mutex`/`Semaphore`/`EventWaitHandle` ani `Environment.GetFolderPath`.
-- Dziś Core żadnego z nich nie używa (grep po `src/MediaStation.Core`: 0 trafień), więc stan jest czysty, ale nic go nie pilnuje.
-- **Disposition:** *fix* w 1.6, przez dopisanie wpisów.
+**N2. `LogAppendCheck` jest manualny i zbyt słaby, by chronić F8 przed regresją.** CONFIRMED.
+- Nie jest uruchamiany przez `dotnet test` ani build; `MediaStation.Core.Tests` referuje tylko Core, a `MediaStation.LogAppendCheck` to `Exe` bez `IsTestProject` (`tools/MediaStation.LogAppendCheck/MediaStation.LogAppendCheck.csproj`). Rewert `FileLogSink` do zwykłego `FileMode.Append` przejdzie wszystkie 255 testów.
+- Program startuje writery sekwencyjnie i od razu czeka; nie ma wspólnej bariery startu, więc „jednocześnie” z macierzy nie jest gwarantowane (`Program.cs:32-46`). `WaitForExit()` nie ma timeoutu (`:40`), a `finally` usuwa katalog także po błędzie (`:91-99`), więc uszkodzony log nie zostaje do diagnozy. Asercja nie sprawdza `pad` ani pełnego kształtu linii (`:55-88`).
+- **Disposition:** *fix now* (R3) — bariera startu, timeout, zachowanie katalogu przy błędzie, pełny kształt linii, test live-read; uruchamiać z `release.yml` albo skryptu w repo.
 
-**F6. Brak `id?` w rekordzie koperty (spec reconciliation).** CONFIRMED.
-- Architektura (`architecture-mediastation.md:385`) definiuje kopertę `{ v, type, id?, payload }`, a `Envelope<T>(V, Type, Payload)` (`Envelope.cs:199`) nie ma `id`. Odczyt ignoruje `id`, co jest decyzją z triage 1.1 #3.
-- **Disposition:** *accept* do pierwszej story z request/response, czyli protokołu strony w epic-browserhost. Tam `id` trzeba dodać.
+**N3. Ścieżki App-only z 1.6/1.7 nie mają testów ani pełnego manualnego pokrycia.** CONFIRMED.
+- `ShellBridge` (odrzucenia `bridgeMessageRejected`), `ShellWindow` (`ProcessFailed`, `NewWindowRequested`), `SingleInstance` (`mutexUnavailable`) i `CompositionRoot` (`DispatcherLogged`) nie są referowane przez żaden test. Plan 1.6 wprost zostawia Mutex i Dispatcher poza testami (`story-refactor-sweep-plan.md:82`); plan 1.7 nie ma testów App (`Never`).
+- Manualne checki 1.7 pokrywają start WebView2, brak `index.html` i czysty run (`story-scisa-koperta-i-diagnostyka-hosta-plan.md:95-100`); nie pokrywają `window.open`, `ProcessFailed`, niedostępnego mutexu ani podwójnego logu UI.
+- **Disposition:** *defer* (R4) — pierwsza story dotykająca danej ścieżki (browserhost/home-screen/deploy) dodaje test lub manualny check; bridge można wydzielić do Core tak jak `StartDecision`.
 
-**F7. Awaria startu WebView2 kończy proces kodem 0, styk 1.1 ↔ 1.5 (spec reconciliation).** CONFIRMED.
-- `ShellWindow.xaml.cs:61-68` w `catch` loguje błąd, pokazuje MessageBox i woła `Close()`. Przy `ShutdownMode="OnMainWindowClose"` proces kończy się kodem `0`, a `stop` loguje `exitCode: 0`.
-- Słownik `ExitCode` z 1.5 (`ExitCode.cs:4`: „jeden słownik dla autora, smoke i przyszłego `--supervise`”) nie ma kodu na awarię hosta.
-- Zgłosiły to adversarial i edge-case, potwierdza to też moja analiza.
-- **Disposition:** *fix* w 1.6. Dodać `ShellStartFailed = 5` i zamiast `Close()` wołać `Application.Shutdown((int)ExitCode.ShellStartFailed)`.
+**N4. 1.7 (risk medium) dostał tylko `quick` review; A12 nie zadziałało.** CONFIRMED.
+- `story-scisa-koperta-i-diagnostyka-hosta-plan.md:11-13`: `review: 'quick'`, `lenses_ran: ['quick']`. Quick znalazł 2 realne findings w `LogAppendCheck`, a retro z trzema lenses znalazło dalsze luki (N2, N3).
+- **Disposition:** *fix now* (R5) — dla `risk = "medium"` pełne lenses albo co najmniej jedno review epiki przed refactor sweep (A12).
 
-### Diff-scope review (bmad-review)
+**N5. A9/A10 nadal częściowe; plan 1.7 zawiera nieaktualne oczekiwanie 404.** CONFIRMED.
+- Manualne skrypty są w planach 1.6/1.7 (A9 spełnione w części), ale `tools/samples/config/` nie istnieje (A9 niespełnione).
+- Close commity `45a6d95` i `65222c5` zmieniają tylko `status`; wyniki są w treści commitów, nie w `Verification` planu (A10 niespełnione). Plan 1.7 zakładał `httpStatusCode` 404 dla braku `index.html`, a close commit `45a6d95` odnotowuje faktyczne `0` (`webErrorStatus unknown/connectionAborted`); plan tego nie poprawia.
+- **Disposition:** *fix now* (R5) — ustalić kanoniczne miejsce wyniku (plan albo commit body) i je stosować; poprawić oczekiwanie 404 → 0; sample configi do repo.
 
-**F8. Współbieżny append do logu gubi i psuje linie, styk 1.3 ↔ 1.5.** CONFIRMED (pomiar). Zgłosiły: verification-gap, adversarial.
-- **Mechanizm:** `FileLogSink.Append` (`FileLogSink.cs:29-31`) otwiera plik z `FileMode.Append` i `FileShare.ReadWrite`. To nie jest atomowy append między procesami.
-- **Pomiar subagenta:** odtworzony w `scratchpad\appendtest\Program.cs` dokładnie tym wzorcem. Dwa procesy po 5000 linii dały 9125 linii, z czego 19 uszkodzonych (przeliczyłem ponownie).
-- **Historia:** triage 1.3 #2 odrzucił to ryzyko z warunkiem „do rozważenia, gdy `--supervise` zacznie logować równolegle”. Story 1.5 spełniło ten warunek wcześniej: każda odrzucona instancja pisze `start`, `instanceRejected` i `stop` do tego samego pliku (`CompositionRoot.cs:45-53, 67`).
-- **Realnie** kolizja wymaga nakładających się zapisów. Odrzucona instancja pisze 3 linie, więc jest rzadka, ale uszkodzona linia psuje parsowanie JSON Lines.
-- **Disposition:** *fix* w 1.6 (`FileSystemRights.AppendData`) albo *defer* do epic-deploy-resilience. Decyzja autora.
-- **Lekcja:** P3.
+**N6. `baseline_revision` planu 1.6 wskazuje commit nieosiągalny z `HEAD`.** CONFIRMED.
+- `story-refactor-sweep-plan.md:7` ma `f68450d`, którego `git merge-base --is-ancestor f68450d HEAD` nie potwierdza; to plan z worktree sprzed rebase. Zrebazowany plan to `65665bd`, a faktyczny zakres 1.6 to `45a6d95..65222c5`.
+- **Disposition:** *fix now* (R2) — ustawić baseline na `65665bd` (albo `45a6d95`), żeby przyszły review/retro liczyły właściwy zakres.
 
-**F9. `ShellBridge` po cichu gubi wiadomości i nie ma loggera, styk 1.1 ↔ 1.3.** CONFIRMED. Zgłosiły wszystkie trzy lenses.
-- Most powstał w tracerze, przed loggerem. `ShellBridge.cs:39-49` robi `return` bez logu przy `JsonException`, innym `v` i nieznanym `type`. Po stronie web jest tylko `console.warn` (`bridge.ts:55`), a DevTools są w Release wyłączone.
-- Dryf handshake'u `ready` daje pusty ekran ground bez śladu. Taki cichy drop był już przyczyną błędu w triage 1.1 #3.
-- **Disposition:** *fix* w 1.6. Wstrzyknąć `ILog` i dodać wpis `bridgeMessageRejected` z `v`/`type`/powodem.
+**N7. Ścisły odczyt nadal przyjmuje zduplikowane klucze; konwerter enumów nie ma guardu na aliasy.** CONFIRMED / PLAUSIBLE.
+- `ContractJson.CreateReadOptions` (`ContractJson.cs:41-52`) nie ustawia `AllowDuplicateProperties = false`; `ConfigJson` robi to dla plików (`ConfigValidation.cs:389-394`), a test przypina `ContractJson.Options.AllowDuplicateProperties == true` (`ConfigValidationTests.cs:828`). W kopercie podwójny `type`/`kind` nadal wygrywa ostatni.
+- `StrictEnumConverter` (`StrictEnumConverter.cs:26-31`) robi `_names.Add(value, name)`; enum z aliasem (dwie nazwy, ta sama wartość) rzuci `ArgumentException`/`TargetInvocationException`, którego `ShellBridge` nie łapie (łapie tylko `JsonException`). Dziś żaden enum nie ma aliasu (grep `src/MediaStation.Core`).
+- **Disposition:** *fix now* dla `AllowDuplicateProperties` (R6); *defer* dla aliasów do pierwszej story dodającej enum kontraktu.
 
-**F10. WebView2 bez obsługi `NavigationCompleted`, `ProcessFailed` i `NewWindowRequested`.** CONFIRMED (odczyt `ShellWindow.xaml.cs:36-60`). Zgłosiły: adversarial, edge-case.
-- Bez nich nic nie ląduje w logu, gdy Debug startuje bez `npm run dev`, gdy brakuje `shell/index.html` albo gdy padnie renderer. `window.open` otworzyłby okno Edge nad kioskiem.
-- **Disposition:** *fix* w 1.6: logowanie plus `Handled = true` dla nowych okien.
+**N8. Niskie, odłożone lub świadomie przyjęte.** 
+- Modalny `MessageBox` przy awarii WebView2 nadal blokuje start w trybie bezobsługowym; `--supervise` powstaje w epic-deploy-resilience — *defer* tam.
+- `NavigationCompleted` loguje `OperationCanceled` jako `navigationFailed`; normalny run 1.7 nie dał takiego wpisu — *defer* do epic-home-screen (więcej nawigacji).
+- `BannedSymbols` nie zakazuje `TimeProvider.System`, `Stopwatch` ani `Environment.TickCount`; Core dziś ich nie używa — *defer* do pierwszej story z czasem w Core.
+- `ShellBridge` loguje `type`/`reason` bez limitu; renderer jest nasz — *accept* (do ewentualnego hardeningu bezpieczeństwa).
+- `ShellSnapshotFactoryTests` buduje `new ConfigResult(null, [])`, czyli stan sprzeczny z dokiem `ConfigResult` (`ConfigValidation.cs:14-15`); produkcja go nie tworzy — *defer* do następnego refactoru testów.
+- `ContractJson.Options` pozostaje publiczny i pobłażliwy; to świadoma decyzja (zapis i schematy) — *accept*.
+- `DispatcherLogged` używa domyślnej równości i nie jest czyszczony przy `Handled = true`; proces kończy się po nieobsłużonym wyjątku — *accept*.
+- `App.tsx` default `never` nie chroni runtime przed nieznanym `screen`; 1.1 triage #8 odrzucił to, bo host i UI dzielą schemat — *accept*.
+- `StartDecision` mapuje `mutexUnavailable` na `AlreadyRunning` (kod 3) — to wiersz macierzy 1.6 (`story-refactor-sweep-plan.md:41`), świadoma decyzja, nie finding.
 
-**F11. `ShellBridge` nie sprawdza `e.Source`, a nawigacja nie jest ograniczona.** CONFIRMED. Zgłosiły: adversarial, edge-case.
-- Triage 1.1 #6 odrzucił to z adnotacją „guard należy do story wprowadzającej Intents”, ale żaden ticket tego nie niesie.
-- **Disposition:** *defer* do epic-home-screen, do pierwszej story z Intents przez most. Do zapisania w jej entry (A9).
+## Process lessons
 
-**F12. `ShellBridge.Publish` bez marshallingu na wątek UI, a `rev` jest stałą wywołującego.** PLAUSIBLE.
-- `ShellBridge.cs:28-32, 57-60`, `CompositionRoot.cs:100` (`Rev: 1`). `CoreWebView2` ma thread affinity, więc publish z wątku Orchestratora rzuci wyjątek.
-- **Disposition:** *defer* do epic-orchestrator-lifecycle albo epic-home-screen, do pierwszej story publikującej snapshot z Orchestratora (A9).
-
-**F13. `new Mutex(false, name)` może rzucić przed `WaitOne`.** PLAUSIBLE. Zgłosiły: adversarial, edge-case.
-- `SingleInstance.cs:26` łapie tylko `AbandonedMutexException`. `UnauthorizedAccessException` (instancja elevated obok nie-elevated) albo `WaitHandleCannotBeOpenedException` skończy się crashem `0xE0434352` zamiast kodu 3.
-- Na UM760 jest jeden użytkownik bez elevacji, więc ryzyko jest niskie.
-- **Disposition:** *fix* w 1.6, tani guard.
-
-**F14. Nieobsłużony wyjątek UI loguje się dwa razy.** PLAUSIBLE (nie wywołane).
-- `DispatcherUnhandledException` bez `Handled` (`CompositionRoot.cs:139`), potem ten sam wyjątek w `AppDomain.UnhandledException` (l.127-136).
-- **Disposition:** *fix* w 1.6, niski priorytet.
-
-**F15. `JsonLinesLog.Format` wywołuje `error.Message` i `error.ToString()` przed `try`.** CONFIRMED (odczyt `JsonLinesLog.cs`, metoda `Format`). Zgłosiły: adversarial, edge-case.
-- Wyjątek z rzucającym `Message`/`ToString` łamie kontrakt „implementacja nigdy nie rzuca” (`ILog.cs:17`), i to w handlerze unhandled exception.
-- **Disposition:** *fix* w 1.6.
-
-**F16. `App.tsx` nie ma sprawdzenia exhaustiveness w `switch`.** CONFIRMED.
-- `web/shell/src/App.tsx:17-22`, a `web/tsconfig.json` nie ma `noImplicitReturns`. Nowy `ShellScreen` skompiluje się i da pusty ekran.
-- **Disposition:** *fix* w 1.6: `default` z `never`.
-
-**F17. Lista błędów configu ucina się bez informacji.** CONFIRMED.
-- `.config-error__content { overflow: hidden }` (`web/shell/src/tokens.css:133-140`) na stałej scenie 1080 px, bez wskaźnika „i jeszcze K”.
-- **Disposition:** *defer* do epic-home-screen (UX ekranu błędu).
-
-**F18. Luki reguł semantycznych configu.** CONFIRMED (odczyt `CheckApps`/`CheckSettings`). Zgłosiły: adversarial, edge-case.
-- `service` nie musi być kebab-case, mimo że to segment ścieżki `web/page/drivers/<service>`.
-- `title`, `icon`, `exe`, `host` i `app` mogą być puste lub z samych spacji.
-- `update.repo` przyjmuje `owner/..`.
-- Czasy nie mają górnej granicy.
-- **Disposition:** *defer* do konsumentów: `service` do epic-netflix-dpad lub epic-browserhost, `exe`/`host`/`app` do epic-moonlight-native, `repo` i limity do epic-deploy-resilience (A9).
-
-**F19. Target `BuildWeb` w Debug nie robi typecheck.** CONFIRMED (`MediaStation.App.csproj:46-50`).
-- Zmiana kontraktu łamiąca TS buduje się zielono w Debug i pada dopiero w Release.
-- **Disposition:** *fix* w 1.6. Warunkowy `npm ci` został już odrzucony w triage 1.1 #9, więc *accept*. `SkipWebBuild=true` to świadomy flag dewelopera, też *accept*.
-
-**F20. Luki weryfikacji z decyzji „bez App.Tests”.** CONFIRMED (verification-gap, grep `tests/`). Czysta logika żyje w App i nic jej nie uruchamia:
-- dispatch startu: parse → `Invalid` przed mutexem → mutex → `Run`/`Unsupported` (`CompositionRoot.cs:55-79`);
-- mapowanie `ConfigResult` → `ShellSnapshot` (`CompositionRoot.cs:98-102`);
-- mapowanie wyjątków I/O na `ConfigFileState` (`ConfigFileReader.cs:24-35`);
-- wartości liczbowe `ExitCode` (jawne w `ExitCode.cs`, ale żaden test ich nie przypina).
-
-**Disposition:** *fix* w 1.6. Wydzielić czystą decyzję startu, fabrykę snapshotu i mapowanie wyjątku do Core i dodać testy. To refactor, zgodny z zakresem 1.6.
-
-**F21. Handshake `ready` jest budowany ręcznie po stronie web, a web nie ma testów.** CONFIRMED.
-- `bridge.ts:9-13, 69` ma własny interfejs `Envelope`. Test C# parsuje skopiowany literał (`ShellSnapshotContractTests.cs:52-70`).
-- **Disposition:** *defer*. vitest wchodzi z driverami (architektura l.311). Do tego czasu F9 wystarcza, żeby dryf był widoczny w logu.
-
-**F22. Klasyfikacja błędów configu po angielskich komunikatach STJ.** CONFIRMED.
-- `ConfigValidation.cs:723-797`. Testy przypinają każdą klasę (plan 1.4, Design Notes), a publish self-contained przypina runtime.
-- **Disposition:** *accept*.
-
-**F23. `Action` i `InputMode` kolidują z typami BCL/WPF.** CONFIRMED w części.
-- Test używa aliasu (`CoreMessageContractTests.cs:4`). App dziś nie używa `Action` (grep: 0 trafień).
-- Triage 1.2 #2 odrzucił zmianę, bo nazwę narzuca zamrożony intent i Consistency Conventions.
-- **Disposition:** *defer* jako pytanie do autora przed epic-input (Open questions).
-
-**F24. Mutex `Local\` zamiast `Global\`.** Decyzja z planu 1.5 (Design Notes). **Disposition:** *accept*.
-
-**F25. Nazwy `snapshot`/`ready` mogą kolidować z `MessageTypes`.** CONFIRMED (`MessageTypes.cs:252-262` nie wyklucza `Envelope.SnapshotType`/`ReadyType`). Dziś kolizji nie ma. **Disposition:** *defer*, niski priorytet. Guard warto dodać razem z pierwszą story, która dopisze typ do rejestru.
-
-**F26. Ścieżka `%LOCALAPPDATA%\MediaStation\config` zakodowana na sztywno w copy ekranu błędu.** CONFIRMED (`ConfigErrorScreen.tsx:12`). Root danych jest jeden i stały (AD-13). **Disposition:** *accept*.
-
-**Odrzucone (źródło się nie utrzymało):**
-- `null` jako wartość `ConfigFileState` w słowniku: słownik buduje wyłącznie `ConfigFileReader.ReadAll` i nigdy nie wstawia null.
-- Puste `Environment.GetFolderPath(LocalApplicationData)`: brak dowodu, że zdarza się na docelowym UM760 (zadanie „at logon” w sesji użytkownika).
-
-### Lekcje procesowe (session logs i plany)
-
-**P1. Testy HITL na UM760 nie miały spisanej procedury.**
-- Autor pytał o nią dwa razy: „Jak to przetestować na UM760? Gdzie są opisane te weryfikacje?” (sesja `worktrees-…-story-1-4/3d92a356…`, 2026-10-20T10:02Z) i „Gdzie jest opisany test do wykonania zgodnie z pkt. 4?” (`912d7732…`, 08:59Z).
-- Przykładowe configi testowe trafiły do nieśledzonego pliku na prośbę autora (`3d92a356…`, 10:06Z).
-- Plany mają w „Manual checks” jedną linię „UM760 (HITL, autor): …” (np. plan 1.4 l.128).
-
-**P2. Wynik HITL nie trafia do planu.**
-- Commity close (`c228ec4`, `318f704`, `7567ec4`, `66aace8`) zmieniają tylko `status` (1 linia).
-- Plany 1.3 (l.315), 1.4 (l.91) i 1.5 (l.206) dalej mówią „UM760 (HITL) nie sprawdzone / czeka na autora”. Jedynym dowodem testu na UM760 są subject commitu i wypowiedzi autora w sesjach.
-
-**P3. Odłożone findings z warunkiem nie przechodzą między stories.**
-- Triage 1.3 #2 (append, warunek `--supervise`) aktywowało się w 1.5 bez re-triage (F8).
-- Pobłażliwość opcji znaleziona w 1.4 w bazie dziedziczonej z 1.2 nie wróciła do `ContractJson` (F1).
-- Triage 1.1 #6 („guard należy do story wprowadzającej Intents”) nie ma ticketu (F11).
-
-**P4. Głębokość review.**
-- Wszystkie pięć planów ma `review: 'quick'`, `review_source: 'pinned'` i `lenses_ran: ['quick']`, także medium-risk 1.1, 1.2 i 1.4.
-- Quick znalazł realne defekty w 4 z 5 stories (triage: 1.1 – 4 patche, 1.2 – 1, 1.3 – 1, 1.4 – 5).
-- Trzy lenses na poziomie epiki dodały CONFIRMED defekty, których quick nie widział, przede wszystkim na stykach: F1, F7, F9, F10, F15, F20.
-
-**P5. Wins.**
-- Tracer bullet z 1.1 dał gotowy pipeline: schema → TS, most i ekran błędu. Stories 1.2 i 1.4 rozszerzyły go bez zmiany kształtu (Code Map 1.2: „bez zmian” dla `BuildWeb`; 1.4: „generują się automatycznie”).
-- Lane'y 1.2 ∥ 1.3 w osobnych worktree przeszły rebase bez konfliktu (`145b3db` → `65b99d7`).
-- Review loop w 1.4 złapał bad_plan, zanim trafił do mastera (Plan Change Log 1.4).
-- Każda story zamknięta po HITL tego samego dnia.
+- **P1 (2026-10-20).** Testy HITL na UM760 nie miały spisanej procedury; autor pytał o nią dwa razy. Plany 1.6/1.7 mają już skrypty krok po kroku, więc A9 zadziałało w części.
+- **P2 (2026-10-20, nadal aktualne).** Wynik HITL nie trafia do planu. Close commity 1.6/1.7 zmieniają tylko `status`, a wyniki są w treści commitów (N1, N5).
+- **P3 (2026-10-20).** Odłożone findings z warunkiem nie przechodzą między stories. A8 zapisało je w epikach konsumentów (commit `006eb7a`); 1.7 naprawiło F1 w obu konsumentach (`ContractJson` i `ConfigJson`), więc tym razem zadziałało.
+- **P4 (2026-10-20, nadal aktualne).** Wszystkie plany miały `quick`; 1.7 medium też (N4). Quick znajduje realne defekty, ale nie widzi luk weryfikacji (N2, N3).
+- **P5 (2026-10-20).** Wins: tracer bullet dał pipeline schema → TS; 1.6 przeniósł logikę do Core z testami; 1.7 naprawił F1/F7/F8/F9/F10 i dodał 23 testy (232 → 255).
+- **P6 (2026-10-21).** Rebase worktree'a zostawił `baseline_revision` na commicie spoza mastera (N6). Baseline trzeba ustawiać po rebase albo z rebased plan commit.
+- **P7 (2026-10-21).** „Automated HITL” na dev machine zastąpił ręczny run autora na UM760 bez jawnej decyzji w planie (N1). Jeśli agent wykonuje HITL, plan ma to mówić i wskazywać środowisko.
+- **P8 (2026-10-21).** Close commit body jest dobrym nośnikiem wyników, ale rozjeżdża się z `Verification` planu (N5). Trzeba wybrać jedno kanoniczne miejsce.
 
 ## Behavior verification
 
-Wykonane 2026-10-20 na maszynie deweloperskiej, na HEAD `66aace8`:
+Wykonane 2026-10-21 na maszynie deweloperskiej, na HEAD `65222c5`:
 
-- `dotnet test`: 224/224 zielone.
-- `dotnet build -c Release`: sukces, 0 ostrzeżeń.
-- Release `MediaStation.exe` w trybach bez okna (log `%LOCALAPPDATA%\MediaStation\logs\mediastation-2026-10-20.jsonl`, 11:55:58Z–11:55:59Z):
+- `dotnet test`: **255/255** zielone (poprzednia runda: 224/224; 1.7 dołożył 8, 1.6 dołożył 23).
+- `dotnet build -c Release`: sukces, **0 ostrzeżeń**, `web/contracts/schema/*.schema.json` bez zmian (hash przed/po identyczny), `git status` czysty.
+- `dotnet run --project tools/MediaStation.LogAppendCheck -c Release --no-build`: **exit 0**, 10000 linii, każda parsuje się jako JSON, każda para `(writer, seq)` dokładnie raz.
+- Release `MediaStation.exe` w trybach bez okna:
 
 | Argumenty | Kod wyjścia | Linie logu |
 |-----------|-------------|------------|
+| `--foo` | 2 | `start` → `invalidArguments` → `stop {exitCode: 2}` |
 | `--smoke netflix` | 4 | `start` → `modeUnsupported {mode: smoke, appId: netflix}` → `stop {exitCode: 4}` |
-| `--calibrate-input` | 4 | `modeUnsupported {mode: calibrateInput}` → `stop {exitCode: 4}` |
-| `--foo` | 2 | `invalidArguments „nieznany argument: --foo”` → `stop {exitCode: 2}` |
-| `--SMOKE netflix` | 2 | `invalidArguments „nieznany argument: --SMOKE”` |
-| `--smoke` | 2 | `invalidArguments „brak appId po --smoke”` |
+| `--calibrate-input` | 4 | `start` → `modeUnsupported {mode: calibrateInput}` → `stop {exitCode: 4}` |
 
-- Probe Core (file-based app na `MediaStation.Core`):
-  - `null` w polach wszystkich trzech plików configu (`apps`, `id`, `title`, `devices`, `keys`, `gamepadHome`, `update`, `update.repo`, `signature`) daje `ConfigError` z poprawną ścieżką i bez crasha. **Sprawdzone i czyste.**
-  - Koperta (`ContractJson.DeserializeEnvelope<Action>`) przyjmuje `"kind":"up, down"` jako `Down`, a także `"UP"` i `"Kind"`. Patrz finding F1.
-- **Nie wykonane tutaj:** tryb główny z oknem shella, druga instancja przy działającej głównej i ekran błędu configu. Nie uruchamiałem pełnoekranowego okna na maszynie dev. Te ścieżki mają tylko dowody pośrednie: notatki weryfikacji lokalnej w planach (1.4 `Implementation Notes`, 1.5 `Implementation Notes`) i deklaracje autora o teście na UM760 (sesje `912d7732` 07:08Z i 09:04Z, `3d92a356` 10:19Z, commity `c228ec4`, `318f704`, `7567ec4`, `66aace8`).
+- Log z rundy HITL na dev machine (2026-10-21, `%LOCALAPPDATA%\MediaStation\logs\mediastation-2026-10-21.jsonl`):
+  - `webView2StartFailed` + `stop {exitCode: 5}` (11:45:30Z/33Z) — A2.
+  - `instanceRejected` (`run`, `smoke`) + `stop {exitCode: 3}` (12:02:51Z/52Z) — A5/1.6.
+  - `configError` dla `apps.json`, `input.json`, `settings.json` z `$.x` i `stop {exitCode: 0}` (12:03:46Z–12:04:14Z) — 1.6.
+  - `navigationFailed` z `webErrorStatus unknown`/`connectionAborted` i `httpStatusCode: 0` (2026-10-20T20:06:48Z/49Z) — 1.7 check 2; plan zakładał 404 (N5).
+- **Nie wykonane tutaj:** pełnoekranowe okno shella, `ProcessFailed`, `NewWindowRequested`, niedostępny mutex i UM760. Te ścieżki mają dowody z close commitów/logów albo pozostają otwarte (N1, N3).
 
 ## Previous-retro follow-through
 
-Nie było czego sprawdzać: **plik poprzedniego retro nie istnieje**. To pierwsza epika inicjatywy (`epics` order: id 1), więc brak pliku nie znaczy, że nie ma zaległych action items.
+Punkt odniesienia: poprzednia runda tego samego retro (2026-10-20). Nie ma retro wcześniejszej epiki (to pierwsza epika inicjatywy). Wszystkie poniższe to action items z 2026-10-20; żaden nie został zastosowany przez samo retro.
+
+| # | Item (z 2026-10-20) | Czy zadziałał | Dowód |
+|---|---------------------|---------------|-------|
+| A1 | Ścisły odczyt koperty: `StrictEnumConverter` + `PropertyNameCaseInsensitive = false`; testy `"up, down"`, `"UP"`, `"Kind"` | **tak** | `ContractJson.cs:25,41-52`; `StrictEnumConverter.cs`; `CoreMessageContractTests.cs:144-160`; `ShellSnapshotContractTests.cs:72-85` |
+| A2 | `ExitCode.ShellStartFailed = 5` i `Application.Shutdown(kod)` w `catch` | **tak** | `ExitCode.cs:25`; `ShellWindow.xaml.cs:66-72`; log `stop {exitCode: 5}` 2026-10-21T11:45:33Z |
+| A3 | `ILog` w `ShellBridge` (`bridgeMessageRejected`) + handlery WebView2 | **tak** | `ShellBridge.cs:22-25,75-81`; `ShellWindow.xaml.cs:60-62,75-108` |
+| A4 | Atomowy append (`FileSystemRights.AppendData`) i test/skrypt z dwoma procesami | **tak (manualnie)** | `FileLogSink.cs:32-39`; `LogAppendCheck` exit 0 (2026-10-21); brak automatu w `dotnet test` (N2) |
+| A5 | Czysta decyzja startu, fabryka snapshotu, mapowanie I/O do Core + testy `ExitCode` | **tak** | `StartDecision.cs`; `ShellSnapshotFactory.cs`; `ConfigPreflight.cs:31-41`; `StartDecisionTests.cs`, `ExitCodeTests.cs`, `ShellSnapshotFactoryTests.cs`, `ConfigFileStateTests.cs` |
+| A6 | Guard `Mutex`, jeden wpis unhandled, `LogError` odporne, `never` w `App.tsx`, typecheck w Debug | **tak** | `SingleInstance.cs:28-47`; `CompositionRoot.cs:26,96-118`; `JsonLinesLog.cs:57-86`; `App.tsx:22-25`; `MediaStation.App.csproj:54-57` |
+| A7 | `BannedSymbols`: AD-14 i obiekty OS; doc `ConfigJson` o schemacie | **tak** | `BannedSymbols.txt:34-45`; `ConfigValidation.cs:378-381`; eksport schematów świadomie został w `ContractJson` (plan 1.6 `Never`) |
+| A8 | Odłożone findings z warunkiem w epikach konsumentów | **tak** | commit `006eb7a`: `epic-browserhost.md`, `epic-deploy-resilience.md`, `epic-home-screen.md`, `epic-moonlight-native.md`, `epic-netflix-dpad.md`, `epic-orchestrator-lifecycle.md` |
+| A9 | Manualne skrypty HITL krok po kroku; sample configi w repo | **częściowo** | skrypty: plan 1.6:104-109, plan 1.7:95-100; `tools/samples/config/` nie istnieje |
+| A10 | Zamknięcie story po HITL dopisuje datowany wynik do `Verification` planu | **nie** | close `45a6d95` i `65222c5` zmieniają tylko `status`; wyniki są w treści commitów (N1, N5) |
+| A11 | Deferred findings z warunkiem do listy/epiki; finding w bazie dziedziczonej sprawdza innych konsumentów | **częściowo** | A8 zapisane; 1.7 naprawiło F1 w `ContractJson` i `ConfigJson`, ale konwencja nie jest spisana |
+| A12 | Dla `risk = "medium"` pełne lenses zamiast `quick` | **nie** | 1.7 medium ma `review: 'quick'`, `lenses_ran: ['quick']` (plan:11-13) |
 
 ## Action items
 
 Wszystkie są **proponowane, nie zastosowane**. Retro nie zmienia kodu, ticketów ani specu.
 
-### Remediation (kod), zakres startowy dla 1.6 Refactor sweep
-
-| # | Co | Findings | Owner | Uwagi |
-|---|----|----------|-------|-------|
-| A1 | Ścisły odczyt koperty: `StrictEnumConverter` i `PropertyNameCaseInsensitive = false` w `DeserializeEnvelope`; konwerter wydzielony z `ConfigValidation.cs` do wspólnego pliku; testy `"up, down"`, `"UP"`, `"Kind"` → `JsonException` | F1, F3 | 1.6 (`bmad-build`) | zmienia zachowanie (patrz Q1) |
-| A2 | `ExitCode.ShellStartFailed = 5` i `Application.Shutdown(kod)` w `catch` `ShellWindow.OnLoaded` | F7 | 1.6 | zmienia zachowanie (Q1) |
-| A3 | `ILog` w `ShellBridge` (wpis `bridgeMessageRejected`) oraz obsługa `NavigationCompleted`, `ProcessFailed`, `NewWindowRequested` z logiem | F9, F10 | 1.6 | Q1 |
-| A4 | Atomowy append w `FileLogSink` (`FileSystemRights.AppendData`) i test lub skrypt z dwoma procesami | F8 | 1.6 | decyzja autora 2026-10-20 (Q2) |
-| A5 | Czysta decyzja startu, fabryka `ShellSnapshot` z `ConfigResult` i mapowanie wyjątku I/O na `ConfigFileState` wydzielone do Core, z testami; test przypinający wartości `ExitCode` | F20 | 1.6 | refactor, w zakresie 1.6 |
-| A6 | Drobne utwardzenia: guard konstruktora `Mutex` (F13), pojedynczy wpis unhandled (F14), `LogError` w `try` (F15), `default: never` w `App.tsx` (F16), `npm run typecheck` w Debug (F19) | F13–F16, F19 | 1.6 | |
-| A7 | Dopisać do `BannedSymbols.txt`: `DateTime.Now`/`UtcNow`, `System.Diagnostics.Process`, `N:System.Net`, nazwane `Mutex`/`Semaphore`/`EventWaitHandle`, `Environment.GetFolderPath`; poprawić doc `ConfigJson` o równoważności ze schematem (opcjonalnie przenieść eksport schematów configu do `Config`) | F4, F5 | 1.6 | |
-
-### Odłożone do kolejnych epik (do wpisania w entries przez `bmad-ticket`)
+### Remediation i weryfikacja
 
 | # | Co | Findings | Owner |
 |---|----|----------|-------|
-| A8 | Zapisać odłożone findings z warunkiem w entries konsumentów: guard `e.Source` i blokada nawigacji (epic-home-screen, pierwsza story z Intents); marshalling `Publish` i `rev` z mostu (pierwsza story publikująca snapshot z Orchestratora); `id?` w kopercie (epic-browserhost, protokół strony); reguła `appId` wspólna z `CliArgs` (epic-deploy-resilience, `--smoke`); reguły `service`/pól pustych/`repo`/górnych granic (epic-netflix-dpad, epic-moonlight-native, epic-deploy-resilience); ucięta lista błędów (epic-home-screen); guard nazw `snapshot`/`ready` w `MessageTypes` | F2, F6, F11, F12, F17, F18, F25 | autor przez `bmad-ticket` |
+| R1 | Re-run trzech manualnych checks 1.6 na UM760 albo jawne przyjęcie dowodu z dev machine; datowany wynik w `Verification` planu 1.6; poprawić oczekiwanie 404 → 0 w planie 1.7 | N1, N5 | autor |
+| R2 | Poprawić `baseline_revision` planu 1.6 z `f68450d` na `65665bd` (albo `45a6d95`) | N6 | autor / `bmad-ticket` |
+| R3 | Utwardzić `LogAppendCheck`: wspólna bariera startu, timeout `WaitForExit`, zachowanie katalogu przy błędzie, sprawdzenie `pad` i pełnego kształtu linii, test live-read; uruchamiać z `release.yml` lub skryptu | N2 | autor |
+| R4 | Pokryć ścieżki App-only: `ShellBridge` (odrzucenia), `ShellWindow` (`ProcessFailed`, `NewWindowRequested`), `SingleInstance` (`mutexUnavailable`), `CompositionRoot` (jeden wpis UI); wydzielić testowalne helpery do Core, gdzie tanie | N3 | autor, przy pierwszej story dotykającej ścieżki |
+| R5 | Proces: pełne lenses dla `risk = "medium"` (A12); kanoniczne miejsce wyniku HITL (plan albo commit body) i spójność z `Verification` (A10); sample configi w `tools/samples/config/` (A9) | N4, N5 | autor |
+| R6 | `AllowDuplicateProperties = false` w `ContractJson.ReadOptions` + testy podwójnego `type`/`kind`; guard/test aliasów w `StrictEnumConverter` (defer do pierwszego nowego enuma) | N7 | autor |
+| R7 | Odłożone niskie: modal MessageBox → epic-deploy-resilience; `OperationCanceled` → epic-home-screen; ambient time w `BannedSymbols` → pierwsza story z czasem w Core; `ShellSnapshotFactoryTests` na poprawnym `ConfigResult` → następny refactor testów | N8 | autor / właściwe epiki |
 
-### Lekcje procesowe
+### Spec reconciliation
 
-| # | Co | Lekcja | Owner |
-|---|----|--------|-------|
-| A9 | Każda story `hitl = true` ma w „Manual checks” krok po kroku skrypt dla UM760 (komendy, gdzie położyć pliki, czego oczekiwać). Przykładowe configi testowe trafiają do repo, np. `tools/samples/config/`, a nie do pliku nieśledzonego | P1 | autor (`bmad-customize` dla `bmad-build` albo zasada w AGENTS.md) |
-| A10 | Zamknięcie story po HITL dopisuje do sekcji Verification planu datowaną linię z wynikiem z UM760, a nie zmienia tylko `status` | P2 | autor i `bmad-build` |
-| A11 | Rejected/deferred findings z warunkiem („gdy X”) trafiają do listy w epic Notes albo do entry ticketu, który spełni warunek. Gdy review znajduje defekt w bazie dziedziczonej (np. `ContractJson.Options`), sprawdza też pozostałych konsumentów | P3 | autor (konwencja triage w `bmad-build`) |
-| A12 | Dla `risk = "medium"` review w pełnym zestawie lenses (adversarial, edge-case, verification-gap) zamiast przypiętego `quick`, albo co najmniej jedno review epiki przed refactor sweep | P4 | autor (decyzja o `review_source: pinned`) |
+| # | Co | Findings | Owner |
+|---|----|----------|-------|
+| R8 | Po akceptacji domknąć epikę przez `bmad-ticket`; w Notes epiki zaktualizować zapis o verdict `rejected` z 2026-10-20 (linia 52) na bieżący wynik; 1.6/1.7 są już `done` | N1, N5, N6 | autor |
 
 ## Acceptance verdict
 
-**Machine verdict: rejected.** Kryteria: **declared** (Done when z epic file).
+**Machine verdict: `accepted-with-open-items`.** Kryteria: **declared** (Done when z epic file).
 
-**Powód: niedokończony ticket `1.6` (Refactor sweep, `state: planned`).** Według reguły unfinished tickets ten jeden wystarcza do `rejected`, niezależnie od kryteriów.
-
-Kryteria Done when wobec dowodów:
+**Powód:** wszystkie 7 ticketów jest `done`, `pending_tickets` jest puste, a pięć punktów Done when ma dowody. Otwarte pozostają findings, które nie łamią kryteriów epiki i mają adresy w R1–R8; N1 (brak re-runu 1.6 na UM760) autor przyjął jako wystarczający dowód z dev machine (2026-10-21).
 
 | # | Kryterium | Stan | Dowód |
 |---|-----------|------|-------|
-| 1 | Testy Core przechodzą; Core bez Win32/WebView2/WPF/systemu plików (AD-3) | spełnione | `dotnet test` 224/224 (2026-10-20); `CoreBoundaryTests.cs`, `BannedSymbols.txt` + `TreatWarningsAsErrors`; luki listy w F5 dotyczą AD-14 i obiektów OS, nie zakresu AD-3 z kryterium |
-| 2 | Typy TS z JSON Schema Core w buildzie web, nikt ich nie edytuje (AD-16) | spełnione | `BuildWeb` (`MediaStation.App.csproj`), `contracts.mjs` z bannerem „nie edytuj ręcznie”, `generated/` w `.gitignore`; Release build 0 ostrzeżeń |
-| 3 | Druga instancja, także `--smoke`, nie startuje (AD-2) | spełnione (dowód pośredni) | plan 1.5 Implementation Notes (kod 3, `instanceRejected` `run`/`smoke`); HITL autora (`66aace8`, sesja `912d7732` 11:48Z); w tym retro sprawdzona tylko ścieżka bez działającej instancji |
-| 4 | Na UM760 błędny config daje ekran błędu zamiast crasha (AD-11) | spełnione (dowód pośredni) | testy `ConfigValidationTests`; plan 1.4 l.91; autor „Przetestowane na UM760” (`3d92a356` 10:19Z, `7567ec4`); probe null w tym retro |
-| 5 | `dotnet publish` na UM760 pokazuje shell z plików lokalnych i loguje JSON Lines w UTC z rotacją dzienną (AD-13) | spełnione | HITL 1.1 i 1.3 (`c228ec4`, `318f704`, sesja `912d7732` 07:08Z i 09:04Z); rotacja przez `JsonLinesLogTests` z `FakeTimeProvider`; linie `ts` z `Z` w logu z tego retro |
+| 1 | Testy Core przechodzą; Core bez Win32/WebView2/WPF/systemu plików (AD-3) | spełnione | `dotnet test` 255/255 (2026-10-21); `CoreBoundaryTests.cs`; `BannedSymbols.txt` + `TreatWarningsAsErrors`; luki ambient time w N8 dotyczą AD-14, nie AD-3 |
+| 2 | Typy TS z JSON Schema Core w buildzie web, nikt ich nie edytuje (AD-16) | spełnione | `BuildWeb` (`MediaStation.App.csproj:42-70`), `contracts.mjs`, `generated/` w `.gitignore`; Release build 0 ostrzeżeń, schema hash bez zmian |
+| 3 | Druga instancja, także `--smoke`, nie startuje (AD-2) | spełnione | 1.5 HITL na UM760 (`66aace8`); 1.6 dev-machine: `instanceRejected` (`run`, `smoke`), `stop {exitCode: 3}` (log 2026-10-21T12:02:51Z/52Z) |
+| 4 | Na UM760 błędny config daje ekran błędu zamiast crasha (AD-11) | spełnione | 1.4 HITL na UM760 (`7567ec4`); 1.6 dev-machine: trzy `configError` z `$.x` i `stop {exitCode: 0}` (log 2026-10-21T12:03:46Z–12:04:14Z) |
+| 5 | `dotnet publish` na UM760 pokazuje shell z plików lokalnych i loguje JSON Lines UTC z rotacją dzienną (AD-13) | spełnione | 1.1/1.3 HITL na UM760; 1.6 self-contained Release publish na dev machine (placeholder, DOM + screenshot); `JsonLinesLogTests` z `FakeTimeProvider`; `ts` z `Z` w logu |
 
-Bez 1.6 epika kwalifikowałaby się na **accepted-with-open-items**: kryteria są spełnione, a otwarte findings (F1, F7–F10, F20) nie blokują Done when i mają adresy w A1–A8.
-
-**Human decision (2026-10-20): autor zostawia `rejected`.** Epika jest **not accepted**, dopóki 1.6 się nie skończy. Po 1.6 retro można wznowić: ten plik zostaje i zostanie uzgodniony z nowymi dowodami.
+**Human decision (2026-10-21): autor podniósł verdict na `accepted`.** Autor przyjął dowód z dev machine dla 1.6 (N1) i zaakceptował R2–R8 jako otwarte/śledzone; R1 pozostaje jako uzupełnienie zapisu w planie, nie jako warunek akceptacji.
 
 ## Open questions
 
-- **Q1. Zakres 1.6. Rozstrzygnięte 2026-10-20:** autor rozszerza 1.6 o A1–A7. Entry 1.6 („tylko cleanup”) trzeba zaktualizować przy starcie przez `bmad-ticket`, bo retro nie edytuje ticketów.
-- **Q2. F8. Rozstrzygnięte 2026-10-20:** naprawa w 1.6 (A4, `FileSystemRights.AppendData`).
-- **Q3. F23 (`Action`, `InputMode`).** Zostawić nazwy z udokumentowanym `global using` w App, czy zmienić je teraz, zanim powstaną konsumenci? Zmiana nazwy zmienia `type` w kopercie i nazwy plików TS, więc wymaga renegocjacji zamrożonego intentu 1.2 i Consistency Conventions.
-- **Q4. Override verdictu. Rozstrzygnięte 2026-10-20:** bez override, `rejected` do czasu ukończenia 1.6.
-- **Niesprawdzone w tym retro:** tryb główny z oknem, druga instancja przy działającej głównej i ekran błędu na UM760. Opieram się na dowodach pośrednich (Behavior verification).
+- **Q1. N1 — UM760 vs dev machine.** Czy dowód z dev machine (commit `65222c5`, log 2026-10-21) wystarcza dla 1.6, czy trzeba powtórzyć trzy checks na UM760? Odpowiedź zmienia, czy epika jest `accepted`, czy zostaje `accepted-with-open-items` z N1.
+- **Q2. N6 — baseline 1.6.** Czy poprawić `baseline_revision` na `65665bd` (rebasowany plan) czy `45a6d95` (baza rebase)? Pierwsze obejmuje plan, drugie plan+build+close.
+- **Q3. N4/A12 — review depth.** Czy od teraz każdy `risk = "medium"` dostaje pełne lenses, czy wystarczy jedno review epiki przed refactor sweep?
+- **Q4. N8 — deferred low.** Czy któreś z odłożonych niskich findings (modal, `OperationCanceled`, ambient time, log limit, test fabryki) ma wejść do najbliższej story, czy zostaje w epikach konsumentów?
