@@ -7,9 +7,10 @@ using MediaStation.Core.Ports;
 namespace MediaStation.App.Hosts;
 
 /// <summary>
-/// Adapter „brak hosta” do czasu epik hostów: <see cref="StartApp"/> nie uruchamia niczego, tylko loguje
-/// <c>startWithoutHost</c> i odpowiada <see cref="CommandFailed"/> z tym samym <c>cmdId</c> (AD-4).
-/// Composition root stawia po jednym adapterze na <see cref="AppType"/>, żeby epiki hostów podmieniały osobno.
+/// Adapter „brak hosta” do czasu epik hostów: <see cref="StartApp"/> i <see cref="StopApp"/> nie robią niczego,
+/// tylko logują <c>startWithoutHost</c>/<c>stopWithoutHost</c> i odpowiadają <see cref="CommandFailed"/> z tym samym
+/// <c>cmdId</c> (AD-4). Composition root stawia po jednym adapterze na <see cref="AppType"/>, żeby epiki hostów
+/// podmieniały osobno.
 /// </summary>
 public sealed class MissingHostPort : IAppHostPort
 {
@@ -28,12 +29,26 @@ public sealed class MissingHostPort : IAppHostPort
         _post = post;
     }
 
-    /// <summary>Loguje jawny fakt braku hosta i wkłada wynik komendy do kolejki Orchestratora; nie rzuca.</summary>
+    /// <summary>Loguje jawny fakt braku hosta startu i wkłada wynik komendy do kolejki Orchestratora; nie rzuca.</summary>
     public void Start(StartApp command)
     {
         ArgumentNullException.ThrowIfNull(command);
 
         _log.Warn(Src, "startWithoutHost", new Dictionary<string, object?>
+        {
+            ["cmdId"] = command.CmdId,
+            ["appId"] = command.AppId,
+        });
+
+        _post(new CommandFailed(command.CmdId, ErrorCode.Unexpected));
+    }
+
+    /// <summary>Loguje jawny fakt braku hosta stopu i wkłada wynik komendy do kolejki Orchestratora; nie rzuca.</summary>
+    public void Stop(StopApp command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        _log.Warn(Src, "stopWithoutHost", new Dictionary<string, object?>
         {
             ["cmdId"] = command.CmdId,
             ["appId"] = command.AppId,

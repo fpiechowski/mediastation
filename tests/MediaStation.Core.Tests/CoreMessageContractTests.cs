@@ -116,6 +116,32 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Close_app_intent_envelope_serializes_exactly_and_round_trips()
+    {
+        Intent close = new CloseApp("netflix");
+
+        var json = ContractJson.SerializeEnvelope(close);
+
+        Assert.Equal("""{"v":1,"type":"closeApp","payload":{"appId":"netflix"}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Intent>(json);
+        Assert.IsType<CloseApp>(back);
+        Assert.Equal(close, back);
+    }
+
+    [Fact]
+    public void Restart_app_intent_envelope_serializes_exactly_and_round_trips()
+    {
+        Intent restart = new RestartApp("netflix");
+
+        var json = ContractJson.SerializeEnvelope(restart);
+
+        Assert.Equal("""{"v":1,"type":"restartApp","payload":{"appId":"netflix"}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Intent>(json);
+        Assert.IsType<RestartApp>(back);
+        Assert.Equal(restart, back);
+    }
+
+    [Fact]
     public void Start_app_command_envelope_serializes_with_cmd_id_first_and_round_trips()
     {
         Command start = new StartApp(2, "netflix");
@@ -126,6 +152,45 @@ public class CoreMessageContractTests
         var back = ContractJson.DeserializeEnvelope<Command>(json);
         Assert.IsType<StartApp>(back);
         Assert.Equal(start, back);
+    }
+
+    [Fact]
+    public void Stop_app_command_envelope_serializes_with_cmd_id_first_and_round_trips()
+    {
+        Command stop = new StopApp(6, "netflix");
+
+        var json = ContractJson.SerializeEnvelope(stop);
+
+        Assert.Equal("""{"v":1,"type":"stopApp","payload":{"cmdId":6,"appId":"netflix"}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<StopApp>(back);
+        Assert.Equal(stop, back);
+    }
+
+    [Fact]
+    public void Process_exited_event_envelope_serializes_exactly_and_round_trips()
+    {
+        Event exited = new ProcessExited("netflix");
+
+        var json = ContractJson.SerializeEnvelope(exited);
+
+        Assert.Equal("""{"v":1,"type":"processExited","payload":{"appId":"netflix"}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Event>(json);
+        Assert.IsType<ProcessExited>(back);
+        Assert.Equal(exited, back);
+    }
+
+    [Fact]
+    public void Foreground_changed_event_envelope_serializes_exactly_and_round_trips()
+    {
+        Event changed = new ForegroundChanged(1234);
+
+        var json = ContractJson.SerializeEnvelope(changed);
+
+        Assert.Equal("""{"v":1,"type":"foregroundChanged","payload":{"hwnd":1234}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Event>(json);
+        Assert.IsType<ForegroundChanged>(back);
+        Assert.Equal(changed, back);
     }
 
     [Fact]
@@ -189,7 +254,11 @@ public class CoreMessageContractTests
         Assert.IsAssignableFrom<IOrchestratorMessage>(new CommandCompleted(1));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new LaunchApp("netflix"));
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new CloseApp("netflix"));
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new RestartApp("netflix"));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new AppWindowAttached("netflix", 1, 2));
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new ProcessExited("netflix"));
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new ForegroundChanged(1));
     }
 
     [Fact]
@@ -306,7 +375,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "launchApp", "setInputRouting", "startApp", "activateWindow", "minimizeWindow", "showShell", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached"], names);
+        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "startApp", "stopApp", "activateWindow", "minimizeWindow", "showShell", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "foregroundChanged"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -331,17 +400,22 @@ public class CoreMessageContractTests
                 "activate-window.schema.json",
                 "app-window-attached.schema.json",
                 "apps-config.schema.json",
+                "close-app.schema.json",
                 "command-completed.schema.json",
                 "command-failed.schema.json",
+                "foreground-changed.schema.json",
                 "input-config.schema.json",
                 "launch-app.schema.json",
                 "minimize-window.schema.json",
                 "orchestrator-started.schema.json",
+                "process-exited.schema.json",
+                "restart-app.schema.json",
                 "set-input-routing.schema.json",
                 "settings.schema.json",
                 "shell-snapshot.schema.json",
                 "show-shell.schema.json",
                 "start-app.schema.json",
+                "stop-app.schema.json",
                 "system-resumed.schema.json",
             ],
             files);
@@ -432,8 +506,13 @@ public class CoreMessageContractTests
 
     [Theory]
     [InlineData("launch-app.schema.json", "LaunchApp", "appId")]
+    [InlineData("close-app.schema.json", "CloseApp", "appId")]
+    [InlineData("restart-app.schema.json", "RestartApp", "appId")]
     [InlineData("start-app.schema.json", "StartApp", "cmdId,appId")]
+    [InlineData("stop-app.schema.json", "StopApp", "cmdId,appId")]
     [InlineData("app-window-attached.schema.json", "AppWindowAttached", "appId,hwnd,rootPid")]
+    [InlineData("process-exited.schema.json", "ProcessExited", "appId")]
+    [InlineData("foreground-changed.schema.json", "ForegroundChanged", "hwnd")]
     [InlineData("activate-window.schema.json", "ActivateWindow", "cmdId,hwnd")]
     [InlineData("minimize-window.schema.json", "MinimizeWindow", "cmdId,hwnd")]
     [InlineData("show-shell.schema.json", "ShowShell", "cmdId")]
@@ -455,12 +534,17 @@ public class CoreMessageContractTests
     {
         Assert.Equal("string", Schema("launch-app.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
         Assert.Equal("string", Schema("start-app.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
+        Assert.Equal("string", Schema("close-app.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
+        Assert.Equal("string", Schema("restart-app.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
+        Assert.Equal("string", Schema("stop-app.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
+        Assert.Equal("string", Schema("process-exited.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
 
         var attached = Schema("app-window-attached.schema.json")["properties"]!;
         Assert.Equal("string", attached["appId"]!["type"]!.GetValue<string>());
         Assert.Equal("integer", attached["hwnd"]!["type"]!.GetValue<string>());
         Assert.Equal("integer", attached["rootPid"]!["type"]!.GetValue<string>());
 
+        Assert.Equal("integer", Schema("foreground-changed.schema.json")["properties"]!["hwnd"]!["type"]!.GetValue<string>());
         Assert.Equal("integer", Schema("activate-window.schema.json")["properties"]!["hwnd"]!["type"]!.GetValue<string>());
         Assert.Equal("integer", Schema("minimize-window.schema.json")["properties"]!["hwnd"]!["type"]!.GetValue<string>());
     }

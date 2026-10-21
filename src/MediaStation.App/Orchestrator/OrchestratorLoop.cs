@@ -121,6 +121,15 @@ public sealed class OrchestratorLoop : IDisposable
                     });
                 }
 
+                // Zmiana foregroundu to fakt zapisany w logu bez reakcji: tryb i dźwięk ustala epic-windows-audio.
+                if (message is ForegroundChanged changed)
+                {
+                    _log.Info(Src, "foregroundChanged", new Dictionary<string, object?>
+                    {
+                        ["hwnd"] = changed.Hwnd,
+                    });
+                }
+
                 // Komendy są fire-and-forget (AD-14): dispatcher kieruje je do portów bez czekania na wynik.
                 // Snapshot publikujemy dopiero po wysłaniu komend, żeby wykonawca nie wyprzedził widoku.
                 _dispatch(result.Commands);

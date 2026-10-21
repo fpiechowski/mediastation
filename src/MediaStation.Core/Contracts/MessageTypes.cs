@@ -15,8 +15,11 @@ public static class MessageTypes
     [
         typeof(Action),
         typeof(LaunchApp),
+        typeof(CloseApp),
+        typeof(RestartApp),
         typeof(SetInputRouting),
         typeof(StartApp),
+        typeof(StopApp),
         typeof(ActivateWindow),
         typeof(MinimizeWindow),
         typeof(ShowShell),
@@ -25,6 +28,8 @@ public static class MessageTypes
         typeof(OrchestratorStarted),
         typeof(SystemResumed),
         typeof(AppWindowAttached),
+        typeof(ProcessExited),
+        typeof(ForegroundChanged),
     ];
 
     private static readonly Dictionary<string, Type> ByName = BuildIndex(All);

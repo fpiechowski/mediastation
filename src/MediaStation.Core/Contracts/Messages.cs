@@ -30,10 +30,23 @@ public abstract record Event : IOrchestratorMessage;
 public sealed record OrchestratorStarted : Event;
 
 /// <summary>
-/// Wybór kafelka w Shellu (AD-16): Orchestrator uruchamia aplikację <see cref="AppId"/> tylko ze stanu
-/// <c>NotRunning</c>, a pozostałe stany są w tej story ignorowane.
+/// Wybór kafelka w Shellu (AD-16): Orchestrator uruchamia aplikację <see cref="AppId"/> ze stanu
+/// <c>NotRunning</c> albo przywraca ją z <c>Background</c> (<c>ActivateWindow</c> i routing wejścia);
+/// pozostałe stany są ignorowane.
 /// </summary>
 public sealed record LaunchApp(string AppId) : Intent;
+
+/// <summary>
+/// Zamknięcie aplikacji z kafelka (AD-16): działa wyłącznie w <c>Background</c>, gdzie Orchestrator
+/// przechodzi w <c>Stopping</c> i wysyła <c>StopApp</c>.
+/// </summary>
+public sealed record CloseApp(string AppId) : Intent;
+
+/// <summary>
+/// Restart aplikacji z kafelka (AD-16): działa wyłącznie w <c>Background</c>; po potwierdzonym stopie
+/// Orchestrator startuje aplikację ponownie (<c>StartApp</c>).
+/// </summary>
+public sealed record RestartApp(string AppId) : Intent;
 
 /// <summary>
 /// Komputer wrócił z uśpienia; adapter power raportuje fakt, a Orchestrator przechodzi na ekran główny
@@ -48,6 +61,19 @@ public sealed record SystemResumed(string Source) : Event;
 /// <param name="Hwnd">Uchwyt okna; <c>long</c>, bo <c>IntPtr</c> nie jest kontraktem JSON, a HWND nie mieści się w <c>int</c>.</param>
 /// <param name="RootPid">PID korzenia drzewa procesów aplikacji; WindowManager i AudioRouter dostają go w dalszych komendach.</param>
 public sealed record AppWindowAttached(string AppId, long Hwnd, int RootPid) : Event;
+
+/// <summary>
+/// Proces aplikacji zakończył się (AD-4): host raportuje fakt, który zamyka <c>Stopping</c> (AD-10) bez czekania
+/// na <see cref="CommandCompleted"/>. Poza <c>Stopping</c> jest ignorowany (przejście w <c>Failed</c> należy do story 4).
+/// </summary>
+public sealed record ProcessExited(string AppId) : Event;
+
+/// <summary>
+/// Foreground systemu zmienił się na okno <see cref="Hwnd"/>. Orchestrator nie zmienia stanu —
+/// pętla zapisuje fakt w logu, a reakcję (dopasowanie trybu, wyciszenie) ustala epic-windows-audio.
+/// </summary>
+/// <param name="Hwnd">Uchwyt okna; <c>long</c> z tego samego powodu co w <see cref="AppWindowAttached"/>.</param>
+public sealed record ForegroundChanged(long Hwnd) : Event;
 
 /// <summary>Wykonawca zakończył komendę <see cref="CmdId"/> sukcesem (AD-4).</summary>
 public sealed record CommandCompleted(long CmdId) : Event;

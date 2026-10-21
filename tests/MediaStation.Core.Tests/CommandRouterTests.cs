@@ -24,6 +24,18 @@ public class CommandRouterTests
     }
 
     [Fact]
+    public void Stop_app_goes_to_host_of_its_app_type()
+    {
+        var (router, hosts, _, _, _) = CreateRouter();
+
+        router.Dispatch([new StopApp(1, "netflix"), new StopApp(2, "plex"), new StopApp(3, "moonlight-pc")]);
+
+        Assert.Equal([new StopApp(1, "netflix")], hosts[AppType.Web].Stopped);
+        Assert.Equal([new StopApp(2, "plex")], hosts[AppType.Native].Stopped);
+        Assert.Equal([new StopApp(3, "moonlight-pc")], hosts[AppType.Moonlight].Stopped);
+    }
+
+    [Fact]
     public void Window_commands_go_to_window_manager()
     {
         var (router, _, window, _, _) = CreateRouter();
@@ -85,6 +97,44 @@ public class CommandRouterTests
     }
 
     [Fact]
+    public void Stop_app_for_unknown_app_logs_warn_without_throwing()
+    {
+        var (router, hosts, _, _, log) = CreateRouter();
+
+        router.Dispatch([new StopApp(11, "nope")]);
+
+        Assert.All(hosts.Values, host => Assert.Empty(host.Stopped));
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Warn, entry.Level);
+        Assert.Equal("commandForUnknownApp", entry.Msg);
+        Assert.Equal(11L, entry.Data!["cmdId"]);
+        Assert.Equal("nope", entry.Data["appId"]);
+    }
+
+    [Fact]
+    public void Stop_app_for_known_app_without_host_logs_warn_without_throwing()
+    {
+        var log = new RecordingLog();
+        var web = new FakeHost();
+        var router = new CommandRouter(
+            new Dictionary<string, AppType> { ["netflix"] = AppType.Web, ["plex"] = AppType.Native },
+            new Dictionary<AppType, IAppHostPort> { [AppType.Web] = web },
+            new FakeWindowManager(),
+            new FakeInputRouting(),
+            log);
+
+        router.Dispatch([new StopApp(12, "plex")]);
+
+        Assert.Empty(web.Stopped);
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Warn, entry.Level);
+        Assert.Equal("commandWithoutPort", entry.Msg);
+        Assert.Equal(12L, entry.Data!["cmdId"]);
+        Assert.Equal("plex", entry.Data["appId"]);
+        Assert.Equal(AppType.Native, entry.Data["appType"]);
+    }
+
+    [Fact]
     public void Command_without_port_logs_warn_without_throwing()
     {
         var (router, hosts, window, input, log) = CreateRouter();
@@ -133,7 +183,11 @@ public class CommandRouterTests
     {
         public List<StartApp> Started { get; } = [];
 
+        public List<StopApp> Stopped { get; } = [];
+
         public void Start(StartApp command) => Started.Add(command);
+
+        public void Stop(StopApp command) => Stopped.Add(command);
     }
 
     private sealed class FakeWindowManager : IWindowManagerPort

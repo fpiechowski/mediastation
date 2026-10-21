@@ -7,8 +7,8 @@ using MediaStation.Core.Ports;
 namespace MediaStation.App.Orchestrator;
 
 /// <summary>
-/// Jedno wyjście Orchestratora do wykonawców (decyzja epiki): <see cref="StartApp"/> trafia do hosta
-/// wybranego po <see cref="AppType"/> z mapy <c>appId → AppType</c> z configu, komendy okienkowe do
+/// Jedno wyjście Orchestratora do wykonawców (decyzja epiki): <see cref="StartApp"/> i <see cref="StopApp"/>
+/// trafiają do hosta wybranego po <see cref="AppType"/> z mapy <c>appId → AppType</c> z configu, komendy okienkowe do
 /// <see cref="IWindowManagerPort"/>, a <see cref="SetInputRouting"/> do <see cref="IInputRoutingPort"/>.
 /// Komenda bez portu i komenda dla nieznanej aplikacji kończą się wpisem <c>warn</c>, nigdy wyjątkiem.
 /// </summary>
@@ -52,7 +52,18 @@ public sealed class CommandRouter
             switch (command)
             {
                 case StartApp start:
-                    DispatchStart(start);
+                    if (TryGetHost(start.CmdId, start.AppId, out var startHost))
+                    {
+                        startHost.Start(start);
+                    }
+
+                    break;
+                case StopApp stop:
+                    if (TryGetHost(stop.CmdId, stop.AppId, out var stopHost))
+                    {
+                        stopHost.Stop(stop);
+                    }
+
                     break;
                 case WindowCommand window:
                     _windowManager.Execute(window);
@@ -71,29 +82,36 @@ public sealed class CommandRouter
         }
     }
 
-    private void DispatchStart(StartApp start)
+    /// <summary>
+    /// Wspólne wyjście do hosta dla komend aplikacji: nieznana aplikacja (<c>commandForUnknownApp</c>)
+    /// i brak hosta dla jej typu (<c>commandWithoutPort</c>) to <c>warn</c> bez wyjątku.
+    /// </summary>
+    private bool TryGetHost(long cmdId, string appId, out IAppHostPort host)
     {
-        if (!_appTypes.TryGetValue(start.AppId, out var appType))
+        if (!_appTypes.TryGetValue(appId, out var appType))
         {
             _log.Warn(Src, "commandForUnknownApp", new Dictionary<string, object?>
             {
-                ["cmdId"] = start.CmdId,
-                ["appId"] = start.AppId,
+                ["cmdId"] = cmdId,
+                ["appId"] = appId,
             });
-            return;
+            host = null!;
+            return false;
         }
 
-        if (!_hosts.TryGetValue(appType, out var host))
+        if (!_hosts.TryGetValue(appType, out var resolved))
         {
             _log.Warn(Src, "commandWithoutPort", new Dictionary<string, object?>
             {
-                ["cmdId"] = start.CmdId,
-                ["appId"] = start.AppId,
+                ["cmdId"] = cmdId,
+                ["appId"] = appId,
                 ["appType"] = appType,
             });
-            return;
+            host = null!;
+            return false;
         }
 
-        host.Start(start);
+        host = resolved;
+        return true;
     }
 }

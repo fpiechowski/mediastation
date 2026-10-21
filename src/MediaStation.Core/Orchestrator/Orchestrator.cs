@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
+using ActionMessage = MediaStation.Core.Contracts.Action;
 
 namespace MediaStation.Core.Orchestrator;
 
@@ -24,6 +25,7 @@ public sealed class Orchestrator
     private readonly List<AppState> _apps;
     private readonly Dictionary<string, AppState> _appsById;
     private readonly Dictionary<long, string> _pendingStarts = [];
+    private readonly Dictionary<long, PendingStop> _pendingStops = [];
     private long _rev;
     private long _focusSeq;
     private long _cmdId;
@@ -58,8 +60,12 @@ public sealed class Orchestrator
         {
             OrchestratorStarted => OnOrchestratorStarted(),
             SystemResumed => OnDefaultFocus(),
+            ActionMessage action => OnHome(action),
             LaunchApp launch => OnLaunchApp(launch),
+            CloseApp close => OnStop(close.AppId, restart: false),
+            RestartApp restart => OnStop(restart.AppId, restart: true),
             AppWindowAttached attached => OnAppWindowAttached(attached),
+            ProcessExited exited => OnProcessExited(exited),
             CommandCompleted completed => OnCommandCompleted(completed),
             CommandFailed failed => OnCommandFailed(failed),
             _ => OrchestratorResult.None,
@@ -88,12 +94,23 @@ public sealed class Orchestrator
     }
 
     /// <summary>
-    /// Wybór kafelka uruchamia tylko aplikację w <c>NotRunning</c>; <c>cmdId</c> zostaje w korelacji startu.
-    /// Story 10 dołoży przełączanie z <c>Background</c>, story 7 adopcję.
+    /// Wybór kafelka uruchamia aplikację w <c>NotRunning</c> (<c>cmdId</c> zostaje w korelacji startu)
+    /// albo przywraca ją z <c>Background</c>. Przełączanie między dwiema żywymi aplikacjami i adopcję
+    /// (story 6/7) dokładają osobne gałęzie.
     /// </summary>
     private OrchestratorResult OnLaunchApp(LaunchApp launch)
     {
-        if (!_appsById.TryGetValue(launch.AppId, out var app) || app.State != AppLifecycleState.NotRunning)
+        if (!_appsById.TryGetValue(launch.AppId, out var app))
+        {
+            return OrchestratorResult.None;
+        }
+
+        if (app.State == AppLifecycleState.Background)
+        {
+            return app.Hwnd is { } hwnd ? OnResume(app, hwnd) : OrchestratorResult.None;
+        }
+
+        if (app.State != AppLifecycleState.NotRunning)
         {
             return OrchestratorResult.None;
         }
@@ -105,7 +122,52 @@ public sealed class Orchestrator
     }
 
     /// <summary>
+    /// Powrót z tła: proces żyje, więc wystarczą <see cref="ActivateWindow"/> i routing wejścia aplikacji.
+    /// Guard „inna aplikacja w <c>Foreground</c>/<c>Starting</c>” chroni niezmiennik jednej aplikacji
+    /// na pierwszym planie; politykę przełączania ustala story 6.
+    /// </summary>
+    private OrchestratorResult OnResume(AppState app, long hwnd)
+    {
+        if (AnotherAppIsActive(app))
+        {
+            return OrchestratorResult.None;
+        }
+
+        app.State = AppLifecycleState.Foreground;
+        var activate = new ActivateWindow(NextCmdId(), hwnd);
+        var routing = new SetInputRouting(NextCmdId(), InputMode.App, app.Type, app.Pointer, NextEpoch());
+        return new OrchestratorResult([activate, routing], Snapshot());
+    }
+
+    /// <summary>
+    /// Home z pierwszego planu: aplikacja schodzi do <c>Background</c>, shell wraca na wierzch, a InputHub
+    /// dostaje tryb <c>shell</c>. Kolejność komend jest istotna (AD-5/AD-15): najpierw minimalizacja,
+    /// potem <see cref="ShowShell"/>, na końcu routing. Fokusu nie zmieniamy — UI sam wraca na ostatni kafelek.
+    /// Home bez aplikacji w <c>Foreground</c> (także w <c>Starting</c>/<c>Stopping</c>) jest ignorowany.
+    /// </summary>
+    private OrchestratorResult OnHome(ActionMessage action)
+    {
+        if (action.Kind != ActionKind.Home)
+        {
+            return OrchestratorResult.None;
+        }
+
+        var app = _apps.Find(candidate => candidate.State == AppLifecycleState.Foreground);
+        if (app?.Hwnd is not { } hwnd)
+        {
+            return OrchestratorResult.None;
+        }
+
+        app.State = AppLifecycleState.Background;
+        var minimize = new MinimizeWindow(NextCmdId(), hwnd);
+        var showShell = new ShowShell(NextCmdId());
+        var routing = new SetInputRouting(NextCmdId(), InputMode.Shell, null, PointerPolicy.Blocked, NextEpoch());
+        return new OrchestratorResult([minimize, showShell, routing], Snapshot());
+    }
+
+    /// <summary>
     /// Okno po starcie daje <c>Foreground</c>: aktywacja okna i routing wejścia według tabeli AD-8.
+    /// <c>hwnd</c> zostaje w stanie aplikacji, bo Home minimalizuje po nim okno, a powrót z tła je aktywuje.
     /// Poza <c>Starting</c> fakt jest ignorowany; adopcję (story 7) dokłada osobna gałąź.
     /// </summary>
     private OrchestratorResult OnAppWindowAttached(AppWindowAttached attached)
@@ -116,28 +178,120 @@ public sealed class Orchestrator
         }
 
         app.State = AppLifecycleState.Foreground;
+        app.Hwnd = attached.Hwnd;
         var activate = new ActivateWindow(NextCmdId(), attached.Hwnd);
         var routing = new SetInputRouting(NextCmdId(), InputMode.App, app.Type, app.Pointer, NextEpoch());
         return new OrchestratorResult([activate, routing], Snapshot());
     }
 
     /// <summary>
-    /// Sukces startu nie zmienia stanu w tej story: <c>Foreground</c> daje wyłącznie
-    /// <see cref="AppWindowAttached"/>. Korelacja kończy się razem z wynikiem komendy.
+    /// Zamknięcie albo restart aplikacji z <c>Background</c>: Orchestrator przechodzi w <c>Stopping</c>
+    /// i wysyła <c>StopApp</c> z <c>cmdId</c> w korelacji stopu. Poza <c>Background</c> intencja jest ignorowana
+    /// (przejście w <c>Failed</c> dokłada story 4), podobnie gdy innemu zadaniu należy się pierwszy plan:
+    /// restart skończyłby się w <c>Starting</c> → <c>Foreground</c>, czyli w dwóch aplikacjach naraz.
+    /// </summary>
+    private OrchestratorResult OnStop(string appId, bool restart)
+    {
+        if (!_appsById.TryGetValue(appId, out var app)
+            || app.State != AppLifecycleState.Background
+            || AnotherAppIsActive(app))
+        {
+            return OrchestratorResult.None;
+        }
+
+        var cmdId = NextCmdId();
+        app.State = AppLifecycleState.Stopping;
+        _pendingStops.Add(cmdId, new PendingStop(app.AppId, restart));
+        return new OrchestratorResult([new StopApp(cmdId, app.AppId)], Snapshot());
+    }
+
+    /// <summary>
+    /// Niezmiennik „jedna aplikacja na pierwszym planie”: inna aplikacja w <c>Foreground</c>/<c>Starting</c>
+    /// blokuje powrót z tła, zamknięcie i restart. Politykę przełączania (story 6) to nie jest.
+    /// </summary>
+    private bool AnotherAppIsActive(AppState app) =>
+        _apps.Exists(other => !ReferenceEquals(other, app)
+            && other.State is AppLifecycleState.Foreground or AppLifecycleState.Starting);
+
+    /// <summary>
+    /// Sukces komendy domyka najpierw stop (<c>Stopping</c> → <c>NotRunning</c> albo <c>Starting</c> przy restarcie),
+    /// a dopiero potem korelację startu. Sukces startu nie zmienia stanu: <c>Foreground</c> daje
+    /// <see cref="AppWindowAttached"/>.
     /// </summary>
     private OrchestratorResult OnCommandCompleted(CommandCompleted completed)
     {
+        if (_pendingStops.Remove(completed.CmdId, out var stopped))
+        {
+            return OnStopped(stopped);
+        }
+
         _pendingStarts.Remove(completed.CmdId);
         return OrchestratorResult.None;
     }
 
     /// <summary>
-    /// Porażka startu nie zmienia stanu w tej story — logowanie i przejście w <c>Failed</c> dokłada story 4.
+    /// Porażka stopu nie jest dowodem, że proces zniknął: stan zostaje <c>Stopping</c>, a korelacja czeka
+    /// na <see cref="ProcessExited"/> (timeout należy do story 11). Porażka startu nie zmienia stanu —
+    /// logowanie i przejście w <c>Failed</c> dokłada story 4.
     /// </summary>
     private OrchestratorResult OnCommandFailed(CommandFailed failed)
     {
         _pendingStarts.Remove(failed.CmdId);
         return OrchestratorResult.None;
+    }
+
+    /// <summary>
+    /// Zakończony proces domyka <c>Stopping</c> tak samo jak potwierdzony <see cref="StopApp"/>.
+    /// Poza <c>Stopping</c> fakt jest ignorowany (przejście w <c>Failed</c> należy do story 4),
+    /// a aplikacja bez korelacji stopu nie zmienia stanu.
+    /// </summary>
+    private OrchestratorResult OnProcessExited(ProcessExited exited)
+    {
+        if (!_appsById.TryGetValue(exited.AppId, out var app) || app.State != AppLifecycleState.Stopping)
+        {
+            return OrchestratorResult.None;
+        }
+
+        if (FindPendingStop(app.AppId) is not { } cmdId)
+        {
+            return OrchestratorResult.None;
+        }
+
+        var pending = _pendingStops[cmdId];
+        _pendingStops.Remove(cmdId);
+        return OnStopped(pending);
+    }
+
+    /// <summary>Wspólny koniec stopu: restart startuje aplikację od nowa, zamknięcie kończy się w <c>NotRunning</c>.</summary>
+    private OrchestratorResult OnStopped(PendingStop stop)
+    {
+        var app = _appsById[stop.AppId];
+        app.Hwnd = null;
+
+        if (!stop.Restart)
+        {
+            app.State = AppLifecycleState.NotRunning;
+            return new OrchestratorResult([], Snapshot());
+        }
+
+        var cmdId = NextCmdId();
+        app.State = AppLifecycleState.Starting;
+        _pendingStarts.Add(cmdId, app.AppId);
+        return new OrchestratorResult([new StartApp(cmdId, app.AppId)], Snapshot());
+    }
+
+    /// <summary><c>cmdId</c> korelacji stopu dla aplikacji; <c>null</c>, gdy stop nie jest w toku.</summary>
+    private long? FindPendingStop(string appId)
+    {
+        foreach (var (cmdId, pending) in _pendingStops)
+        {
+            if (pending.AppId == appId)
+            {
+                return cmdId;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Snapshot bieżącego stanu; powtarza ostatni <see cref="FocusRequest"/>, bo UI stosuje <c>seq</c> raz.</summary>
@@ -184,5 +338,11 @@ public sealed class Orchestrator
         public PointerPolicy Pointer { get; } = pointer;
 
         public AppLifecycleState State { get; set; } = AppLifecycleState.NotRunning;
+
+        /// <summary>Uchwyt okna z <see cref="AppWindowAttached"/>; <c>null</c> po zamknięciu albo restarcie.</summary>
+        public long? Hwnd { get; set; }
     }
+
+    /// <summary>Korelacja <c>cmdId → aplikacja</c> dla <see cref="StopApp"/>; <c>Restart</c> wybiera stan po stopie.</summary>
+    private sealed record PendingStop(string AppId, bool Restart);
 }

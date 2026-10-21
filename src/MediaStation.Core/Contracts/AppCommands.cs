@@ -7,6 +7,12 @@ namespace MediaStation.Core.Contracts;
 public sealed record StartApp(long CmdId, string AppId) : Command(CmdId);
 
 /// <summary>
+/// Komenda zamknięcia aplikacji do hosta jej <see cref="AppType"/> (AD-4, AD-11). Niesie wyłącznie
+/// <see cref="AppId"/>, bo host zna swoje aplikacje i wie, jak zakończyć proces.
+/// </summary>
+public sealed record StopApp(long CmdId, string AppId) : Command(CmdId);
+
+/// <summary>
 /// Baza komend WindowManagera, jedynego kodu zmieniającego widoczność, Z-order i foreground okien (AD-15).
 /// </summary>
 public abstract record WindowCommand(long CmdId) : Command(CmdId);

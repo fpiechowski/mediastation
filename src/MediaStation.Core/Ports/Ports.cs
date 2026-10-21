@@ -11,6 +11,9 @@ public interface IAppHostPort
 {
     /// <summary>Uruchamia aplikację; host odpowiada <see cref="CommandCompleted"/> albo <see cref="CommandFailed"/>.</summary>
     void Start(StartApp command);
+
+    /// <summary>Zamyka aplikację; host odpowiada <see cref="CommandCompleted"/> albo <see cref="CommandFailed"/>.</summary>
+    void Stop(StopApp command);
 }
 
 /// <summary>

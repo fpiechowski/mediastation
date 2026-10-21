@@ -106,6 +106,42 @@ public class OrchestratorLoopTests
     }
 
     [Fact]
+    public void Foreground_changed_is_logged_without_changing_state()
+    {
+        var log = new RecordingLog();
+        using var loop = CreateLoop(out var published, out _, log);
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        loop.Post(new ForegroundChanged(1234));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "foregroundChanged"));
+
+        // Pętla loguje przed dispatch/publish, więc sam wpis nie dowodzi braku snapshotu: SystemResumed
+        // publikuje kolejny snapshot z nowym `seq`, a gdyby `ForegroundChanged` też publikował, kolejka
+        // miałaby o jeden wpis więcej (albo snapshot bez nowego `seq`).
+        loop.Post(new SystemResumed("PBT_APMRESUMEAUTOMATIC"));
+        WaitFor(() => published.Any(snapshot => snapshot.FocusRequest?.Seq == 2));
+
+        var snapshots = published.ToArray();
+        Assert.Collection(
+            snapshots,
+            snapshot =>
+            {
+                Assert.Equal(1, snapshot.Rev);
+                Assert.Equal(1, snapshot.FocusRequest!.Seq);
+            },
+            snapshot =>
+            {
+                Assert.Equal(2, snapshot.Rev);
+                Assert.Equal(2, snapshot.FocusRequest!.Seq);
+            });
+        var entry = Assert.Single(log.Entries, entry => entry.Msg == "foregroundChanged");
+        Assert.Equal(LogLevel.Info, entry.Level);
+        Assert.Equal("orchestrator", entry.Src);
+        Assert.Equal(1234L, entry.Data!["hwnd"]);
+    }
+
+    [Fact]
     public void Missing_host_answer_returns_to_the_queue_and_keeps_app_starting()
     {
         var log = new RecordingLog();
