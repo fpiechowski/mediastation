@@ -12,7 +12,7 @@ risk: medium
 
 ## Description
 
-CAP-2: kilka aplikacji działa naraz i przełącza się bez zamykania, każda ma jawny stan cyklu życia. Epika dostarcza Orchestrator jako jedynego writera stanu sesji (jedna kolejka, Commands fire-and-forget, `transitionId`, `TimerElapsed`), adopcję sierot, ścieżkę wybudzenia i `focusRequest` w snapshotach oraz produkcyjny adapter SystemEvents (power, procesy), żeby wybudzenie z Modern Standby docierało do Core na UM760.
+CAP-2: kilka aplikacji działa naraz i przełącza się bez zamykania, każda ma jawny stan cyklu życia. Epika dostarcza Orchestrator jako jedynego writera stanu sesji (jedna kolejka, Commands fire-and-forget, `transitionId`, `TimerElapsed`), adopcję sierot, ścieżkę wybudzenia i `focusRequest` w snapshotach oraz produkcyjny adapter SystemEvents (power, procesy), żeby wybudzenie z Modern Standby docierało do Core na aktualnej maszynie.
 
 ## Outcome
 
@@ -21,11 +21,11 @@ Kolejne epiki podpinają hosty i wykonawców do jednego właściciela decyzji, s
 ## Done when
 
 1. Testy Orchestratora na fake'ach portów z `FakeTimeProvider` pokrywają pięć scenariuszy z success CAP-2: przejścia z `Failed`, Home w trakcie `Starting`, adopcję przeglądarki i Moonlighta po restarcie, wybudzenie z `focusRequest{default}`, awarię aplikacji na pierwszym planie z fokusem na jej kafelku (AD-10, AD-14).
-2. Na UM760 Orchestrator działa w composition root, shell dostaje snapshoty (AD-16), a wybudzenie z Modern Standby przez SystemEvents daje `focusRequest{default}` (AD-10).
+2. Na aktualnej maszynie Orchestrator działa w composition root, shell dostaje snapshoty (AD-16), a check wybudzenia z Modern Standby przez SystemEvents jest best-effort: jeśli sprzęt nie jest dostępny, wystarczają testy Core i logi (AD-10).
 
 ## Boundaries
 
-Core: Orchestrator, stan sesji, polityka wyboru przy Home; App: SystemEvents. Nie: hosty aplikacji (epic-browserhost, epic-moonlight-native), WindowManager i AudioRouter (epic-windows-audio), UI (epic-home-screen). Weryfikacja J4 na UM760 jest w epic-browserhost.
+Core: Orchestrator, stan sesji, polityka wyboru przy Home; App: SystemEvents. Nie: hosty aplikacji (epic-browserhost, epic-moonlight-native), WindowManager i AudioRouter (epic-windows-audio), UI (epic-home-screen). Weryfikacja J4 na aktualnej maszynie (best-effort) jest w epic-browserhost.
 
 ## References
 
@@ -66,7 +66,8 @@ Core: Orchestrator, stan sesji, polityka wyboru przy Home; App: SystemEvents. Ni
 - Decision (przegląd pod pętlę, 2026-10-21): właściciele rekordów — `OrchestratorStarted` story 1, `SystemResumed` story 2, `LaunchApp`/`AppWindowAttached`/`StartApp` i komendy WindowManager story 3, `CloseApp`/`RestartApp`/`StopApp`/`ProcessExited`/`ForegroundChanged` story 10, `CdpLost` story 4, `ScheduleTimer`/`CancelTimer`/`TimerElapsed` story 5, `ProbeExisting` story 7, `RenewSession` story 8.
 - Decision (przegląd pod pętlę, 2026-10-21): wybór sygnału wybudzenia w story 2 — wygrywa pierwszy z `PBT_APMRESUMEAUTOMATIC` albo `GUID_CONSOLE_DISPLAY_STATE=on`, kolejne w ciągu 5 s są pomijane; autor może to zmienić przy `plan_checkpoint` story 2 na podstawie pomiaru.
 - Decision (przegląd pod pętlę, 2026-10-21): story 5 podzielona na 5 (scheduler, timeout Starting, ambient time) i 11 (timeout Stopping, `stoppingTimeout`, granice); górna granica 600 s dla `startingTimeout` i `stoppingTimeout`, bez reguły „`stoppingTimeout` > 30 s”.
-- Decision (przegląd pod pętlę, 2026-10-21): wynik każdego checku HITL trafia do notatki odbioru epiku z datą, HEAD i nazwą maszyny; maszyna dev nie zastępuje UM760 bez decyzji autora (retro epiki 1, P2/P7).
+- Decision (przegląd pod pętlę, 2026-10-21): wynik każdego checku HITL trafia do notatki odbioru epiku z datą, HEAD i nazwą maszyny; UM760 nie jest wymagany, akceptujemy evidence z aktualnej maszyny (retro epiki 1, P2/P7).
 - Decision (przegląd pod pętlę, 2026-10-21): adopcja w story 7 wysyła po `MinimizeWindow` także `ShowShell`, bo Z-order shella zmienia tylko WindowManager (AD-15).
 - Decision: bez closing end-to-end suite — spec nie ma test planu dla CAP-2, a scenariusze pokrywają testy stories (2026-10-21).
-- Decision (bmad-loop, 2026-10-21): epika 2 jest puszczona w pełni automatycznie do `epic-boundary`; 2.1, 2.2 i 2.9 nie są `hitl` i nie mają `plan_checkpoint`/`done_checkpoint`. Ręczne checki UM760 i akceptacja planu story 2 przenoszą się na odbiór epiku; wyniki idą do notatki odbioru lub bugów.
+- Decision (bmad-loop, 2026-10-21): epika 2 jest puszczona w pełni automatycznie do `epic-boundary`; 2.1, 2.2 i 2.9 nie są `hitl` i nie mają `plan_checkpoint`/`done_checkpoint`. Checki sprzętowe są best-effort na aktualnej maszynie; UM760 nie jest wymagany, a wyniki idą do notatki odbioru lub bugów.
+- Decision (2026-10-21): UM760 nie jest dostępny dla bmad-loop. Agent testuje automatycznie na aktualnej maszynie (ALDER, B760 Pro RS/D4, Windows 11 Home), akceptuje najmocniejszy dostępny dowód i nie parkuje ticketu dla checków sprzętowych; brak Modern Standby/pilota/TV jest not applicable, nie blocker.

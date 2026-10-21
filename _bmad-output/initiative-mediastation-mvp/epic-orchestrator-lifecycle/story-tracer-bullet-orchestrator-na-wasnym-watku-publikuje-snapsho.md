@@ -17,7 +17,7 @@ Dodaje w Core Orchestrator jako czysty handler (komunikat → Commands i snapsho
 
 ## Acceptance Criteria
 
-Verify: `dotnet test` przechodzi z testami monotonicznego `rev`, `focusRequest{default}` w snapshocie z `OrchestratorStarted` i helpera `DispatcherLogged`, a Release self-contained uruchomiony przez autora na UM760 pokazuje placeholder shella i zostawia w logu `snapshotPublished` z `focusRequest {target: default, seq: 1}`.
+Verify: `dotnet test` przechodzi z testami monotonicznego `rev`, `focusRequest{default}` w snapshocie z `OrchestratorStarted` i helpera `DispatcherLogged`, a Release self-contained uruchomiony automatycznie na aktualnej maszynie pokazuje placeholder shella i zostawia w logu `snapshotPublished` z `focusRequest {target: default, seq: 1}`; UM760 nie jest wymagany.
 
 ## References
 
@@ -29,7 +29,7 @@ Verify: `dotnet test` przechodzi z testami monotonicznego `rev`, `focusRequest{d
 
 ## Notes
 
-- HITL (autor, UM760): na maszynie dev `dotnet publish` projektu `MediaStation.App` w Release, self-contained win-x64; skopiować katalog publish na UM760; uruchomić `MediaStation.exe`; sprawdzić, że shell pokazuje placeholder; w `%LOCALAPPDATA%\MediaStation\logs\mediastation-<dzień UTC>.jsonl` ostatnie linie zawierają `snapshotPublished` z `focusRequest {target: default, seq: 1}`.
-- HITL: wynik z datą, HEAD i nazwą maszyny trafia do notatki odbioru epiku; maszyna dev nie spełnia checku bez decyzji autora (Notes epiki, retro epiki 1 P2/P7).
+- Automated acceptance (current machine): `dotnet publish` projektu `MediaStation.App` w Release, self-contained win-x64; uruchomić `MediaStation.exe` na aktualnej maszynie; sprawdzić, że shell pokazuje placeholder; w `%LOCALAPPDATA%\MediaStation\logs\mediastation-<dzień UTC>.jsonl` ostatnie linie zawierają `snapshotPublished` z `focusRequest {target: default, seq: 1}`.
+- Automated acceptance: wynik z datą, HEAD i nazwą maszyny trafia do notatki odbioru epiku; UM760 nie jest wymagany.
 - Obsługę `OrchestratorStarted` z tej story rozszerzają story 3 (`SetInputRouting{shell}`) i story 7 (`ProbeExisting{appId}`); ta story daje tylko pierwszy snapshot.
 - Monotoniczność `rev` dowodzi test jednostkowy, nie log; stałe `Rev: 1` z composition root znika w tej story.

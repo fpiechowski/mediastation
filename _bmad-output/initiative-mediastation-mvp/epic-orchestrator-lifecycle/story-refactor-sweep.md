@@ -17,7 +17,7 @@ Sprząta kod epiki: zakresem są findings z dispozycją `defer` w planach storie
 
 ## Acceptance Criteria
 
-Verify: `dotnet test` przechodzi, a autor powtarza na UM760 skrypty HITL ze stories 1 i 2 (snapshot z `focusRequest{default}` po starcie i po wybudzeniu z Modern Standby), z datowanym wynikiem w notatce odbioru epiku.
+Verify: `dotnet test` przechodzi, a automatyczny smoke na aktualnej maszynie (publish, start, log `snapshotPublished` z `focusRequest{default}`) przechodzi; UM760 nie jest wymagany.
 
 ## References
 
@@ -25,5 +25,5 @@ Verify: `dotnet test` przechodzi, a autor powtarza na UM760 skrypty HITL ze stor
 
 ## Notes
 
-- HITL (autor, UM760): powtórzyć skrypty HITL z Notes stories 1 i 2 na buildzie po sweepie.
-- HITL: wynik z datą, HEAD i nazwą maszyny trafia do notatki odbioru epiku; maszyna dev nie spełnia checku bez decyzji autora.
+- Automated smoke (current machine): powtórzyć start i log `snapshotPublished` z `focusRequest{default}` na buildzie po sweepie; UM760 nie jest wymagany.
+- Automated acceptance: wynik z datą, HEAD i nazwą maszyny trafia do notatki odbioru epiku; UM760 nie jest wymagany.
