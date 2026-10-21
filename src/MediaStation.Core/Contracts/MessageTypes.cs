@@ -19,7 +19,7 @@ public static class MessageTypes
         typeof(CommandFailed),
     ];
 
-    private static readonly Dictionary<string, Type> ByName = BuildIndex();
+    private static readonly Dictionary<string, Type> ByName = BuildIndex(All);
 
     private static readonly Dictionary<Type, string> NamesByType = Invert(ByName);
 
@@ -33,13 +33,22 @@ public static class MessageTypes
     /// <summary>Rekord dla nazwy <c>type</c> z koperty.</summary>
     public static bool TryGet(string name, out Type type) => ByName.TryGetValue(name, out type!);
 
-    private static Dictionary<string, Type> BuildIndex()
+    internal static Dictionary<string, Type> BuildIndex(IEnumerable<Type> types)
     {
+        ArgumentNullException.ThrowIfNull(types);
+
         var index = new Dictionary<string, Type>(StringComparer.Ordinal);
-        foreach (var type in All)
+        foreach (var type in types)
         {
+            var name = JsonNamingPolicy.CamelCase.ConvertName(type.Name);
+            if (name is Envelope.SnapshotType or Envelope.ReadyType)
+            {
+                throw new InvalidOperationException(
+                    $"Nazwa '{name}' jest zarezerwowana dla koperty mostu i nie może być w {nameof(MessageTypes)}.");
+            }
+
             // Add rzuca przy duplikacie: dwie takie same nazwy w kopercie to błąd rejestru.
-            index.Add(JsonNamingPolicy.CamelCase.ConvertName(type.Name), type);
+            index.Add(name, type);
         }
 
         return index;

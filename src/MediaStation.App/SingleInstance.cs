@@ -1,3 +1,4 @@
+using System.IO;
 using System.Threading;
 using MediaStation.Core.Logging;
 
@@ -16,16 +17,18 @@ public static class SingleInstance
     private static Mutex? _mutex;
 
     /// <summary>
-    /// Próbuje przejąć mutex bez czekania; <c>false</c> = inna instancja go trzyma. Porzucony mutex (poprzedni właściciel
-    /// padł z otwartym uchwytem) jest przejmowany i logowany jako <c>mutexAbandoned</c>.
+    /// Próbuje przejąć mutex bez czekania; <c>false</c> = inna instancja go trzyma albo mutex jest niedostępny
+    /// (brak uprawnień, nazwa nie do otwarcia, błąd I/O). Porzucony mutex (poprzedni właściciel padł z otwartym
+    /// uchwytem) jest przejmowany i logowany jako <c>mutexAbandoned</c>.
     /// </summary>
     public static bool TryAcquire(ILog log)
     {
         ArgumentNullException.ThrowIfNull(log);
 
-        var mutex = new Mutex(initiallyOwned: false, MutexName);
+        Mutex? mutex = null;
         try
         {
+            mutex = new Mutex(initiallyOwned: false, MutexName);
             if (!mutex.WaitOne(0))
             {
                 mutex.Dispose();
@@ -36,9 +39,18 @@ public static class SingleInstance
         {
             log.Warn(Src, "mutexAbandoned");
         }
+        catch (Exception ex) when (IsUnavailable(ex))
+        {
+            mutex?.Dispose();
+            log.Error(Src, "mutexUnavailable", ex);
+            return false;
+        }
 
         // Trzymany do końca procesu; OS zwalnia mutex, więc nie ma ręcznego ReleaseMutex.
         _mutex = mutex;
         return true;
     }
+
+    private static bool IsUnavailable(Exception ex) =>
+        ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException or IOException;
 }

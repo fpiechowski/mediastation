@@ -3,14 +3,14 @@ title: 'Refactor sweep'
 type: 'refactor'
 ticket: '6'
 created: '2026-10-20'
-status: 'ready-for-dev'
-baseline_revision: ''
+status: 'built'
+baseline_revision: 'f68450d75eae0283505de6ef0cc2eba5f7302342'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
-review: ''
-review_source: ''
-lenses_ran: []
+review: 'quick'
+review_source: 'pinned'
+lenses_ran: ['quick']
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/initiative-mediastation-mvp/epic-foundation-contracts/epic-foundation-contracts-retrospective.md'
@@ -86,6 +86,10 @@ context:
 - Given błąd typu w `web/shell/src` (np. `const x: number = 'a'`), when `dotnet build` (Debug), then build pada na `tsc`.
 - Given tymczasowe `DateTime.UtcNow` i `System.Net.Http.HttpClient` w Core, when `dotnet build`, then RS0030 dla obu (probe, cofnięty).
 - Given publish na UM760 (HITL, autor), when wykonuję Manual checks, then wyniki zgodne z opisem.
+
+## Review Triage Log
+
+Pass 1 (quick): no findings.
 
 ## Design Notes
 

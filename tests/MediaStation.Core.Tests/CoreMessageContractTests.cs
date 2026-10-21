@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MediaStation.Core.Contracts;
-using Action = MediaStation.Core.Contracts.Action;
 
 namespace MediaStation.Core.Tests;
 

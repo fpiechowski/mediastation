@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -6,7 +7,6 @@ using MediaStation.App.Logging;
 using MediaStation.App.Shell;
 using MediaStation.Core.Cli;
 using MediaStation.Core.Config;
-using MediaStation.Core.Contracts;
 using MediaStation.Core.Logging;
 
 namespace MediaStation.App;
@@ -22,6 +22,8 @@ public static class CompositionRoot
     private const string ConfigSrc = "config";
 
     private static ILog? _log;
+
+    private static readonly ConcurrentDictionary<Exception, byte> DispatcherLogged = new();
 
     public static string DataRoot { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MediaStation");
@@ -52,31 +54,15 @@ public static class CompositionRoot
             ["args"] = args,
         });
 
-        var parsed = CliArgs.Parse(args);
-        if (parsed is CliParseResult.Invalid invalid)
+        var decision = StartDecision.Decide(args, () => SingleInstance.TryAcquire(log));
+        if (decision is StartDecision.Exit exit)
         {
-            // Złe argumenty to nie tryb: mutex nie jest brany, więc działająca instancja nie blokuje odpowiedzi.
-            log.Error(Src, "invalidArguments", data: new Dictionary<string, object?> { ["reason"] = invalid.Reason });
-            app.Shutdown((int)ExitCode.InvalidArguments);
+            log.Write(exit.Level, Src, exit.Msg, exit.Data);
+            app.Shutdown((int)exit.Code);
             return;
         }
 
-        var mode = ((CliParseResult.Parsed)parsed).Mode;
-        if (!SingleInstance.TryAcquire(log))
-        {
-            log.Warn(Src, "instanceRejected", new Dictionary<string, object?> { ["mode"] = mode.LogName });
-            app.Shutdown((int)ExitCode.AlreadyRunning);
-            return;
-        }
-
-        if (mode is CliMode.Run)
-        {
-            StartRun(app, log);
-        }
-        else
-        {
-            RejectUnsupportedMode(app, log, mode);
-        }
+        StartRun(app, log);
     }
 
     /// <summary>Tryb główny: config (I/O tylko w App), walidacja w Core, snapshot i okno shella.</summary>
@@ -96,36 +82,25 @@ public static class CompositionRoot
 
         Config = result.Config;
 
-        var snapshot = new ShellSnapshot(
-            Rev: 1,
-            Screen: result.Errors.Count == 0 ? ShellScreen.Placeholder : ShellScreen.ConfigError,
-            ConfigErrors: result.Errors);
-
+        var snapshot = ShellSnapshotFactory.FromConfig(result, rev: 1);
         var bridge = new ShellBridge(snapshot, log);
         var window = new ShellWindow(bridge, WebView2UserDataDir, log);
         app.MainWindow = window;
         window.Show();
     }
 
-    /// <summary>Tryb rozpoznany, ale jeszcze niezaimplementowany: wpis z nazwą trybu i kod <see cref="ExitCode.Unsupported"/>.</summary>
-    private static void RejectUnsupportedMode(Application app, ILog log, CliMode mode)
-    {
-        var data = new Dictionary<string, object?> { ["mode"] = mode.LogName };
-        if (mode is CliMode.Smoke smoke)
-        {
-            data["appId"] = smoke.AppId;
-        }
-
-        log.Warn(Src, "modeUnsupported", data);
-        app.Shutdown((int)ExitCode.Unsupported);
-    }
-
     private static void AttachLifecycleLogging(Application app, ILog log)
     {
         app.Exit += (_, e) => log.Info(Src, "stop", new Dictionary<string, object?> { ["exitCode"] = e.ApplicationExitCode });
 
-        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
         {
+            // Wyjątek z Dispatchera jest już zalogowany: AppDomain nie dopisuje drugiego wpisu dla tego samego obiektu.
+            if (e.ExceptionObject is Exception logged && DispatcherLogged.TryRemove(logged, out _))
+            {
+                return;
+            }
+
             var data = new Dictionary<string, object?> { ["isTerminating"] = e.IsTerminating };
             if (e.ExceptionObject is not Exception)
             {
@@ -136,7 +111,11 @@ public static class CompositionRoot
         };
 
         // Bez `Handled = true`: logujemy i zostawiamy domyślne zachowanie WPF (crash, restart przez --supervise).
-        app.DispatcherUnhandledException += (_, e) => log.Error(Src, "dispatcherUnhandledException", e.Exception);
+        app.DispatcherUnhandledException += (_, e) =>
+        {
+            DispatcherLogged.TryAdd(e.Exception, 0);
+            log.Error(Src, "dispatcherUnhandledException", e.Exception);
+        };
 
         TaskScheduler.UnobservedTaskException += (_, e) => log.Error(Src, "unobservedTaskException", e.Exception);
     }

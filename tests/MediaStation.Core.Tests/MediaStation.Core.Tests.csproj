@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="MediaStation.Core.Contracts.Action" Alias="Action" />
+    <Using Include="MediaStation.Core.Contracts.InputMode" Alias="InputMode" />
   </ItemGroup>
 
 </Project>

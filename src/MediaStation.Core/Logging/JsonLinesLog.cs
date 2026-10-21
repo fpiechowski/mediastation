@@ -41,7 +41,7 @@ public sealed class JsonLinesLog : ILog
     public static string Format(DateTimeOffset time, LogLevel level, string src, string msg, IReadOnlyDictionary<string, object?>? data, Exception? error)
     {
         var ts = time.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
-        var err = error is null ? null : new LogError(error.GetType().FullName ?? error.GetType().Name, error.Message, error.ToString());
+        var err = error is null ? null : FormatError(error);
         try
         {
             return JsonSerializer.Serialize(new LogLine(ts, level, src, msg, data, err), Options);
@@ -51,6 +51,37 @@ public sealed class JsonLinesLog : ILog
             // Nieserializowalne `data` (cykl, NaN, nieobsługiwany typ, rzucający getter) nie może zgubić wpisu ani przerwać aplikacji.
             var fallback = new Dictionary<string, object?> { ["serializationError"] = ex.Message };
             return JsonSerializer.Serialize(new LogLine(ts, level, src, msg, fallback, err), Options);
+        }
+    }
+
+    // Message i ToString czytane osobno: wyjątek z getterem nie może zgubić wpisu ani przerwać aplikacji.
+    private static LogError FormatError(Exception error)
+    {
+        var type = error.GetType().FullName ?? error.GetType().Name;
+        return new LogError(type, SafeMessage(error, type), SafeToString(error, type));
+    }
+
+    private static string SafeMessage(Exception error, string type)
+    {
+        try
+        {
+            return error.Message;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return $"<{type}.Message threw {ex.GetType().FullName}>";
+        }
+    }
+
+    private static string SafeToString(Exception error, string type)
+    {
+        try
+        {
+            return error.ToString();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return $"<{type}.ToString threw {ex.GetType().FullName}>";
         }
     }
 

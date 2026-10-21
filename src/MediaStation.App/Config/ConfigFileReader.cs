@@ -25,13 +25,9 @@ public static class ConfigFileReader
         {
             return new ConfigFileState.Present(File.ReadAllText(path));
         }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        catch (Exception ex) when (ConfigFileState.FromReadError(ex) is { } state)
         {
-            return new ConfigFileState.Missing();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
-        {
-            return new ConfigFileState.Unreadable(ex.Message);
+            return state;
         }
     }
 }

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Security;
 using System.Text;
 using System.Text.Json;
 using MediaStation.Core.Contracts;
@@ -21,6 +23,22 @@ public abstract record ConfigFileState
 
     /// <summary>Plik istnieje, ale nie dało się go odczytać (blokada, brak uprawnień).</summary>
     public sealed record Unreadable(string? Detail) : ConfigFileState;
+
+    /// <summary>
+    /// Stan pliku dla wyjątku I/O z odczytu; <c>null</c> = wyjątek nie jest I/O i leci dalej.
+    /// Brak pliku i katalogu to <see cref="Missing"/>, a błąd dostępu lub odczytu — <see cref="Unreadable"/>.
+    /// </summary>
+    public static ConfigFileState? FromReadError(Exception error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+
+        return error switch
+        {
+            FileNotFoundException or DirectoryNotFoundException => new Missing(),
+            IOException or UnauthorizedAccessException or SecurityException => new Unreadable(error.Message),
+            _ => null,
+        };
+    }
 }
 
 /// <summary>

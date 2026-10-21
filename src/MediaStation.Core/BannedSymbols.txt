@@ -31,3 +31,15 @@ N:System.IO.IsolatedStorage;AD-3: Core nie robi I/O plikowego
 T:System.IO.RandomAccess;AD-3: Core nie robi I/O plikowego
 T:System.IO.Compression.ZipFile;AD-3: Core nie robi I/O plikowego
 T:System.IO.Compression.ZipFileExtensions;AD-3: Core nie robi I/O plikowego
+P:System.DateTime.Now;AD-14: czas tylko przez TimeProvider
+P:System.DateTime.UtcNow;AD-14: czas tylko przez TimeProvider
+P:System.DateTime.Today;AD-14: czas tylko przez TimeProvider
+P:System.DateTimeOffset.Now;AD-14: czas tylko przez TimeProvider
+P:System.DateTimeOffset.UtcNow;AD-14: czas tylko przez TimeProvider
+T:System.Diagnostics.Process;AD-3: Core nie uruchamia procesów
+N:System.Net;AD-3: Core nie robi I/O sieciowego
+T:System.Threading.Mutex;AD-3: obiekty OS tylko w App
+T:System.Threading.Semaphore;AD-3: obiekty OS tylko w App
+T:System.Threading.EventWaitHandle;AD-3: obiekty OS tylko w App
+M:System.Environment.GetFolderPath(System.Environment.SpecialFolder);AD-3: ścieżki systemu plików tylko w App
+M:System.Environment.GetFolderPath(System.Environment.SpecialFolder,System.Environment.SpecialFolderOption);AD-3: ścieżki systemu plików tylko w App

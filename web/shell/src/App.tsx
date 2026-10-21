@@ -19,5 +19,10 @@ export function App() {
       return <Placeholder />;
     case 'configError':
       return <ConfigErrorScreen errors={snapshot.configErrors} />;
+    default: {
+      // Nowy ShellScreen bez przypadku tutaj nie skompiluje się (F16).
+      const unreachable: never = snapshot.screen;
+      return unreachable;
+    }
   }
 }

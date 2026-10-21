@@ -13,6 +13,16 @@ public class JsonLinesLogTests
         public void Append(string fileName, string line) => Lines.Add((fileName, line));
     }
 
+    private sealed class ThrowingMessageException : Exception
+    {
+        public override string Message => throw new InvalidOperationException("message getter");
+    }
+
+    private sealed class ThrowingToStringException : Exception
+    {
+        public override string ToString() => throw new InvalidOperationException("toString");
+    }
+
     private static (JsonLinesLog Log, CollectingSink Sink, FakeTimeProvider Time) Create(DateTimeOffset start)
     {
         var time = new FakeTimeProvider(start);
@@ -203,5 +213,36 @@ public class JsonLinesLogTests
         var root = Parse(Assert.Single(sink.Lines).Line);
         Assert.Equal("nan", root.GetProperty("msg").GetString());
         Assert.True(root.GetProperty("data").TryGetProperty("serializationError", out _));
+    }
+
+    [Fact]
+    public void Throwing_message_keeps_entry_with_fallback_text()
+    {
+        var (log, sink, _) = Create(new DateTimeOffset(2026, 10, 20, 12, 0, 0, TimeSpan.Zero));
+
+        log.Error("app", "hostile", new ThrowingMessageException());
+
+        var root = Parse(Assert.Single(sink.Lines).Line);
+        Assert.Equal("error", root.GetProperty("level").GetString());
+        Assert.Equal("hostile", root.GetProperty("msg").GetString());
+        var err = root.GetProperty("err");
+        Assert.Equal(typeof(ThrowingMessageException).FullName, err.GetProperty("type").GetString());
+        Assert.Contains(nameof(ThrowingMessageException), err.GetProperty("message").GetString());
+        Assert.Contains(".Message threw", err.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public void Throwing_to_string_keeps_entry_with_fallback_text()
+    {
+        var (log, sink, _) = Create(new DateTimeOffset(2026, 10, 20, 12, 0, 0, TimeSpan.Zero));
+
+        log.Error("app", "hostile", new ThrowingToStringException());
+
+        var root = Parse(Assert.Single(sink.Lines).Line);
+        Assert.Equal("hostile", root.GetProperty("msg").GetString());
+        var err = root.GetProperty("err");
+        Assert.Equal(typeof(ThrowingToStringException).FullName, err.GetProperty("type").GetString());
+        Assert.Contains(nameof(ThrowingToStringException), err.GetProperty("stack").GetString());
+        Assert.Contains(".ToString threw", err.GetProperty("stack").GetString());
     }
 }

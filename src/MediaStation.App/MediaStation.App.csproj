@@ -19,6 +19,12 @@
     <ProjectReference Include="..\MediaStation.Core\MediaStation.Core.csproj" />
   </ItemGroup>
 
+  <!-- Nazwy narzucone przez zamrożone kontrakty (Consistency Conventions): aliasy wygrywają z BCL/WPF. -->
+  <ItemGroup>
+    <Using Include="MediaStation.Core.Contracts.Action" Alias="Action" />
+    <Using Include="MediaStation.Core.Contracts.InputMode" Alias="InputMode" />
+  </ItemGroup>
+
   <!--
     Build web jako target MSBuild (AD-13): SchemaExport → npm ci (gdy brak node_modules) →
     Debug: npm run contracts (shell z Vite dev servera), inne konfiguracje: npm run build i web/shell/dist → <exe>/shell.
@@ -46,6 +52,8 @@
     <Exec Command="npm ci" WorkingDirectory="$(MediaStationWebDir)" Condition="!Exists('$(MediaStationWebDir)node_modules')" />
 
     <Exec Command="npm run contracts" WorkingDirectory="$(MediaStationWebDir)" Condition="'$(MediaStationShellFromDevServer)' == 'true'" />
+
+    <Exec Command="npm run typecheck" WorkingDirectory="$(MediaStationWebDir)" Condition="'$(MediaStationShellFromDevServer)' == 'true'" />
 
     <Exec Command="npm run build" WorkingDirectory="$(MediaStationWebDir)" Condition="'$(MediaStationShellFromDevServer)' != 'true'" />
 
