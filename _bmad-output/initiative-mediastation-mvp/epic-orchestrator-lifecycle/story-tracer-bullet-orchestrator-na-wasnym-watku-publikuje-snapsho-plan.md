@@ -3,7 +3,7 @@ title: 'Tracer bullet: Orchestrator na własnym wątku publikuje snapshot do she
 type: 'feature'
 ticket: '1'
 created: '2026-10-21'
-status: blocked
+status: done
 baseline_revision: 'c727620fba2c8d3b1f9b90ebc792e3713352f5cc'
 route: 'full'
 route_source: 'auto'
@@ -16,13 +16,10 @@ followup_review_recommended: false
 warnings: []
 deferred: []
 operator_actions:
-  - 'On the dev machine, publish a Release self-contained win-x64 build with `dotnet publish src/MediaStation.App -c Release -r win-x64 --self-contained`.'
-  - 'Copy the publish directory to the UM760 and run `MediaStation.exe` with valid `config/apps.json`, `config/input.json` and `config/settings.json`.'
-  - 'Confirm on the UM760 that the shell shows the placeholder screen.'
-  - 'In `%LOCALAPPDATA%\MediaStation\logs\mediastation-<UTC day>.jsonl`, confirm the last lines contain `snapshotPublished` with `focusRequest {target: "default", seq: 1}`.'
-  - 'Record the dated UM760 result with HEAD and machine name in the epic acceptance note.'
-blocked_at: "2026-10-21"
-blocked_reason: "awaiting operator: On the dev machine, publish a Release self-contained win-x64 build with `dotnet publish src/MediaStation.App -c Release -r win-x64 --self-contained`.; Copy the publish directory to the UM760 and run `MediaStation.exe` with valid `config/apps.json`, `config/input.json` and `config/settings.json`.; Confirm on the UM760 that the shell shows the placeholder screen.; In `%LOCALAPPDATA%\\MediaStation\\logs\\mediastation-<UTC day>.jsonl`, confirm the last lines contain `snapshotPublished` with `focusRequest {target: \"default\", seq: 1}`.; Record the dated UM760 result with HEAD and machine name in the epic acceptance note."
+  - 'Publish a Release self-contained win-x64 build with `dotnet publish src/MediaStation.App -c Release -r win-x64 --self-contained true`.'
+  - 'Run the published `MediaStation.exe` on the current machine (ALDER, B760 Pro RS/D4, Windows 11 Home) with valid config.'
+  - 'Confirm the process stays alive and the log contains `snapshotPublished` with `focusRequest {target: "default", seq: 1}`.'
+  - 'Record the dated current-machine result with HEAD and machine name in the plan.'
 ---
 
 <intent-contract>
@@ -110,6 +107,12 @@ Bootstrap `rev: 0` is never logged; Orchestrator revs start at 1. `seq` advances
 - `dotnet test` -- all tests green.
 - `dotnet build MediaStation.slnx -c Release` -- schema + TS regenerate (untracked), shell bundle builds; Debug App build covers typecheck.
 
+**Current-machine acceptance (2026-10-21, HEAD 791b3a85, ALDER / B760 Pro RS/D4 / Windows 11 Home):**
+- `dotnet publish src/MediaStation.App -c Release -r win-x64 --self-contained true` -- success.
+- Ran `MediaStation.exe` from the publish output with valid `%LOCALAPPDATA%\MediaStation\config`; process stayed alive.
+- Log `%LOCALAPPDATA%\MediaStation\logs\mediastation-2026-10-21.jsonl` contains `snapshotPublished` with `rev: 1` and `focusRequest {target: "default", seq: 1}`.
+- UM760 check waived by the user; current-machine automated evidence accepted.
+
 ## Auto Run Result
 
 Status: awaiting-operator
@@ -131,5 +134,15 @@ Status: awaiting-operator
 - `dotnet build MediaStation.slnx -c Release` — success, 0 warnings; schema/TS regenerated and Vite shell bundle built.
 - `dotnet build src/MediaStation.App -c Debug` — success, 0 warnings; contracts + `tsc` passed.
 
-**Residual risks:** App-only threading/dispatcher wiring has no unit tests (verified by build); `apps[]`/`focusRequest` are not rendered yet by design; the UM760 self-contained run and log check are outstanding operator actions.
+**Residual risks:** App-only threading/dispatcher wiring has no unit tests (verified by build); `apps[]`/`focusRequest` are not rendered yet by design; the UM760 self-contained run was waived and replaced by the current-machine publish/run/log check above.
 
+## Operator Confirmation
+
+Confirmed 2026-10-21: the external actions this story owed were carried out.
+
+- Publish a Release self-contained win-x64 build with `dotnet publish src/MediaStation.App -c Release -r win-x64 --self-contained true`.
+- Run the published `MediaStation.exe` on the current machine (ALDER, B760 Pro RS/D4, Windows 11 Home) with valid config.
+- Confirm the process stays alive and the log contains `snapshotPublished` with `focusRequest {target: "default", seq: 1}`.
+- Record the dated current-machine result with HEAD and machine name in the plan.
+
+_Appended by the bmad-loop orchestrator (`bmad-loop confirm`, #335): a human confirmed these external actions out of band, and the story was advanced from `awaiting-operator` to `done`._
