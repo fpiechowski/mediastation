@@ -4,7 +4,7 @@ type: 'refactor'
 ticket: '6'
 created: '2026-10-20'
 status: done
-baseline_revision: 'f68450d75eae0283505de6ef0cc2eba5f7302342'
+baseline_revision: '65665bdf6f5c29bb9eb99edbd627c31b605996c7'
 route: 'full'
 route_source: 'auto'
 risk: 'low'
@@ -107,3 +107,11 @@ HITL autora na UM760 (PowerShell; `$exe` = `MediaStation.exe` z katalogu publish
 2. Tryb główny: `Start-Process $exe` → okno shella (placeholder albo ekran błędu configu).
 3. Przy działającym oknie: `(Start-Process $exe -Wait -PassThru).ExitCode` i `(Start-Process $exe '--smoke','netflix' -Wait -PassThru).ExitCode` → `3` i `3`; `Get-Content $log -Tail 6` → dwa `instanceRejected` (`run`, `smoke`) i `stop` z `"exitCode":3`.
 4. Zamknąć okno (Alt+F4). Dla `$f` kolejno `apps.json`, `input.json`, `settings.json`: `Copy-Item $cfg\$f $cfg\$f.bak; $j = Get-Content $cfg\$f -Raw | ConvertFrom-Json; $j | Add-Member x 1; $j | ConvertTo-Json -Depth 20 | Set-Content $cfg\$f; Start-Process $exe` → ekran błędu konfiguracji z `$f` i ścieżką `$.x` (nieznane pole), nie crash; Alt+F4, `Move-Item $cfg\$f.bak $cfg\$f -Force`.
+
+**Wynik (2026-10-21, HEAD `65222c5`, maszyna dev):**
+- Autor przyjął dowód z maszyny dev zamiast re-runu na UM760 (retro N1, R1; decyzja 2026-10-21).
+- `dotnet publish` self-contained Release: shell z plików lokalnych pokazał placeholder (DOM + screenshot), bez crasha.
+- Druga instancja: `instanceRejected` (`run`, `smoke`) i `stop {exitCode: 3}` (log 2026-10-21T12:02:51Z/52Z).
+- Błędny `apps.json`, `input.json`, `settings.json` z `$.x`: trzy `configError` i `stop {exitCode: 0}`, ekran błędu zamiast crasha (log 12:03:46Z–12:04:14Z).
+- `dotnet test` 255/255; `dotnet build -c Release` 0 ostrzeżeń.
+- Świadomie nie powtórzono trzech checks na UM760 (N1).

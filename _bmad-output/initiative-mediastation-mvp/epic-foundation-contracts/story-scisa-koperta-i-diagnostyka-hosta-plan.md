@@ -38,7 +38,7 @@ context:
 | Wielkość liter | `"kind":"UP"`, pole `"Kind"`, `"V"`/`"Type"` w kopercie | brak obiektu | `JsonException` |
 | Dodatkowe pola | `"id":"x"` w kopercie, nieznane pole w payloadzie | obiekt odczytany | — |
 | Start WebView2 pada | `CreateAsync`/`EnsureCoreWebView2Async`/mapowanie rzuca | log `webView2StartFailed`, MessageBox, po OK kod 5 i `stop {exitCode: 5}` | `catch` w `OnLoaded` |
-| Nawigacja nieudana | brak `shell/index.html` (404) albo brak dev servera | `Error("shell","navigationFailed",{uri, webErrorStatus, httpStatusCode})`, okno żyje | — |
+| Nawigacja nieudana | brak `shell/index.html` albo brak dev servera (`httpStatusCode` 0, `webErrorStatus` unknown/connectionAborted) | `Error("shell","navigationFailed",{uri, webErrorStatus, httpStatusCode})`, okno żyje | — |
 | Proces WebView2 pada | `ProcessFailed` | `Error("shell","webViewProcessFailed",{kind, reason, exitCode, processDescription})` | bez odzyskiwania |
 | `window.open`/`target=_blank` | `NewWindowRequested` | `Handled = true`, brak nowego okna, `Warn("shell","newWindowBlocked",{uri})` | — |
 | Odrzucona wiadomość | zły JSON, `v` ≠ 1, `type` ≠ `ready` | `Warn("shell","bridgeMessageRejected",{v, type, reason})`; `v`/`type` = `null`, gdy nieczytelne | `JsonException` łapany |
@@ -95,7 +95,7 @@ context:
 **Manual checks (if no CLI):**
 HITL autora na maszynie dev (PowerShell w root repo, po `dotnet build -c Release`; `$exe = "src\MediaStation.App\bin\Release\net10.0-windows\MediaStation.exe"`, log: `$log = "$env:LOCALAPPDATA\MediaStation\logs\mediastation-$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')).jsonl"`):
 1. Awaria WebView2: `$env:WEBVIEW2_BROWSER_EXECUTABLE_FOLDER = "C:\nie-istnieje"; $p = Start-Process $exe -PassThru; $p.WaitForExit(); $p.ExitCode; Remove-Item Env:WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` → po kliknięciu OK w komunikacie błędu kod `5`; `Get-Content $log -Tail 3` → `webView2StartFailed` i `stop` z `"exitCode":5`.
-2. Brak `index.html`: `Rename-Item src\MediaStation.App\bin\Release\net10.0-windows\shell\index.html index.html.bak`, uruchomić `$exe`, zamknąć Alt+F4, przywrócić nazwę → w logu `navigationFailed` z `httpStatusCode` 404.
+2. Brak `index.html`: `Rename-Item src\MediaStation.App\bin\Release\net10.0-windows\shell\index.html index.html.bak`, uruchomić `$exe`, zamknąć Alt+F4, przywrócić nazwę → w logu `navigationFailed` z `httpStatusCode` 0 (`webErrorStatus` unknown/connectionAborted; 404 nie występuje — log 2026-10-20T20:06:48Z).
 3. Bez zmian: uruchomić `$exe` → shell (placeholder albo ekran błędu configu), Alt+F4 → w logu brak `bridgeMessageRejected`.
 
 ## Review Triage Log

@@ -5,6 +5,7 @@ parent: initiative-mediastation-mvp
 covers: [CAP-1, CAP-12]
 after: []
 assignee: ""
+status: done
 risk: medium
 ---
 
@@ -52,3 +53,4 @@ Scaffold, kontrakty i konfiguracja. Nie: Orchestrator i jego logika (epic-orches
 - Decision: verdict retro zostaje `rejected` do czasu ukończenia 1.7 i 1.6; potem retro jest wznawiane na tym samym pliku (retro Q4, 2026-10-20).
 - Decision: guard nazw `snapshot`/`ready` w `MessageTypes` (F25 z retro) robi 1.6, zamiast odkładać go do epik 2 i 3 (2026-10-20).
 - Decision: korekta linii o parserze CLI z 2026-10-18: `--smoke` implementuje epic-netflix-dpad (`--smoke netflix`, jej Done when 2), a jego exit codes dokłada epic-deploy-resilience; `--calibrate-input` zostaje w epic-input (2026-10-20).
+- Decision: retro epiki zakończone 2026-10-21 z verdict `accepted`; autor podniósł verdict z `accepted-with-open-items` po przyjęciu dowodu z dev machine dla 1.6 (N1). Zapis z 2026-10-20 o verdict `rejected` jest nieaktualny. Epika zamknięta przez `bmad-ticket` po closure check (retro R8); otwarte pozycje R1–R7 pozostają śledzone poza Done when epiki. Z CAP-12 epika domyka wyłącznie logi; resztę capability niosą epic-deploy-resilience i epic-netflix-dpad (2026-10-21).

@@ -55,3 +55,5 @@ Granica: capabilities specu, jedna na epikę, poza CAP-4 + CAP-5 (jeden właści
 - Decision: jedyny CI to `release.yml` w GitHub Actions na tagu `v<semver>` (change-osk-everywhere-github-update, 2026-10-18); do jego powstania w epice Deploy & resilience build trafia na UM760 przez ręczne `dotnet publish` i kopię. Repo publiczne od 2026-10-18.
 - Decision: CAP-2 i CAP-3 idą równolegle po E1 — rekord `SetInputRouting` żyje w kontraktach Core z E1 (2026-10-18).
 - Open question: osiem Open Questions specu ma przypisane epiki i wczesne stories spike/pomiarowe — szczegóły w Notes każdej epiki.
+- Decision: każdy ticket z `risk = "medium"` dostaje pełne lenses review zamiast `quick`; `quick` zostaje dla `low` (retro epiki 1, N4/A12, R5, 2026-10-21).
+- Decision: kanoniczne miejsce wyniku HITL to sekcja `Verification` w planie ticketu, z datą i środowiskiem; commit body tylko streszcza, nie jest źródłem (retro epiki 1, N5/A10, R5, 2026-10-21).
