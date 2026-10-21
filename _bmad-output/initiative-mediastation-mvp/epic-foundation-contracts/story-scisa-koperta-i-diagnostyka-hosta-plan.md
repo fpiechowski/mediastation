@@ -3,7 +3,7 @@ title: 'Ścisła koperta i diagnostyka hosta'
 type: 'bugfix'
 ticket: '7'
 created: '2026-10-20'
-status: 'built'
+status: done
 baseline_revision: '006eb7a21b0710acd7f0e7f618aba16514a4b308'
 route: 'full'
 route_source: 'auto'
