@@ -3,7 +3,7 @@ title: 'Strict envelope read rejects duplicate keys and enum aliases'
 type: 'bugfix'
 ticket: 2
 created: '2026-10-21'
-status: 'built'
+status: done
 baseline_revision: '9a2e48189fcda83d5d7caf2df0308d1e3b00382c'
 route: 'oneshot'
 route_source: 'auto'

@@ -3,7 +3,7 @@ title: 'LogAppendCheck hardening and sample configs'
 type: 'chore'
 ticket: 1
 created: '2026-10-21'
-status: 'built'
+status: done
 baseline_revision: 'fb0042f7eec2d73c5f42657094cff0db33381199'
 route: 'full'
 route_source: 'auto'
