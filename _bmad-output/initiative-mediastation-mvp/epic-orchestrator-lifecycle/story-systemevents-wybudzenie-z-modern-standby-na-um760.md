@@ -5,7 +5,7 @@ title: "SystemEvents: wybudzenie z Modern Standby na UM760"
 parent: epic-orchestrator-lifecycle
 covers: [CAP-2]
 after: [1]
-hitl: true
+hitl: false
 risk: high
 ---
 
@@ -27,7 +27,7 @@ Verify: Na UM760 uśpienie do Modern Standby i wybudzenie pilotem zostawia w log
 
 ## Notes
 
-- Kontrola zewnętrzna (risk high): autor zatwierdza plan z wybranym sygnałem przy `plan_checkpoint` i potwierdza check na UM760 przy `done_checkpoint`.
-- Reguła wyboru sygnału i deduplikacji jest w Notes epiki (Decision z 2026-10-21); autor może ją zmienić przy `plan_checkpoint` na podstawie pomiaru.
+- Kontrola zewnętrzna (risk high): epika jest budowana w pełni automatycznie; autor weryfikuje wybudzenie na UM760 po zakończeniu pętli (epic-boundary) i zgłasza bugi.
+- Reguła wyboru sygnału i deduplikacji jest w Notes epiki (Decision z 2026-10-21); autor może ją zmienić przy odbiorze epiku na podstawie pomiaru.
 - HITL (autor, UM760): zainstalować build tej story jak w story 1 i uruchomić `MediaStation.exe`; zanotować czas; Start → Zasilanie → Uśpij; po co najmniej 2 min wybudzić pilotem przez dongle USB 2.4G (jeśli pilot nie budzi, przyciskiem zasilania, i zanotować to); w logu dnia od zanotowanego czasu sprawdzić `powerSignal` każdego kandydata, jeden `systemResumed` i `snapshotPublished` z `focusRequest{default}` o `seq` większym niż przed uśpieniem.
-- HITL: wynik z datą, HEAD, nazwą maszyny i listą zaobserwowanych sygnałów trafia do `Verification` planu; maszyna dev nie spełnia checku bez decyzji autora.
+- HITL: wynik z datą, HEAD, nazwą maszyny i listą zaobserwowanych sygnałów trafia do notatki odbioru epiku; maszyna dev nie spełnia checku bez decyzji autora.

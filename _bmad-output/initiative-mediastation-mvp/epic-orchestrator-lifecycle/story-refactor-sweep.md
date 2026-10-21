@@ -5,7 +5,7 @@ title: "Refactor sweep"
 parent: epic-orchestrator-lifecycle
 covers: [CAP-2]
 after: [1, 2, 3, 10, 4, 5, 11, 6, 7, 8]
-hitl: true
+hitl: false
 risk: low
 ---
 
@@ -17,7 +17,7 @@ Sprząta kod epiki: zakresem są findings z dispozycją `defer` w planach storie
 
 ## Acceptance Criteria
 
-Verify: `dotnet test` przechodzi, a autor powtarza na UM760 skrypty HITL ze stories 1 i 2 (snapshot z `focusRequest{default}` po starcie i po wybudzeniu z Modern Standby), z datowanym wynikiem w `Verification` planu.
+Verify: `dotnet test` przechodzi, a autor powtarza na UM760 skrypty HITL ze stories 1 i 2 (snapshot z `focusRequest{default}` po starcie i po wybudzeniu z Modern Standby), z datowanym wynikiem w notatce odbioru epiku.
 
 ## References
 
@@ -26,4 +26,4 @@ Verify: `dotnet test` przechodzi, a autor powtarza na UM760 skrypty HITL ze stor
 ## Notes
 
 - HITL (autor, UM760): powtórzyć skrypty HITL z Notes stories 1 i 2 na buildzie po sweepie.
-- HITL: wynik z datą, HEAD i nazwą maszyny trafia do `Verification` planu; maszyna dev nie spełnia checku bez decyzji autora.
+- HITL: wynik z datą, HEAD i nazwą maszyny trafia do notatki odbioru epiku; maszyna dev nie spełnia checku bez decyzji autora.
