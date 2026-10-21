@@ -29,6 +29,7 @@ public static class MessageTypes
         typeof(SystemResumed),
         typeof(AppWindowAttached),
         typeof(ProcessExited),
+        typeof(CdpLost),
         typeof(ForegroundChanged),
     ];
 

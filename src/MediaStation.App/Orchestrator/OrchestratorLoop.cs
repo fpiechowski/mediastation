@@ -111,7 +111,8 @@ public sealed class OrchestratorLoop : IDisposable
             {
                 var result = _orchestrator.Handle(message);
 
-                // Porażka wykonawcy to w tej story tylko ślad w logu; przejście w `Failed` dokłada story 4.
+                // Porażka wykonawcy zostawia ślad w logu; stan ustala Orchestrator: `Failed` po nieudanym
+                // `StartApp`, a `Stopping` zostaje po nieudanym `StopApp` (domyka go `ProcessExited`).
                 if (message is CommandFailed failed)
                 {
                     _log.Warn(Src, "commandFailed", new Dictionary<string, object?>

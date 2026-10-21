@@ -37,13 +37,13 @@ public sealed record OrchestratorStarted : Event;
 public sealed record LaunchApp(string AppId) : Intent;
 
 /// <summary>
-/// Zamknięcie aplikacji z kafelka (AD-16): działa wyłącznie w <c>Background</c>, gdzie Orchestrator
+/// Zamknięcie aplikacji z kafelka (AD-16): działa w <c>Background</c> i <c>Failed</c>, gdzie Orchestrator
 /// przechodzi w <c>Stopping</c> i wysyła <c>StopApp</c>.
 /// </summary>
 public sealed record CloseApp(string AppId) : Intent;
 
 /// <summary>
-/// Restart aplikacji z kafelka (AD-16): działa wyłącznie w <c>Background</c>; po potwierdzonym stopie
+/// Restart aplikacji z kafelka (AD-16): działa w <c>Background</c> i <c>Failed</c>; po potwierdzonym stopie
 /// Orchestrator startuje aplikację ponownie (<c>StartApp</c>).
 /// </summary>
 public sealed record RestartApp(string AppId) : Intent;
@@ -64,9 +64,17 @@ public sealed record AppWindowAttached(string AppId, long Hwnd, int RootPid) : E
 
 /// <summary>
 /// Proces aplikacji zakończył się (AD-4): host raportuje fakt, który zamyka <c>Stopping</c> (AD-10) bez czekania
-/// na <see cref="CommandCompleted"/>. Poza <c>Stopping</c> jest ignorowany (przejście w <c>Failed</c> należy do story 4).
+/// na <see cref="CommandCompleted"/>. W <c>Starting</c>, <c>Foreground</c> i <c>Background</c> Orchestrator przechodzi
+/// wtedy w <c>Failed</c>; w <c>NotRunning</c>, <c>Failed</c> i <c>Stopping</c> bez korelacji stopu fakt jest ignorowany.
 /// </summary>
 public sealed record ProcessExited(string AppId) : Event;
+
+/// <summary>
+/// Połączenie CDP z przeglądarką aplikacji nie wróciło w <c>cdpReconnectTimeout</c> (AD-10): BrowserHost raportuje
+/// fakt po nieudanym reconnecie. W <c>Starting</c>, <c>Foreground</c> i <c>Background</c> Orchestrator przechodzi
+/// wtedy w <c>Failed</c>; poza żywym cyklem fakt jest ignorowany.
+/// </summary>
+public sealed record CdpLost(string AppId) : Event;
 
 /// <summary>
 /// Foreground systemu zmienił się na okno <see cref="Hwnd"/>. Orchestrator nie zmienia stanu —

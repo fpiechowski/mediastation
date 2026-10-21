@@ -1,3 +1,4 @@
+using System.Reflection;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
 using CoreOrchestrator = MediaStation.Core.Orchestrator.Orchestrator;
@@ -175,18 +176,22 @@ public class OrchestratorTests
         Assert.Equal(AppLifecycleState.Starting, StateOf(snapshot, "netflix"));
     }
 
-    [Fact]
-    public void Command_failed_for_start_keeps_starting_and_yields_nothing()
+    [Theory]
+    [InlineData(ErrorCode.Unexpected)]
+    [InlineData(ErrorCode.CdpUnavailable)]
+    public void Command_failed_for_start_moves_to_failed_without_commands_or_focus_change(ErrorCode errorCode)
     {
         var (orchestrator, _) = Started();
-        orchestrator.Handle(new LaunchApp("netflix"));
+        var starting = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new LaunchApp("netflix")).Snapshot);
 
-        var result = orchestrator.Handle(new CommandFailed(2, ErrorCode.CdpUnavailable));
+        var result = orchestrator.Handle(new CommandFailed(2, errorCode));
 
         Assert.Empty(result.Commands);
-        Assert.Null(result.Snapshot);
-        var snapshot = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
-        Assert.Equal(AppLifecycleState.Starting, StateOf(snapshot, "netflix"));
+        var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
+        Assert.Equal(starting.Rev + 1, snapshot.Rev);
+        Assert.Equal(starting.FocusRequest, snapshot.FocusRequest);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(snapshot, "netflix"));
+        Assert.Equal(AppLifecycleState.NotRunning, StateOf(snapshot, "plex"));
     }
 
     [Theory]
@@ -589,6 +594,7 @@ public class OrchestratorTests
     [InlineData("close")]
     [InlineData("restart")]
     [InlineData("processExited")]
+    [InlineData("cdpLost")]
     public void Messages_for_unknown_app_are_ignored(string kind)
     {
         var (orchestrator, started) = Started();
@@ -597,7 +603,8 @@ public class OrchestratorTests
             "launch" => new LaunchApp("nope"),
             "close" => new CloseApp("nope"),
             "restart" => new RestartApp("nope"),
-            _ => new ProcessExited("nope"),
+            "processExited" => new ProcessExited("nope"),
+            _ => new CdpLost("nope"),
         };
 
         var result = orchestrator.Handle(message);
@@ -609,30 +616,156 @@ public class OrchestratorTests
     }
 
     [Theory]
-    [InlineData("notRunning")]
-    [InlineData("starting")]
-    [InlineData("foreground")]
-    [InlineData("background")]
-    public void Process_exited_outside_stopping_is_ignored(string state)
+    [InlineData("starting", "processExited")]
+    [InlineData("starting", "cdpLost")]
+    [InlineData("background", "processExited")]
+    [InlineData("background", "cdpLost")]
+    public void Failure_in_starting_or_background_enters_failed_without_commands_or_new_focus(string state, string fact)
     {
         var (orchestrator, _) = Started();
-        switch (state)
+        var last = state == "starting"
+            ? Assert.IsType<ShellSnapshot>(orchestrator.Handle(new LaunchApp("netflix")).Snapshot)
+            : Background(orchestrator, "netflix");
+        Event failure = fact == "cdpLost" ? new CdpLost("netflix") : new ProcessExited("netflix");
+
+        var result = orchestrator.Handle(failure);
+
+        Assert.Empty(result.Commands);
+        var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
+        Assert.Equal(last.Rev + 1, snapshot.Rev);
+        Assert.Equal(last.FocusRequest, snapshot.FocusRequest);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(snapshot, "netflix"));
+        Assert.Equal(AppLifecycleState.NotRunning, StateOf(snapshot, "plex"));
+    }
+
+    [Theory]
+    [InlineData("processExited")]
+    [InlineData("cdpLost")]
+    public void Failure_in_foreground_shows_shell_routes_shell_and_focuses_the_tile(string fact)
+    {
+        var (orchestrator, _) = Started();
+        var foreground = Foreground(orchestrator, "netflix");
+        Event failure = fact == "cdpLost" ? new CdpLost("netflix") : new ProcessExited("netflix");
+
+        var result = orchestrator.Handle(failure);
+
+        Assert.Collection(
+            result.Commands,
+            command => Assert.Equal(new ShowShell(5), command),
+            command => Assert.Equal(
+                new SetInputRouting(6, InputMode.Shell, null, PointerPolicy.Blocked, 3),
+                command));
+        var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
+        Assert.Equal(foreground.Rev + 1, snapshot.Rev);
+        Assert.Equal(new FocusRequest("netflix", foreground.FocusRequest!.Seq + 1), snapshot.FocusRequest);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(snapshot, "netflix"));
+        Assert.Equal(AppLifecycleState.NotRunning, StateOf(snapshot, "plex"));
+    }
+
+    /// <summary>
+    /// Porażka startu może dotrzeć po <c>AppWindowAttached</c>: kafelek jest już w <c>Foreground</c>, ale korelacja
+    /// startu wciąż żyje, więc awaria zachowuje się jak każda inna awaria na pierwszym planie.
+    /// </summary>
+    [Fact]
+    public void Command_failed_for_start_after_attached_window_enters_failed_from_foreground()
+    {
+        var (orchestrator, _) = Started();
+        var foreground = Foreground(orchestrator, "netflix");
+
+        var result = orchestrator.Handle(new CommandFailed(2, ErrorCode.CdpUnavailable));
+
+        Assert.Collection(
+            result.Commands,
+            command => Assert.Equal(new ShowShell(5), command),
+            command => Assert.Equal(
+                new SetInputRouting(6, InputMode.Shell, null, PointerPolicy.Blocked, 3),
+                command));
+        var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
+        Assert.Equal(foreground.Rev + 1, snapshot.Rev);
+        Assert.Equal(new FocusRequest("netflix", 2), snapshot.FocusRequest);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(snapshot, "netflix"));
+        Assert.Equal(AppLifecycleState.NotRunning, StateOf(snapshot, "plex"));
+    }
+
+    /// <summary>
+    /// <c>CdpLost</c> w <c>Stopping</c> należy do korelacji stopu: zamykana aplikacja kończy się <c>NotRunning</c>,
+    /// a nie <c>Failed</c>.
+    /// </summary>
+    [Fact]
+    public void Cdp_lost_in_stopping_is_ignored_and_close_finishes_not_running()
+    {
+        var (orchestrator, _) = Started();
+        Background(orchestrator, "netflix");
+        var stopping = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new CloseApp("netflix")).Snapshot);
+
+        var ignored = orchestrator.Handle(new CdpLost("netflix"));
+
+        Assert.Empty(ignored.Commands);
+        Assert.Null(ignored.Snapshot);
+        var completed = orchestrator.Handle(new CommandCompleted(8));
+        Assert.Empty(completed.Commands);
+        var snapshot = Assert.IsType<ShellSnapshot>(completed.Snapshot);
+        Assert.Equal(stopping.Rev + 1, snapshot.Rev);
+        Assert.Equal(AppLifecycleState.NotRunning, StateOf(snapshot, "netflix"));
+    }
+
+    /// <summary>
+    /// Spóźnione fakty nie wskrzeszają kafelka: <c>NotRunning</c> nie ma procesu, a <c>Failed</c> nie ma żywego cyklu.
+    /// </summary>
+    [Theory]
+    [InlineData("notRunning", "processExited")]
+    [InlineData("notRunning", "cdpLost")]
+    [InlineData("failed", "processExited")]
+    [InlineData("failed", "cdpLost")]
+    public void Facts_outside_live_cycle_are_ignored_without_snapshot(string state, string fact)
+    {
+        var (orchestrator, _) = Started();
+        if (state == "failed")
         {
-            case "starting":
-                orchestrator.Handle(new LaunchApp("netflix"));
-                break;
-            case "foreground":
-                Foreground(orchestrator, "netflix");
-                break;
-            case "background":
-                Background(orchestrator, "netflix");
-                break;
+            Foreground(orchestrator, "netflix");
+            orchestrator.Handle(new CdpLost("netflix"));
         }
 
-        var result = orchestrator.Handle(new ProcessExited("netflix"));
+        Event failure = fact == "cdpLost" ? new CdpLost("netflix") : new ProcessExited("netflix");
+        var result = orchestrator.Handle(failure);
 
         Assert.Empty(result.Commands);
         Assert.Null(result.Snapshot);
+        var snapshot = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
+        Assert.Equal(
+            state == "failed" ? AppLifecycleState.Failed : AppLifecycleState.NotRunning,
+            StateOf(snapshot, "netflix"));
+    }
+
+    /// <summary>
+    /// <c>Stopping</c> bez korelacji stopu nie powstaje z żadnego publicznego przejścia (<c>OnStop</c> zawsze
+    /// ją zakłada), więc obronną gałąź <c>FindPendingStop == null</c> przypinamy na stanie z usuniętą korelacją:
+    /// ani fakt, ani spóźniony wynik komendy nie mogą jej zamknąć.
+    /// </summary>
+    [Theory]
+    [InlineData("processExited")]
+    [InlineData("cdpLost")]
+    public void Facts_in_stopping_without_stop_correlation_are_ignored(string fact)
+    {
+        var (orchestrator, _) = Started();
+        Background(orchestrator, "netflix");
+        var stopping = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new CloseApp("netflix")).Snapshot);
+        var pendingStops = typeof(CoreOrchestrator)
+            .GetField("_pendingStops", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(orchestrator);
+        ((System.Collections.IDictionary)pendingStops!).Clear();
+        Event failure = fact == "cdpLost" ? new CdpLost("netflix") : new ProcessExited("netflix");
+
+        var result = orchestrator.Handle(failure);
+
+        Assert.Empty(result.Commands);
+        Assert.Null(result.Snapshot);
+        var late = orchestrator.Handle(new CommandCompleted(8));
+        Assert.Empty(late.Commands);
+        Assert.Null(late.Snapshot);
+        var snapshot = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
+        Assert.Equal(stopping.Rev + 1, snapshot.Rev);
+        Assert.Equal(AppLifecycleState.Stopping, StateOf(snapshot, "netflix"));
     }
 
     [Fact]
@@ -664,6 +797,150 @@ public class OrchestratorTests
         Assert.Null(result.Snapshot);
         var started = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
         Assert.Equal(1, started.Rev);
+    }
+
+    // ── Failed: co pokazuje, co ignoruje i jak z niego wyjść ──────────────────
+
+    [Theory]
+    [InlineData("launch")]
+    [InlineData("home")]
+    [InlineData("processExited")]
+    [InlineData("cdpLost")]
+    [InlineData("attached")]
+    public void Failed_ignores_inputs_without_commands_or_snapshot(string message)
+    {
+        var (orchestrator, _) = Started();
+        Foreground(orchestrator, "netflix");
+        orchestrator.Handle(new CdpLost("netflix"));
+
+        IOrchestratorMessage ignored = message switch
+        {
+            "launch" => new LaunchApp("netflix"),
+            "home" => new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 2),
+            "processExited" => new ProcessExited("netflix"),
+            "cdpLost" => new CdpLost("netflix"),
+            _ => new AppWindowAttached("netflix", 0x77, 7),
+        };
+
+        var result = orchestrator.Handle(ignored);
+
+        Assert.Empty(result.Commands);
+        Assert.Null(result.Snapshot);
+        var snapshot = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(snapshot, "netflix"));
+    }
+
+    [Theory]
+    [InlineData("completed")]
+    [InlineData("processExited")]
+    public void Restart_in_failed_stops_then_starts_and_foreground_on_attached_window(string stopResult)
+    {
+        var (orchestrator, _) = Started();
+        Foreground(orchestrator, "netflix");
+        var failed = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new CdpLost("netflix")).Snapshot);
+
+        var restart = orchestrator.Handle(new RestartApp("netflix"));
+
+        var stop = Assert.IsType<StopApp>(Assert.Single(restart.Commands));
+        Assert.Equal("netflix", stop.AppId);
+        var stopping = Assert.IsType<ShellSnapshot>(restart.Snapshot);
+        Assert.Equal(failed.Rev + 1, stopping.Rev);
+        Assert.Equal(AppLifecycleState.Stopping, StateOf(stopping, "netflix"));
+
+        var stopped = stopResult == "completed"
+            ? orchestrator.Handle(new CommandCompleted(stop.CmdId))
+            : orchestrator.Handle(new ProcessExited("netflix"));
+
+        Assert.Equal(new StartApp(8, "netflix"), Assert.Single(stopped.Commands));
+        var starting = Assert.IsType<ShellSnapshot>(stopped.Snapshot);
+        Assert.Equal(stopping.Rev + 1, starting.Rev);
+        Assert.Equal(AppLifecycleState.Starting, StateOf(starting, "netflix"));
+
+        var attached = orchestrator.Handle(new AppWindowAttached("netflix", 0x99, 7));
+
+        Assert.Collection(
+            attached.Commands,
+            command => Assert.Equal(new ActivateWindow(9, 0x99), command),
+            command => Assert.Equal(
+                new SetInputRouting(10, InputMode.App, AppType.Web, PointerPolicy.Blocked, 4),
+                command));
+        var foreground = Assert.IsType<ShellSnapshot>(attached.Snapshot);
+        Assert.Equal(AppLifecycleState.Foreground, StateOf(foreground, "netflix"));
+        Assert.Equal(new FocusRequest("netflix", 2), foreground.FocusRequest);
+    }
+
+    [Theory]
+    [InlineData("completed")]
+    [InlineData("failed")]
+    public void Stale_start_result_after_restart_in_failed_does_not_change_restarted_app(string stale)
+    {
+        var (orchestrator, _) = Started();
+        Foreground(orchestrator, "netflix");
+        orchestrator.Handle(new CdpLost("netflix"));
+        var restart = orchestrator.Handle(new RestartApp("netflix"));
+        var stop = Assert.IsType<StopApp>(Assert.Single(restart.Commands));
+        var starting = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new CommandCompleted(stop.CmdId)).Snapshot);
+
+        IOrchestratorMessage late = stale == "completed"
+            ? new CommandCompleted(2)
+            : new CommandFailed(2, ErrorCode.CdpUnavailable);
+        var result = orchestrator.Handle(late);
+
+        Assert.Empty(result.Commands);
+        Assert.Null(result.Snapshot);
+        var snapshot = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
+        Assert.Equal(starting.Rev + 1, snapshot.Rev);
+        Assert.Equal(AppLifecycleState.Starting, StateOf(snapshot, "netflix"));
+    }
+
+    [Fact]
+    public void Close_in_failed_stops_then_finishes_not_running()
+    {
+        var (orchestrator, _) = Started();
+        Background(orchestrator, "netflix");
+        var failed = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new ProcessExited("netflix")).Snapshot);
+
+        var close = orchestrator.Handle(new CloseApp("netflix"));
+
+        var stop = Assert.IsType<StopApp>(Assert.Single(close.Commands));
+        Assert.Equal("netflix", stop.AppId);
+        var stopping = Assert.IsType<ShellSnapshot>(close.Snapshot);
+        Assert.Equal(failed.Rev + 1, stopping.Rev);
+        Assert.Equal(AppLifecycleState.Stopping, StateOf(stopping, "netflix"));
+
+        var completed = orchestrator.Handle(new CommandCompleted(stop.CmdId));
+
+        Assert.Empty(completed.Commands);
+        var snapshot = Assert.IsType<ShellSnapshot>(completed.Snapshot);
+        Assert.Equal(stopping.Rev + 1, snapshot.Rev);
+        Assert.Equal(AppLifecycleState.NotRunning, StateOf(snapshot, "netflix"));
+        Assert.Equal(failed.FocusRequest, snapshot.FocusRequest);
+    }
+
+    [Theory]
+    [InlineData("foreground", false)]
+    [InlineData("foreground", true)]
+    [InlineData("starting", false)]
+    [InlineData("starting", true)]
+    public void Close_or_restart_in_failed_is_ignored_while_another_app_is_active(string other, bool restart)
+    {
+        var (orchestrator, _) = Started();
+        Background(orchestrator, "netflix");
+        orchestrator.Handle(new CdpLost("netflix"));
+        var last = other == "foreground"
+            ? Foreground(orchestrator, "plex")
+            : Assert.IsType<ShellSnapshot>(orchestrator.Handle(new LaunchApp("plex")).Snapshot);
+
+        var result = orchestrator.Handle(restart ? new RestartApp("netflix") : new CloseApp("netflix"));
+
+        Assert.Empty(result.Commands);
+        Assert.Null(result.Snapshot);
+        var next = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
+        Assert.Equal(last.Rev + 1, next.Rev);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(next, "netflix"));
+        Assert.Equal(
+            other == "foreground" ? AppLifecycleState.Foreground : AppLifecycleState.Starting,
+            StateOf(next, "plex"));
     }
 
     // ── Cała ścieżka cyklu życia ──────────────────────────────────────────────

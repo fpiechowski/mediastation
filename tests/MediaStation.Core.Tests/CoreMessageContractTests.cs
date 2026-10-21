@@ -181,6 +181,19 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Cdp_lost_event_envelope_serializes_exactly_and_round_trips()
+    {
+        Event lost = new CdpLost("netflix");
+
+        var json = ContractJson.SerializeEnvelope(lost);
+
+        Assert.Equal("""{"v":1,"type":"cdpLost","payload":{"appId":"netflix"}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Event>(json);
+        Assert.IsType<CdpLost>(back);
+        Assert.Equal(lost, back);
+    }
+
+    [Fact]
     public void Foreground_changed_event_envelope_serializes_exactly_and_round_trips()
     {
         Event changed = new ForegroundChanged(1234);
@@ -258,6 +271,7 @@ public class CoreMessageContractTests
         Assert.IsAssignableFrom<IOrchestratorMessage>(new RestartApp("netflix"));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new AppWindowAttached("netflix", 1, 2));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new ProcessExited("netflix"));
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new CdpLost("netflix"));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new ForegroundChanged(1));
     }
 
@@ -375,7 +389,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "startApp", "stopApp", "activateWindow", "minimizeWindow", "showShell", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "foregroundChanged"], names);
+        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "startApp", "stopApp", "activateWindow", "minimizeWindow", "showShell", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "foregroundChanged"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -400,6 +414,7 @@ public class CoreMessageContractTests
                 "activate-window.schema.json",
                 "app-window-attached.schema.json",
                 "apps-config.schema.json",
+                "cdp-lost.schema.json",
                 "close-app.schema.json",
                 "command-completed.schema.json",
                 "command-failed.schema.json",
@@ -512,6 +527,7 @@ public class CoreMessageContractTests
     [InlineData("stop-app.schema.json", "StopApp", "cmdId,appId")]
     [InlineData("app-window-attached.schema.json", "AppWindowAttached", "appId,hwnd,rootPid")]
     [InlineData("process-exited.schema.json", "ProcessExited", "appId")]
+    [InlineData("cdp-lost.schema.json", "CdpLost", "appId")]
     [InlineData("foreground-changed.schema.json", "ForegroundChanged", "hwnd")]
     [InlineData("activate-window.schema.json", "ActivateWindow", "cmdId,hwnd")]
     [InlineData("minimize-window.schema.json", "MinimizeWindow", "cmdId,hwnd")]
@@ -538,6 +554,7 @@ public class CoreMessageContractTests
         Assert.Equal("string", Schema("restart-app.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
         Assert.Equal("string", Schema("stop-app.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
         Assert.Equal("string", Schema("process-exited.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
+        Assert.Equal("string", Schema("cdp-lost.schema.json")["properties"]!["appId"]!["type"]!.GetValue<string>());
 
         var attached = Schema("app-window-attached.schema.json")["properties"]!;
         Assert.Equal("string", attached["appId"]!["type"]!.GetValue<string>());

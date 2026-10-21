@@ -142,7 +142,7 @@ public class OrchestratorLoopTests
     }
 
     [Fact]
-    public void Missing_host_answer_returns_to_the_queue_and_keeps_app_starting()
+    public void Missing_host_start_failure_returns_to_the_queue_as_failed()
     {
         var log = new RecordingLog();
         var published = new ConcurrentQueue<ShellSnapshot>();
@@ -172,7 +172,7 @@ public class OrchestratorLoopTests
 
         loop.Post(new LaunchApp("netflix"));
         WaitFor(() => log.Entries.Any(entry => entry.Msg == "commandFailed"));
-        WaitFor(() => published.Count >= 2);
+        WaitFor(() => published.Count >= 3);
 
         var startWithoutHost = Assert.Single(log.Entries, entry => entry.Msg == "startWithoutHost");
         Assert.Equal(2L, startWithoutHost.Data!["cmdId"]);
@@ -181,9 +181,14 @@ public class OrchestratorLoopTests
         Assert.Equal(LogLevel.Warn, commandFailed.Level);
         Assert.Equal(2L, commandFailed.Data!["cmdId"]);
         Assert.Equal(ErrorCode.Unexpected, commandFailed.Data["errorCode"]);
-        Assert.Equal(
-            AppLifecycleState.Starting,
-            published.ElementAt(1).Apps.Single(app => app.AppId == "netflix").State);
+
+        // StartApp → snapshot `Starting`, a CommandFailed z adaptera domyka przejście w `Failed`.
+        var snapshots = published.ToArray();
+        Assert.Equal(1, snapshots[0].Rev);
+        Assert.Equal(AppLifecycleState.Starting, snapshots[1].Apps.Single(app => app.AppId == "netflix").State);
+        Assert.Equal(3, snapshots[2].Rev);
+        Assert.Equal(AppLifecycleState.Failed, snapshots[2].Apps.Single(app => app.AppId == "netflix").State);
+        Assert.Equal(snapshots[1].FocusRequest, snapshots[2].FocusRequest);
     }
 
     [Fact]

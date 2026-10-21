@@ -66,6 +66,7 @@ public sealed class Orchestrator
             RestartApp restart => OnStop(restart.AppId, restart: true),
             AppWindowAttached attached => OnAppWindowAttached(attached),
             ProcessExited exited => OnProcessExited(exited),
+            CdpLost lost => OnCdpLost(lost),
             CommandCompleted completed => OnCommandCompleted(completed),
             CommandFailed failed => OnCommandFailed(failed),
             _ => OrchestratorResult.None,
@@ -185,15 +186,16 @@ public sealed class Orchestrator
     }
 
     /// <summary>
-    /// Zamknięcie albo restart aplikacji z <c>Background</c>: Orchestrator przechodzi w <c>Stopping</c>
-    /// i wysyła <c>StopApp</c> z <c>cmdId</c> w korelacji stopu. Poza <c>Background</c> intencja jest ignorowana
-    /// (przejście w <c>Failed</c> dokłada story 4), podobnie gdy innemu zadaniu należy się pierwszy plan:
-    /// restart skończyłby się w <c>Starting</c> → <c>Foreground</c>, czyli w dwóch aplikacjach naraz.
+    /// Zamknięcie albo restart aplikacji z <c>Background</c> albo <c>Failed</c>: Orchestrator przechodzi w <c>Stopping</c>
+    /// i wysyła <c>StopApp</c> z <c>cmdId</c> w korelacji stopu. <c>Failed</c> wychodzi więc wyłącznie przez stop:
+    /// potwierdzony stop kończy się <c>NotRunning</c> albo nowym <c>Starting</c>. Poza tymi stanami intencja jest
+    /// ignorowana, podobnie gdy innemu zadaniu należy się pierwszy plan: restart skończyłby się w <c>Starting</c>
+    /// → <c>Foreground</c>, czyli w dwóch aplikacjach naraz.
     /// </summary>
     private OrchestratorResult OnStop(string appId, bool restart)
     {
         if (!_appsById.TryGetValue(appId, out var app)
-            || app.State != AppLifecycleState.Background
+            || app.State is not (AppLifecycleState.Background or AppLifecycleState.Failed)
             || AnotherAppIsActive(app))
         {
             return OrchestratorResult.None;
@@ -231,35 +233,108 @@ public sealed class Orchestrator
 
     /// <summary>
     /// Porażka stopu nie jest dowodem, że proces zniknął: stan zostaje <c>Stopping</c>, a korelacja czeka
-    /// na <see cref="ProcessExited"/> (timeout należy do story 11). Porażka startu nie zmienia stanu —
-    /// logowanie i przejście w <c>Failed</c> dokłada story 4.
+    /// na <see cref="ProcessExited"/> (timeout należy do story 11). Nieudany <c>StartApp</c> przenosi aplikację
+    /// w <c>Failed</c> także wtedy, gdy okno zdążyło już dać <c>Foreground</c>/<c>Background</c>; porażka komendy
+    /// spoza korelacji startu nie zmienia stanu.
     /// </summary>
     private OrchestratorResult OnCommandFailed(CommandFailed failed)
     {
-        _pendingStarts.Remove(failed.CmdId);
+        if (_pendingStarts.Remove(failed.CmdId, out var appId)
+            && _appsById.TryGetValue(appId, out var app)
+            && app.State is AppLifecycleState.Starting or AppLifecycleState.Foreground or AppLifecycleState.Background)
+        {
+            return EnterFailed(app, wasForeground: app.State == AppLifecycleState.Foreground);
+        }
+
         return OrchestratorResult.None;
     }
 
     /// <summary>
     /// Zakończony proces domyka <c>Stopping</c> tak samo jak potwierdzony <see cref="StopApp"/>.
-    /// Poza <c>Stopping</c> fakt jest ignorowany (przejście w <c>Failed</c> należy do story 4),
-    /// a aplikacja bez korelacji stopu nie zmienia stanu.
+    /// W żywym cyklu (<c>Starting</c>, <c>Foreground</c>, <c>Background</c>) fakt jest awarią i prowadzi w <c>Failed</c>;
+    /// <c>NotRunning</c>, <c>Failed</c> i <c>Stopping</c> bez korelacji stopu ignorują go, bo spóźniony fakt nie może
+    /// wskrzesić kafelka.
     /// </summary>
     private OrchestratorResult OnProcessExited(ProcessExited exited)
     {
-        if (!_appsById.TryGetValue(exited.AppId, out var app) || app.State != AppLifecycleState.Stopping)
+        if (!_appsById.TryGetValue(exited.AppId, out var app))
         {
             return OrchestratorResult.None;
         }
 
-        if (FindPendingStop(app.AppId) is not { } cmdId)
+        if (app.State == AppLifecycleState.Stopping)
+        {
+            if (FindPendingStop(app.AppId) is not { } cmdId)
+            {
+                return OrchestratorResult.None;
+            }
+
+            var pending = _pendingStops[cmdId];
+            _pendingStops.Remove(cmdId);
+            return OnStopped(pending);
+        }
+
+        return app.State is AppLifecycleState.Starting or AppLifecycleState.Foreground or AppLifecycleState.Background
+            ? EnterFailed(app, wasForeground: app.State == AppLifecycleState.Foreground)
+            : OrchestratorResult.None;
+    }
+
+    /// <summary>
+    /// Zerwane CDP to awaria tylko w żywym cyklu: <c>Starting</c>, <c>Foreground</c> i <c>Background</c> prowadzą
+    /// w <c>Failed</c> (AD-10). <c>Stopping</c> należy do korelacji stopu, a <c>NotRunning</c> i <c>Failed</c>
+    /// nie mają żywego procesu, którego awarię mógłby raportować.
+    /// </summary>
+    private OrchestratorResult OnCdpLost(CdpLost lost)
+    {
+        if (!_appsById.TryGetValue(lost.AppId, out var app))
         {
             return OrchestratorResult.None;
         }
 
-        var pending = _pendingStops[cmdId];
-        _pendingStops.Remove(cmdId);
-        return OnStopped(pending);
+        return app.State is AppLifecycleState.Starting or AppLifecycleState.Foreground or AppLifecycleState.Background
+            ? EnterFailed(app, wasForeground: app.State == AppLifecycleState.Foreground)
+            : OrchestratorResult.None;
+    }
+
+    /// <summary>
+    /// Wspólne wejście w <c>Failed</c>: okno po awarii nie jest już pod kontrolą Orchestratora, więc <c>Hwnd</c> znika,
+    /// a korelacje startu przepadają — spóźniony wynik startu nie może już zmienić stanu. Awaria na pierwszym planie
+    /// pokazuje shell i oddaje mu wejście (AD-5/AD-15), a fokus z nowym <c>seq</c> wskazuje kafelek, który padł (AD-16).
+    /// Kolejność komend jest istotna: najpierw <see cref="ShowShell"/>, potem routing.
+    /// </summary>
+    private OrchestratorResult EnterFailed(AppState app, bool wasForeground)
+    {
+        app.Hwnd = null;
+        app.State = AppLifecycleState.Failed;
+        DropPendingStarts(app.AppId);
+
+        if (!wasForeground)
+        {
+            return new OrchestratorResult([], Snapshot());
+        }
+
+        var showShell = new ShowShell(NextCmdId());
+        var routing = new SetInputRouting(NextCmdId(), InputMode.Shell, null, PointerPolicy.Blocked, NextEpoch());
+        _focus = new FocusRequest(app.AppId, ++_focusSeq);
+        return new OrchestratorResult([showShell, routing], Snapshot());
+    }
+
+    /// <summary>Korelacje startu aplikacji tracą znaczenie po wejściu w <c>Failed</c>.</summary>
+    private void DropPendingStarts(string appId)
+    {
+        var stale = new List<long>();
+        foreach (var (cmdId, pendingAppId) in _pendingStarts)
+        {
+            if (pendingAppId == appId)
+            {
+                stale.Add(cmdId);
+            }
+        }
+
+        foreach (var cmdId in stale)
+        {
+            _pendingStarts.Remove(cmdId);
+        }
     }
 
     /// <summary>Wspólny koniec stopu: restart startuje aplikację od nowa, zamknięcie kończy się w <c>NotRunning</c>.</summary>
@@ -339,7 +414,7 @@ public sealed class Orchestrator
 
         public AppLifecycleState State { get; set; } = AppLifecycleState.NotRunning;
 
-        /// <summary>Uchwyt okna z <see cref="AppWindowAttached"/>; <c>null</c> po zamknięciu albo restarcie.</summary>
+        /// <summary>Uchwyt okna z <see cref="AppWindowAttached"/>; <c>null</c> po zamknięciu, restarcie albo wejściu w <c>Failed</c>.</summary>
         public long? Hwnd { get; set; }
     }
 
