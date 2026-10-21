@@ -34,6 +34,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\src\MediaStation.Core\BannedSymbols.txt" Link="BannedSymbols.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
     <Using Include="MediaStation.Core.Contracts.Action" Alias="Action" />
     <Using Include="MediaStation.Core.Contracts.InputMode" Alias="InputMode" />

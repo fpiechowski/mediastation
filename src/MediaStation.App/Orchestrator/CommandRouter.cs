@@ -9,7 +9,8 @@ namespace MediaStation.App.Orchestrator;
 /// <summary>
 /// Jedno wyjście Orchestratora do wykonawców (decyzja epiki): <see cref="StartApp"/> i <see cref="StopApp"/>
 /// trafiają do hosta wybranego po <see cref="AppType"/> z mapy <c>appId → AppType</c> z configu, komendy okienkowe do
-/// <see cref="IWindowManagerPort"/>, a <see cref="SetInputRouting"/> do <see cref="IInputRoutingPort"/>.
+/// <see cref="IWindowManagerPort"/>, komendy timerów do <see cref="ITimerPort"/>, a <see cref="SetInputRouting"/>
+/// do <see cref="IInputRoutingPort"/>.
 /// Komenda bez portu i komenda dla nieznanej aplikacji kończą się wpisem <c>warn</c>, nigdy wyjątkiem.
 /// </summary>
 public sealed class CommandRouter
@@ -20,6 +21,7 @@ public sealed class CommandRouter
     private readonly IReadOnlyDictionary<AppType, IAppHostPort> _hosts;
     private readonly IWindowManagerPort _windowManager;
     private readonly IInputRoutingPort _inputRouting;
+    private readonly ITimerPort _timers;
     private readonly ILog _log;
 
     public CommandRouter(
@@ -27,18 +29,21 @@ public sealed class CommandRouter
         IReadOnlyDictionary<AppType, IAppHostPort> hosts,
         IWindowManagerPort windowManager,
         IInputRoutingPort inputRouting,
+        ITimerPort timers,
         ILog log)
     {
         ArgumentNullException.ThrowIfNull(appTypes);
         ArgumentNullException.ThrowIfNull(hosts);
         ArgumentNullException.ThrowIfNull(windowManager);
         ArgumentNullException.ThrowIfNull(inputRouting);
+        ArgumentNullException.ThrowIfNull(timers);
         ArgumentNullException.ThrowIfNull(log);
 
         _appTypes = appTypes;
         _hosts = hosts;
         _windowManager = windowManager;
         _inputRouting = inputRouting;
+        _timers = timers;
         _log = log;
     }
 
@@ -67,6 +72,9 @@ public sealed class CommandRouter
                     break;
                 case WindowCommand window:
                     _windowManager.Execute(window);
+                    break;
+                case TimerCommand timer:
+                    _timers.Execute(timer);
                     break;
                 case SetInputRouting routing:
                     _inputRouting.Execute(routing);

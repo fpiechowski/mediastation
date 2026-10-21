@@ -261,6 +261,48 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Schedule_timer_command_envelope_serializes_with_cmd_id_first_and_round_trips()
+    {
+        var due = new DateTimeOffset(2026, 10, 22, 12, 0, 30, TimeSpan.Zero);
+        Command schedule = new ScheduleTimer(3, 42, "netflix", due);
+
+        var json = ContractJson.SerializeEnvelope(schedule);
+
+        Assert.Equal(
+            """{"v":1,"type":"scheduleTimer","payload":{"cmdId":3,"timerId":42,"owner":"netflix","due":"2026-10-22T12:00:30\u002B00:00"}}""",
+            json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<ScheduleTimer>(back);
+        Assert.Equal(schedule, back);
+    }
+
+    [Fact]
+    public void Cancel_timer_command_envelope_serializes_with_cmd_id_first_and_round_trips()
+    {
+        Command cancel = new CancelTimer(4, 42);
+
+        var json = ContractJson.SerializeEnvelope(cancel);
+
+        Assert.Equal("""{"v":1,"type":"cancelTimer","payload":{"cmdId":4,"timerId":42}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<CancelTimer>(back);
+        Assert.Equal(cancel, back);
+    }
+
+    [Fact]
+    public void Timer_elapsed_event_envelope_serializes_exactly_and_round_trips()
+    {
+        Event elapsed = new TimerElapsed(42);
+
+        var json = ContractJson.SerializeEnvelope(elapsed);
+
+        Assert.Equal("""{"v":1,"type":"timerElapsed","payload":{"timerId":42}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Event>(json);
+        Assert.IsType<TimerElapsed>(back);
+        Assert.Equal(elapsed, back);
+    }
+
+    [Fact]
     public void Orchestrator_messages_share_the_orchestrator_queue_base()
     {
         Assert.IsAssignableFrom<IOrchestratorMessage>(new OrchestratorStarted());
@@ -272,6 +314,7 @@ public class CoreMessageContractTests
         Assert.IsAssignableFrom<IOrchestratorMessage>(new AppWindowAttached("netflix", 1, 2));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new ProcessExited("netflix"));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new CdpLost("netflix"));
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new TimerElapsed(1));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new ForegroundChanged(1));
     }
 
@@ -389,7 +432,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "startApp", "stopApp", "activateWindow", "minimizeWindow", "showShell", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "foregroundChanged"], names);
+        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "startApp", "stopApp", "activateWindow", "minimizeWindow", "showShell", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -414,6 +457,7 @@ public class CoreMessageContractTests
                 "activate-window.schema.json",
                 "app-window-attached.schema.json",
                 "apps-config.schema.json",
+                "cancel-timer.schema.json",
                 "cdp-lost.schema.json",
                 "close-app.schema.json",
                 "command-completed.schema.json",
@@ -425,6 +469,7 @@ public class CoreMessageContractTests
                 "orchestrator-started.schema.json",
                 "process-exited.schema.json",
                 "restart-app.schema.json",
+                "schedule-timer.schema.json",
                 "set-input-routing.schema.json",
                 "settings.schema.json",
                 "shell-snapshot.schema.json",
@@ -432,6 +477,7 @@ public class CoreMessageContractTests
                 "start-app.schema.json",
                 "stop-app.schema.json",
                 "system-resumed.schema.json",
+                "timer-elapsed.schema.json",
             ],
             files);
     }
@@ -525,6 +571,9 @@ public class CoreMessageContractTests
     [InlineData("restart-app.schema.json", "RestartApp", "appId")]
     [InlineData("start-app.schema.json", "StartApp", "cmdId,appId")]
     [InlineData("stop-app.schema.json", "StopApp", "cmdId,appId")]
+    [InlineData("schedule-timer.schema.json", "ScheduleTimer", "cmdId,timerId,owner,due")]
+    [InlineData("cancel-timer.schema.json", "CancelTimer", "cmdId,timerId")]
+    [InlineData("timer-elapsed.schema.json", "TimerElapsed", "timerId")]
     [InlineData("app-window-attached.schema.json", "AppWindowAttached", "appId,hwnd,rootPid")]
     [InlineData("process-exited.schema.json", "ProcessExited", "appId")]
     [InlineData("cdp-lost.schema.json", "CdpLost", "appId")]
@@ -564,6 +613,24 @@ public class CoreMessageContractTests
         Assert.Equal("integer", Schema("foreground-changed.schema.json")["properties"]!["hwnd"]!["type"]!.GetValue<string>());
         Assert.Equal("integer", Schema("activate-window.schema.json")["properties"]!["hwnd"]!["type"]!.GetValue<string>());
         Assert.Equal("integer", Schema("minimize-window.schema.json")["properties"]!["hwnd"]!["type"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Timer_schemas_type_ids_as_integer_and_due_as_date_time()
+    {
+        var schedule = Schema("schedule-timer.schema.json")["properties"]!;
+        Assert.Equal("integer", schedule["cmdId"]!["type"]!.GetValue<string>());
+        Assert.Equal("integer", schedule["timerId"]!["type"]!.GetValue<string>());
+        Assert.Equal("string", schedule["owner"]!["type"]!.GetValue<string>());
+        Assert.Equal("string", schedule["due"]!["type"]!.GetValue<string>());
+        Assert.Equal("date-time", schedule["due"]!["format"]!.GetValue<string>());
+
+        Assert.Equal(
+            "integer",
+            Schema("cancel-timer.schema.json")["properties"]!["timerId"]!["type"]!.GetValue<string>());
+        Assert.Equal(
+            "integer",
+            Schema("timer-elapsed.schema.json")["properties"]!["timerId"]!["type"]!.GetValue<string>());
     }
 
     [Fact]

@@ -1,3 +1,5 @@
+using System;
+
 namespace MediaStation.Core.Contracts;
 
 /// <summary>
@@ -25,3 +27,19 @@ public sealed record MinimizeWindow(long CmdId, long Hwnd) : WindowCommand(CmdId
 
 /// <summary>WindowManager pokazuje ekran główny nad aplikacjami.</summary>
 public sealed record ShowShell(long CmdId) : WindowCommand(CmdId);
+
+/// <summary>
+/// Baza komend schedulera timerów: Orchestrator planuje i anuluje terminy, a scheduler w Core
+/// publikuje <see cref="TimerElapsed"/> z powrotem do kolejki. <c>cmdId</c> nie ma korelacji —
+/// timer nie jest zadanym efektem, tylko terminem, więc scheduler nie odpowiada <see cref="CommandCompleted"/>.
+/// </summary>
+public abstract record TimerCommand(long CmdId) : Command(CmdId);
+
+/// <summary>
+/// Jednorazowy timer na <see cref="Due"/>. <see cref="Owner"/> to aplikacja, do której należy termin
+/// (korelacja timeoutu <c>Starting</c> żyje w Orchestratorze); duplikat <see cref="TimerId"/> zastępuje poprzedni timer.
+/// </summary>
+public sealed record ScheduleTimer(long CmdId, long TimerId, string Owner, DateTimeOffset Due) : TimerCommand(CmdId);
+
+/// <summary>Anuluje timer <see cref="TimerId"/>; nieznany identyfikator jest no-opem.</summary>
+public sealed record CancelTimer(long CmdId, long TimerId) : TimerCommand(CmdId);

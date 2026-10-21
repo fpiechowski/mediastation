@@ -45,6 +45,14 @@ public class CoreBoundaryTests
         "System.IO.Compression.ZipFileExtensions",
     ];
 
+    /// <summary>Ambient time spoza wstrzykniętego <c>TimeProvider</c> (AD-14); <c>TimeProvider</c> sam jest dozwolony.</summary>
+    private static readonly string[] ForbiddenAmbientTimeMembers =
+    [
+        "System.TimeProvider::get_System",
+        "System.Environment::get_TickCount",
+        "System.Environment::get_TickCount64",
+    ];
+
     [Fact]
     public void Core_is_not_platform_specific()
     {
@@ -90,6 +98,37 @@ public class CoreBoundaryTests
     }
 
     [Fact]
+    public void Core_references_no_ambient_time_sources()
+    {
+        Assert.DoesNotContain("System.Diagnostics.Stopwatch", TypeReferences(CorePath));
+
+        var members = MemberReferences(CorePath);
+
+        Assert.DoesNotContain(members, member => ForbiddenAmbientTimeMembers.Contains(member));
+    }
+
+    [Fact]
+    public void Member_reference_check_detects_ambient_time_shape()
+    {
+        // Kontrola pozytywna: testy używają File.OpenRead, więc ekstrakcja `typ::nazwa` musi to zobaczyć —
+        // ta sama ścieżka łapie `System.TimeProvider::get_System` i gettery `Environment.TickCount(64)`.
+        var members = MemberReferences(typeof(CoreBoundaryTests).Assembly.Location);
+
+        Assert.Contains("System.IO.File::OpenRead", members);
+    }
+
+    [Fact]
+    public void Banned_symbols_list_ambient_time_sources()
+    {
+        var entries = File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "BannedSymbols.txt"));
+
+        Assert.Contains("P:System.TimeProvider.System;AD-14: czas tylko przez wstrzyknięty TimeProvider", entries);
+        Assert.Contains("T:System.Diagnostics.Stopwatch;AD-14: czas tylko przez wstrzyknięty TimeProvider", entries);
+        Assert.Contains("P:System.Environment.TickCount;AD-14: czas tylko przez wstrzyknięty TimeProvider", entries);
+        Assert.Contains("P:System.Environment.TickCount64;AD-14: czas tylko przez wstrzyknięty TimeProvider", entries);
+    }
+
+    [Fact]
     public void Core_has_no_pinvoke_methods()
     {
         var pinvoke = Read(CorePath, reader => reader.MethodDefinitions
@@ -122,6 +161,10 @@ public class CoreBoundaryTests
 
     private static string[] TypeReferences(string path) => Read(path, reader => reader.TypeReferences
         .Select(handle => TypeReferenceName(reader, handle))
+        .ToArray());
+
+    private static string[] MemberReferences(string path) => Read(path, reader => reader.MemberReferences
+        .Select(handle => MemberReferenceName(reader, handle))
         .ToArray());
 
     private static T Read<T>(string path, Func<MetadataReader, T> read)
@@ -164,5 +207,18 @@ public class CoreBoundaryTests
         var ns = reader.GetString(type.Namespace);
         var name = reader.GetString(type.Name);
         return ns.Length == 0 ? name : ns + "." + name;
+    }
+
+    /// <summary>Nazwa member reference w formie <c>typ::członek</c>; getter właściwości to np. <c>System.TimeProvider::get_System</c>.</summary>
+    private static string MemberReferenceName(MetadataReader reader, MemberReferenceHandle handle)
+    {
+        var member = reader.GetMemberReference(handle);
+        var name = reader.GetString(member.Name);
+        return member.Parent.Kind switch
+        {
+            HandleKind.TypeReference => TypeReferenceName(reader, (TypeReferenceHandle)member.Parent) + "::" + name,
+            HandleKind.TypeDefinition => TypeDefinitionName(reader, (TypeDefinitionHandle)member.Parent) + "::" + name,
+            _ => name,
+        };
     }
 }

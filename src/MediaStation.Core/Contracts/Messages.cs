@@ -77,6 +77,12 @@ public sealed record ProcessExited(string AppId) : Event;
 public sealed record CdpLost(string AppId) : Event;
 
 /// <summary>
+/// Termin timera zaplanowanego przez Orchestrator (<see cref="ScheduleTimer"/>) minął. Timer jest jednorazowy,
+/// a <see cref="TimerId"/> nieznany albo już anulowany jest ignorowany: nie daje komend ani snapshotu.
+/// </summary>
+public sealed record TimerElapsed(long TimerId) : Event;
+
+/// <summary>
 /// Foreground systemu zmienił się na okno <see cref="Hwnd"/>. Orchestrator nie zmienia stanu —
 /// pętla zapisuje fakt w logu, a reakcję (dopasowanie trybu, wyciszenie) ustala epic-windows-audio.
 /// </summary>

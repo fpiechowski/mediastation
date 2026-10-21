@@ -1,3 +1,4 @@
+using System;
 using MediaStation.Core.Contracts;
 
 namespace MediaStation.Core.Ports;
@@ -34,4 +35,15 @@ public interface IInputRoutingPort
 {
     /// <summary>Przekazuje InputHubowi nowy tryb routingu wraz z <c>epoch</c>.</summary>
     void Execute(SetInputRouting command);
+}
+
+/// <summary>
+/// Port schedulera timerów (AD-14): wykonawca liczy termin na wstrzykniętym <see cref="TimeProvider"/>
+/// i publikuje <see cref="TimerElapsed"/> do kolejki Orchestratora. Wykonawca nie przepuszcza wyjątku
+/// przez granicę portu (AD-4).
+/// </summary>
+public interface ITimerPort
+{
+    /// <summary>Planuje albo anuluje timer; duplikat <c>timerId</c> zastępuje poprzedni termin.</summary>
+    void Execute(TimerCommand command);
 }

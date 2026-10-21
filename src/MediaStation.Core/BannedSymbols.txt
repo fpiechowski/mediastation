@@ -36,6 +36,10 @@ P:System.DateTime.UtcNow;AD-14: czas tylko przez TimeProvider
 P:System.DateTime.Today;AD-14: czas tylko przez TimeProvider
 P:System.DateTimeOffset.Now;AD-14: czas tylko przez TimeProvider
 P:System.DateTimeOffset.UtcNow;AD-14: czas tylko przez TimeProvider
+P:System.TimeProvider.System;AD-14: czas tylko przez wstrzyknięty TimeProvider
+T:System.Diagnostics.Stopwatch;AD-14: czas tylko przez wstrzyknięty TimeProvider
+P:System.Environment.TickCount;AD-14: czas tylko przez wstrzyknięty TimeProvider
+P:System.Environment.TickCount64;AD-14: czas tylko przez wstrzyknięty TimeProvider
 T:System.Diagnostics.Process;AD-3: Core nie uruchamia procesów
 N:System.Net;AD-3: Core nie robi I/O sieciowego
 T:System.Threading.Mutex;AD-3: obiekty OS tylko w App

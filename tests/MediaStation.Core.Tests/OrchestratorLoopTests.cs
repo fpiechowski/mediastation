@@ -6,7 +6,9 @@ using MediaStation.App.Platform.Window;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
 using MediaStation.Core.Logging;
+using MediaStation.Core.Orchestrator;
 using MediaStation.Core.Ports;
+using Microsoft.Extensions.Time.Testing;
 using CoreOrchestrator = MediaStation.Core.Orchestrator.Orchestrator;
 
 namespace MediaStation.Core.Tests;
@@ -17,6 +19,9 @@ namespace MediaStation.Core.Tests;
 /// </summary>
 public class OrchestratorLoopTests
 {
+    /// <summary>Punkt startowy zegara; <c>startingTimeout</c> z domyślnych <see cref="Settings"/> to 30 s.</summary>
+    private static readonly DateTimeOffset T0 = new(2026, 10, 22, 12, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public void Posted_event_is_handled_and_publishes_next_snapshot()
     {
@@ -41,7 +46,7 @@ public class OrchestratorLoopTests
         var order = new List<string>();
         var published = new ManualResetEventSlim();
         using var loop = new OrchestratorLoop(
-            new CoreOrchestrator(TwoApps()),
+            new CoreOrchestrator(TwoApps(), new FakeTimeProvider(T0)),
             batch =>
             {
                 lock (order)
@@ -77,10 +82,11 @@ public class OrchestratorLoopTests
         WaitFor(() => published.Count >= 1);
 
         loop.Post(new LaunchApp("netflix"));
-        WaitFor(() => dispatched.Count >= 2);
+        WaitFor(() => dispatched.Count >= 3);
         WaitFor(() => published.Count >= 2);
 
         Assert.Equal(new StartApp(2, "netflix"), dispatched.ElementAt(1));
+        Assert.Equal(new ScheduleTimer(3, 1, "netflix", T0.AddSeconds(30)), dispatched.ElementAt(2));
         Assert.Equal(
             AppLifecycleState.Starting,
             published.ElementAt(1).Apps.Single(app => app.AppId == "netflix").State);
@@ -149,6 +155,8 @@ public class OrchestratorLoopTests
 
         // Jak w composition root: port „brak hosta” odpowiada w kolejce, a pętla powstaje po routerze.
         OrchestratorLoop? postsTo = null;
+        var time = new FakeTimeProvider(T0);
+        using var timers = new TimerScheduler(time, message => postsTo?.Post(message));
         var hosts = new Dictionary<AppType, IAppHostPort>
         {
             [AppType.Web] = new MissingHostPort(log, message => postsTo?.Post(message)),
@@ -164,8 +172,9 @@ public class OrchestratorLoopTests
             hosts,
             new LogWindowManagerPort(log),
             new LogInputRoutingPort(log),
+            timers,
             log);
-        using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps()), router.Dispatch, published.Enqueue, log);
+        using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
         postsTo = loop;
         loop.Start();
         WaitFor(() => published.Count >= 1);
@@ -186,6 +195,48 @@ public class OrchestratorLoopTests
         var snapshots = published.ToArray();
         Assert.Equal(1, snapshots[0].Rev);
         Assert.Equal(AppLifecycleState.Starting, snapshots[1].Apps.Single(app => app.AppId == "netflix").State);
+        Assert.Equal(3, snapshots[2].Rev);
+        Assert.Equal(AppLifecycleState.Failed, snapshots[2].Apps.Single(app => app.AppId == "netflix").State);
+        Assert.Equal(snapshots[1].FocusRequest, snapshots[2].FocusRequest);
+    }
+
+    [Fact]
+    public void Start_timeout_without_host_response_publishes_failed_snapshot()
+    {
+        var time = new FakeTimeProvider(T0);
+        var log = new RecordingLog();
+        var published = new ConcurrentQueue<ShellSnapshot>();
+        OrchestratorLoop? postsTo = null;
+        var hosts = new Dictionary<AppType, IAppHostPort>
+        {
+            [AppType.Web] = new SilentHost(),
+            [AppType.Moonlight] = new SilentHost(),
+            [AppType.Native] = new SilentHost(),
+        };
+        using var timers = new TimerScheduler(time, message => postsTo?.Post(message));
+        var router = new CommandRouter(
+            new Dictionary<string, AppType>(StringComparer.Ordinal) { ["netflix"] = AppType.Web },
+            hosts,
+            new LogWindowManagerPort(log),
+            new LogInputRoutingPort(log),
+            timers,
+            log);
+        using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
+        postsTo = loop;
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        // Host przyjmuje StartApp bez odpowiedzi: tylko zegar może wyprowadzić aplikację ze stanu Starting.
+        loop.Post(new LaunchApp("netflix"));
+        WaitFor(() => published.Count >= 2);
+        Assert.Equal(
+            AppLifecycleState.Starting,
+            published.ElementAt(1).Apps.Single(app => app.AppId == "netflix").State);
+
+        time.Advance(TimeSpan.FromSeconds(30));
+        WaitFor(() => published.Count >= 3);
+
+        var snapshots = published.ToArray();
         Assert.Equal(3, snapshots[2].Rev);
         Assert.Equal(AppLifecycleState.Failed, snapshots[2].Apps.Single(app => app.AppId == "netflix").State);
         Assert.Equal(snapshots[1].FocusRequest, snapshots[2].FocusRequest);
@@ -255,7 +306,7 @@ public class OrchestratorLoopTests
         published = snapshots;
         dispatched = commands;
         return new OrchestratorLoop(
-            new CoreOrchestrator(TwoApps()),
+            new CoreOrchestrator(TwoApps(), new FakeTimeProvider(T0)),
             batch =>
             {
                 foreach (var command in batch)
@@ -292,6 +343,18 @@ public class OrchestratorLoopTests
     private sealed class NullLog : ILog
     {
         public void Write(LogLevel level, string src, string msg, IReadOnlyDictionary<string, object?>? data = null, Exception? error = null)
+        {
+        }
+    }
+
+    /// <summary>Host, który przyjmuje komendy i nigdy nie odpowiada: tylko timeout może zamknąć start.</summary>
+    private sealed class SilentHost : IAppHostPort
+    {
+        public void Start(StartApp command)
+        {
+        }
+
+        public void Stop(StopApp command)
         {
         }
     }

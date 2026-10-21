@@ -14,6 +14,7 @@ using MediaStation.Core.Cli;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
 using MediaStation.Core.Logging;
+using MediaStation.Core.Orchestrator;
 using MediaStation.Core.Ports;
 using CoreOrchestrator = MediaStation.Core.Orchestrator.Orchestrator;
 
@@ -122,14 +123,19 @@ public static class CompositionRoot
             [AppType.Native] = new MissingHostPort(log, message => postsTo?.Post(message)),
         };
 
+        // Scheduler timerów liczy termin na tym samym zegarze co log i power; publikuje do kolejki pętli leniwie,
+        // bo pętla powstaje po routerze.
+        var timers = new TimerScheduler(time, message => postsTo?.Post(message));
+
         var router = new CommandRouter(
             appTypes,
             hosts,
             new LogWindowManagerPort(log),
             new LogInputRoutingPort(log),
+            timers,
             log);
 
-        var loop = new OrchestratorLoop(new CoreOrchestrator(config), router.Dispatch, bridge.Publish, log);
+        var loop = new OrchestratorLoop(new CoreOrchestrator(config, time), router.Dispatch, bridge.Publish, log);
         postsTo = loop;
         loop.Start();
 
@@ -137,7 +143,7 @@ public static class CompositionRoot
         PowerNotifications? notifications = null;
 
         // Handler przed startem adaptera: wyjątek w konstrukcji nie może zostawić pętli bez zwolnienia.
-        // Kolejność zwolnienia: najpierw adapter (żadnych nowych Eventów), potem pętla.
+        // Kolejność zwolnienia: najpierw adapter (żadnych nowych Eventów), potem scheduler timerów, na końcu pętla.
         app.Exit += (_, _) =>
         {
             try
@@ -152,7 +158,14 @@ public static class CompositionRoot
                 }
                 finally
                 {
-                    loop.Dispose();
+                    try
+                    {
+                        timers.Dispose();
+                    }
+                    finally
+                    {
+                        loop.Dispose();
+                    }
                 }
             }
         };

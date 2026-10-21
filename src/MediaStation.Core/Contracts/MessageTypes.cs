@@ -23,6 +23,8 @@ public static class MessageTypes
         typeof(ActivateWindow),
         typeof(MinimizeWindow),
         typeof(ShowShell),
+        typeof(ScheduleTimer),
+        typeof(CancelTimer),
         typeof(CommandCompleted),
         typeof(CommandFailed),
         typeof(OrchestratorStarted),
@@ -30,6 +32,7 @@ public static class MessageTypes
         typeof(AppWindowAttached),
         typeof(ProcessExited),
         typeof(CdpLost),
+        typeof(TimerElapsed),
         typeof(ForegroundChanged),
     ];
 
