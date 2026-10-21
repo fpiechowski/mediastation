@@ -84,7 +84,7 @@ slug = "epic-do-oceny"
 title = "„Do oceny”"
 covers = ["CAP-11", "CAP-6"]
 after = [
-  { epic = 2, needs = "TimerElapsed dla dobowego sprawdzenia pending, buforowanie do StoreLoaded" },
+  { epic = 2, needs = "TimerElapsed dla dobowego sprawdzenia pending" },
   { epic = 4, needs = "ekran główny i model fokusu kluczowany stabilnymi id" },
   { epic = 7, needs = "fakty playback z title serialu, seriesId, lastInSeason, position/duration" },
 ]

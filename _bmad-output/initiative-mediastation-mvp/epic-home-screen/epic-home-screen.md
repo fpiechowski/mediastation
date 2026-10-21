@@ -40,6 +40,7 @@ Pierwsze demo na TV: ekran główny obsługiwany pilotem, zgodny z `DESIGN.md`; 
 ## Notes
 
 - Decision: linię success CAP-6 „Nowa karta »Do oceny« nie kradnie fokusu” weryfikuje epic-do-oceny; ta epika dostarcza model fokusu kluczowany stabilnymi id (2026-10-18).
+- Decision: przekazanie Actions z Orchestratora do Shell w trybie `shell` (gałąź w Orchestratorze i komunikat przez most) dostarcza ta epika; epic-orchestrator-lifecycle obsługuje z Actions tylko Home (inception epiki 2, 2026-10-21).
 - Waits on epic-foundation-contracts, epic-orchestrator-lifecycle, epic-input because: host Shell, snapshot z `focusRequest`, Actions z `phase: long`.
 - Deferred: guard `e.Source` w `ShellBridge` (tylko wiadomości z origin shella) i blokada nawigacji WebView2 poza shell. Źródło: F11 w retro epic-foundation-contracts (`_bmad-output/initiative-mediastation-mvp/epic-foundation-contracts/epic-foundation-contracts-retrospective.md`); wcześniej triage 1.1 #6 („guard należy do story wprowadzającej Intents”). Warunek: pierwsza story tej epiki, która wysyła Intents z UI przez most (2026-10-20).
 - Deferred: lista błędów na ekranie błędu konfiguracji ucina się bez informacji (`overflow: hidden` na scenie 1080 px); brakuje wskaźnika „i jeszcze K” albo innego rozwiązania z UX. Źródło: F17 w retro epic-foundation-contracts (`_bmad-output/initiative-mediastation-mvp/epic-foundation-contracts/epic-foundation-contracts-retrospective.md`). Warunek: story tej epiki, która dotyka ekranu błędu konfiguracji; gdy żadna, Refactor sweep tej epiki (2026-10-20).

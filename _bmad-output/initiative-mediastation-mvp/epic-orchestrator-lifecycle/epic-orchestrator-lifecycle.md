@@ -43,3 +43,20 @@ Core: Orchestrator, stan sesji, polityka wyboru przy Home; App: SystemEvents. Ni
 - Deferred: `CompositionRoot` (jeden wpis logu na nieobsłużony wyjątek UI, `DispatcherLogged`) nie ma testu ani pełnego manualnego pokrycia. Źródło: R4/N3 w retro epic-foundation-contracts (`_bmad-output/initiative-mediastation-mvp/epic-foundation-contracts/epic-foundation-contracts-retrospective.md`). Warunek: pierwsza story, która podłącza Orchestrator do composition root (2026-10-21).
 - Deferred: `BannedSymbols.txt` nie zakazuje `TimeProvider.System`, `Stopwatch`, `Environment.TickCount`. Źródło: R7/N8 w retro epic-foundation-contracts (`_bmad-output/initiative-mediastation-mvp/epic-foundation-contracts/epic-foundation-contracts-retrospective.md`). Warunek: pierwsza story z czasem w Core (2026-10-21).
 - Deferred: `ShellSnapshotFactoryTests` buduje `new ConfigResult(null, [])` — stan sprzeczny z dokiem `ConfigResult`. Źródło: R7/N8 w retro epic-foundation-contracts (`_bmad-output/initiative-mediastation-mvp/epic-foundation-contracts/epic-foundation-contracts-retrospective.md`). Warunek: następny refactor testów w tej epice (2026-10-21).
+- Decision: tracer bullet to story 1 — Orchestrator na własnym wątku publikuje snapshot (`rev`, `apps[]` ze stanem, `focusRequest`) do shella na UM760; po nim story 2 (SystemEvents, Modern Standby), bo to najmniej pewny element epiki (2026-10-21).
+- Decision: jeden lane — stories 2–8 i 10 zmieniają kod Orchestratora, więc `after` tworzy łańcuch i nie budujemy ich równolegle (2026-10-21).
+- Decision: Orchestrator w Core to czysty handler (komunikat → Commands i snapshot); wątek z jedną kolejką żyje w App (2026-10-21).
+- Decision: bez hostów composition root dostaje adapter „brak hosta” per `AppType`: na `ProbeExisting` nic, na `StartApp` `CommandFailed{Unexpected}`; epiki hostów podmieniają adapter (2026-10-21).
+- Decision: Done when 2 weryfikuje log (`snapshotPublished {rev, focusRequest}`); shell zostaje na placeholderze, w `web/shell` zmienia się tylko guard `isSnapshot` (2026-10-21).
+- Decision: ta epika wprowadza port WindowManager tylko z `MinimizeWindow` i `ShowShell` (fake w testach); sekwencję pause → mute → minimize, unmute i adapter dokłada epic-windows-audio (2026-10-21).
+- Decision: `ForegroundChanged` w MVP Orchestrator zapisuje i loguje bez reakcji (Home zawsze ratuje); reakcję ustala epic-windows-audio (2026-10-21).
+- Decision: Orchestrator wysyła `SetInputRouting` przy każdej zmianie trybu `shell`/`app` już w tej epice; epic-input go konsumuje (2026-10-21).
+- Decision: buforowanie faktów `playback` do `StoreLoaded` (AD-12, CAP-11) przechodzi do epic-do-oceny; tutaj zostaje `TimerElapsed` (2026-10-21).
+- Decision: SystemEvents w tej epice obsługuje tylko power (wybudzenie); zakończenie procesu raportują hosty jako `ProcessExited` (AD-4) (2026-10-21).
+- Decision: pomiar sygnału wybudzenia z Modern Standby jest częścią story 2 (z `plan_checkpoint`), nie osobnym spike'iem (2026-10-21).
+- Decision: port WindowManager z tej epiki ma też `ActivateWindow{hwnd}` (adapter tylko-log); sekwencję restore → odblokowanie foreground → unmute implementuje epic-windows-audio (2026-10-21).
+- Decision: Orchestrator w tej epice obsługuje z Actions tylko Home; przekazanie Actions do Shell w trybie `shell` dokłada epic-home-screen, a `action`/`back` do strony w `app` + `web` epic-netflix-dpad — każda swoją gałęzią w Orchestratorze (2026-10-21).
+- Decision: story ścieżki szczęśliwej podzielona na 3 (porty i uruchomienie) i 10 (Home, przełączanie, zamykanie), bo po check'u setu przekraczała jedną sesję (2026-10-21).
+- Decision: timeout bezpieczeństwa `Stopping` → `Failed` z nowego `settings.stoppingTimeout` (domyślnie 45 s) planuje Orchestrator w story 5; limity `prepareClose` i `quit` Moonlighta zostają w hostach (2026-10-21).
+- Decision: breakdown zaakceptowany (10 entries); epika będzie budowana w pełni automatycznie w pętli (`bmad-build-auto`) (2026-10-21).
+- Decision: bez closing end-to-end suite — spec nie ma test planu dla CAP-2, a scenariusze pokrywają testy stories (2026-10-21).

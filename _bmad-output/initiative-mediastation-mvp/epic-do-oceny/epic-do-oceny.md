@@ -40,4 +40,5 @@ Eliza ma powód, żeby woleć MediaStation od VIDAA: ocenia obejrzany tytuł tel
 
 - Open question: kontrole z forge i UX — czy QR otwiera aplikację Filmweb, czy przeglądarkę; czy wyszukiwarka Filmwebu znajduje tytuł w języku profilu; skan QR (ECC L) z 3 m dwoma telefonami. Rozstrzyga wczesna story spike na prawdziwym TV; dokładny format URL ustala story (AD-12).
 - Decision: linię success CAP-6 „nowa karta nie kradnie fokusu” weryfikuje ta epika (2026-10-18).
+- Decision: buforowanie faktów `playback` w Orchestratorze do `StoreLoaded` (AD-12) dostarcza ta epika, nie epic-orchestrator-lifecycle; z epiki 2 bierze tylko `TimerElapsed` (inception epiki 2, 2026-10-21).
 - Waits on epic-netflix-dpad because: fakty `playback` z `title` serialu, `seriesId`, `lastInSeason`, `position`, `duration`.

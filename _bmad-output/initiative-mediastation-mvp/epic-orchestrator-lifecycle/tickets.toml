@@ -1,0 +1,126 @@
+# Orchestrator & app lifecycle — entries w kolejności budowy. tickets.py reads it.
+# Kolejność tabel = kolejność budowy; `id` nie jest kolejnością.
+# Jeden lane: każda story od 2 do 8 i 10 zmienia handler Orchestratora, więc `after` tworzy łańcuch; story 2 dodatkowo dotyka osobnego kodu (`Platform/System`).
+
+[[entry]]
+id = 1
+type = "story"
+title = "Tracer bullet: Orchestrator na własnym wątku publikuje snapshot do shella"
+description = "Dodaje w Core Orchestrator jako czysty handler (komunikat → Commands i snapshot) z monotonicznym `rev`, a w kontraktach enum stanów cyklu życia (NotRunning, Starting, Foreground, Background, Stopping, Failed), `apps[]` w snapshocie (`appId`, `category`, stan) i `focusRequest { target: default|<appId>, seq }` z `focusRequest{default}` przy starcie, które używają kolejne stories; w App pętlę Orchestratora na dedykowanym wątku z jedną kolejką, publikację snapshotu latest-wins przeniesioną na wątek UI (F12) z wpisem logu `snapshotPublished {rev, focusRequest}`, podpięcie w composition root z pokryciem jednego wpisu logu na nieobsłużony wyjątek UI (`DispatcherLogged`, R4/N3) helperem wydzielonym do Core z testem albo manualnym checkiem, aktualizację guardu `isSnapshot` w `web/shell/src/bridge.ts` i `ShellSnapshotFactoryTests` na poprawnym `ConfigResult` (N8)."
+verify = "`dotnet test` przechodzi z testami monotonicznego `rev` i `focusRequest{default}` w pierwszym snapshocie, a `dotnet publish` na UM760 pokazuje placeholder shella i zostawia w logu `snapshotPublished` z `rev` nadanym przez Orchestrator."
+covers = ["CAP-2"]
+after = ["1.2", "1.3", "1.6"]
+hitl = true
+risk = "medium"
+done_checkpoint = true
+references = ["architecture-mediastation/architecture-mediastation.md, AD-2", "architecture-mediastation/architecture-mediastation.md, AD-14", "architecture-mediastation/architecture-mediastation.md, AD-16", "epic-foundation-contracts/epic-foundation-contracts-retrospective.md, Findings F12, N3, N8"]
+
+[[entry]]
+id = 2
+type = "story"
+title = "SystemEvents: wybudzenie z Modern Standby na UM760"
+description = "Dodaje produkcyjny adapter power w `Platform/System`, który na UM760 loguje każdy kandydujący sygnał wybudzenia (`PBT_APMRESUMEAUTOMATIC`, `GUID_CONSOLE_DISPLAY_STATE`, `PowerModeChanged`), wybiera jeden i wysyła do kolejki Orchestratora Event `SystemResumed`, na który Orchestrator przechodzi na ekran główny i publikuje snapshot z nowym `seq` `focusRequest{default}`; pełną politykę wybudzenia (Background dla aplikacji na pierwszym planie, `RenewSession`, zastępowanie przełączenia) dokłada story 8."
+verify = "Na UM760 uśpienie do Modern Standby i wybudzenie pilotem zostawia w logu jeden `systemResumed` i `snapshotPublished` z `focusRequest{default}` o `seq` większym niż przed uśpieniem, a test Core sprawdza ten sam wynik dla `SystemResumed`."
+covers = ["CAP-2"]
+after = [1]
+hitl = true
+risk = "high"
+plan_checkpoint = true
+done_checkpoint = true
+references = ["architecture-mediastation/architecture-mediastation.md, AD-10", "research-browser-control-for-streaming-services/digests/spike-um760.md, claim S7/S8 (CDP zrywa się po Modern Standby)"]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Porty i ścieżka uruchomienia aplikacji"
+description = "Dodaje Intent `LaunchApp{ appId }` (wybór kafelka) eksportowany do JSON Schema i TS (AD-16), porty hostów per `AppType` ze `StartApp` z `cmdId` i korelacją `CommandCompleted`/`CommandFailed`, Event `AppWindowAttached{ appId, hwnd, rootPid }`, przejścia NotRunning → Starting → Foreground, port WindowManager z komendami `ActivateWindow{hwnd}`, `MinimizeWindow` i `ShowShell` (pełne sekwencje restore → odblokowanie foreground → unmute i pause → mute → minimize dokłada epic-windows-audio; `MinimizeWindow` i `ShowShell` używają stories 10, 4, 6, 7 i 8), `SetInputRouting` z monotonicznym `epoch` nadawanym przez Orchestrator przy każdej zmianie trybu `shell`/`app`, oraz w composition root adapter „brak hosta”, który na `StartApp` odpowiada `CommandFailed{Unexpected}` (przejście w `Failed` dokłada story 4), i adaptery tylko-log dla WindowManager i `SetInputRouting`, które podmieniają epic-windows-audio i epic-input."
+verify = "Testy Orchestratora na fake'ach portów przechodzą przez NotRunning → Starting → Foreground z `StartApp`, `ActivateWindow` po `AppWindowAttached`, `SetInputRouting{app}` z rosnącym `epoch` i stanem aplikacji w snapshocie, a wynik ze złym `cmdId` nie zmienia stanu."
+covers = ["CAP-2"]
+after = [2]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-4", "architecture-mediastation/architecture-mediastation.md, AD-5", "architecture-mediastation/architecture-mediastation.md, AD-8 (tabela routingu)", "architecture-mediastation/architecture-mediastation.md, AD-15"]
+
+[[entry]]
+id = 10
+type = "story"
+title = "Home, przełączanie i zamykanie aplikacji"
+description = "Dodaje obsługę `Action{Home}` (rekord z 1.2), po której aplikacja w Foreground przechodzi w Background z `MinimizeWindow`, `ShowShell` i `SetInputRouting{shell}`, powrót Background → Foreground przez `LaunchApp` ze story 3 z `ActivateWindow` i `SetInputRouting{app}`, Intents `CloseApp{ appId }` i `RestartApp{ appId }` (AppMenu, tylko dla Background; eksport do JSON Schema i TS) ze `StopApp` i przejściem Background → Stopping, które kończy `CommandCompleted` na `StopApp` albo oczekiwany `ProcessExited` (→ NotRunning, przy restarcie dalej Starting), oraz zapis i log `ForegroundChanged` bez reakcji; z `CloseApp`/`RestartApp` korzysta wyjście z `Failed` w story 4, a z przejścia przy Home stories 6 i 8."
+verify = "Testy Orchestratora przechodzą przez Foreground → Background (Home) → Foreground (`LaunchApp`) → Background → Stopping → NotRunning (`CloseApp`) oraz Background → Stopping → Starting (`RestartApp`) z oczekiwanymi Commands i `SetInputRouting`, a `ForegroundChanged` zostawia wpis w logu i nie zmienia stanu."
+covers = ["CAP-2"]
+after = [3]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-5", "architecture-mediastation/architecture-mediastation.md, AD-8 (AppMenu)", "architecture-mediastation/architecture-mediastation.md, AD-15"]
+
+[[entry]]
+id = 4
+type = "story"
+title = "Failed: wejście, wyjście przez AppMenu i awaria na pierwszym planie"
+description = "Dodaje przejście w `Failed` po `ProcessExited` poza stanem Stopping, po `CommandFailed` na `StartApp` (w tym `Unexpected` z adaptera „brak hosta” ze story 3) i po Evencie `CdpLost` po nieudanym reconnecie (zgłasza go epic-browserhost po `cdpReconnectTimeout`), wyjście z `Failed` wyłącznie przez `RestartApp` (Stopping → Starting) i `CloseApp` ze story 10, a przy awarii aplikacji na pierwszym planie przejście na ekran główny z `ShowShell` ze story 3, `SetInputRouting{shell}` i `focusRequest{<appId>}` z nowym `seq`."
+verify = "Testy Orchestratora pokazują, że `Failed` ignoruje `LaunchApp`, `RestartApp` prowadzi przez Stopping do Starting, `CloseApp` do NotRunning, `CdpLost` i `ProcessExited` aplikacji w Foreground dają `ShowShell`, `SetInputRouting{shell}` i `focusRequest` na jej kafelku, a `ProcessExited` w Stopping nie daje `Failed`."
+covers = ["CAP-2"]
+after = [10]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (AppMenu)", "ux-mediastation/EXPERIENCE.md, Key Flows J4"]
+
+[[entry]]
+id = 5
+type = "story"
+title = "Timery w Core oraz timeouty Starting i Stopping"
+description = "Dodaje timery bez łamania czystego handlera: handler zwraca `ScheduleTimer{ timerId, due }` i `CancelTimer{ timerId }`, a pętla w App planuje je przez wstrzyknięty `TimeProvider` i wkłada `TimerElapsed{ timerId }` do kolejki; timer jest kluczowany `timerId` i właścicielem, a anuluje go wyłącznie jawne `CancelTimer` (tak skorzysta z niego dobowe sprawdzenie w epic-do-oceny); do tego timeout `Starting` z `settings.startingTimeout` prowadzący do `Failed` i anulowany po `AppWindowAttached`, timeout bezpieczeństwa `Stopping` z nowego `settings.stoppingTimeout` (domyślnie 45 s, dłużej niż 30 s na `quit` Moonlighta; schemat, walidacja i `tools/samples/config/settings.json`) prowadzący do `Failed`, górne granice obu wartości w walidacji `settings.json` (F18) oraz zakaz `TimeProvider.System`, `Stopwatch` i `Environment.TickCount` w `BannedSymbols.txt` z testem granicy Core (N8)."
+verify = "Testy z `FakeTimeProvider` przeprowadzają aplikację ze Starting po `startingTimeout` i ze Stopping po `stoppingTimeout` w `Failed`, a po wcześniejszym `AppWindowAttached` albo `CommandCompleted` na `StopApp` timer jest anulowany i nie zmienia stanu; testy walidacji odrzucają obie wartości ponad granicę, a `CoreBoundaryTests` odrzuca ambient time."
+covers = ["CAP-2"]
+after = [4]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-14", "epic-foundation-contracts/epic-foundation-contracts-retrospective.md, Findings F18, N8"]
+
+[[entry]]
+id = 6
+type = "story"
+title = "transitionId i Home w trakcie Starting"
+description = "Nadaje każdemu przełączeniu foreground `transitionId`, tak że nowsza decyzja zastępuje poprzednią, a wyniki ze starego `transitionId` nie wynoszą aplikacji na pierwszy plan, i obsługuje Home w trakcie `Starting`: ekran główny od razu, aplikacja, która dokończy start, dostaje kompensujące `MinimizeWindow` ze story 3 zamiast `ActivateWindow` i przechodzi w `Background`, a timeout `Starting` ze story 5 należy do startu aplikacji i przeżywa Home."
+verify = "Test Orchestratora z Home w trakcie `Starting` i spóźnionym `AppWindowAttached` daje `MinimizeWindow` dla tej aplikacji, stan `Background` i `SetInputRouting{shell}`, a Home w trakcie `Starting` bez `AppWindowAttached` daje `Failed` po `startingTimeout` bez nowego `focusRequest`."
+covers = ["CAP-2"]
+after = [5]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-14", "ux-mediastation/EXPERIENCE.md, State Patterns (Kafelek — cykl życia, Starting)"]
+
+[[entry]]
+id = 7
+type = "story"
+title = "Adopcja żywych aplikacji po restarcie"
+description = "Dodaje przy starcie Orchestratora Command `ProbeExisting` do każdego hosta (adapter „brak hosta” ze story 3 nic na niego nie raportuje), po którym `AppWindowAttached` bez wcześniejszego `StartApp` daje adoptowaną aplikację w `Background` z `MinimizeWindow`, ekranem głównym na wierzchu i `focusRequest{default}`, tak samo dla przeglądarki i Moonlighta."
+verify = "Test Orchestratora z fake hostami raportującymi `AppWindowAttached` na `ProbeExisting` daje przeglądarkę i Moonlighta w `Background` z `MinimizeWindow` dla każdej, `SetInputRouting{shell}` i `focusRequest{default}`, a adoptowana aplikacja wraca na pierwszy plan przez `LaunchApp` z `ActivateWindow`."
+covers = ["CAP-2"]
+after = [6]
+hitl = false
+risk = "low"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-10 (Adopcja sierot)", "architecture-mediastation/architecture-mediastation.md, AD-15"]
+
+[[entry]]
+id = 8
+type = "story"
+title = "Wybudzenie: pełna polityka"
+description = "Rozszerza obsługę `SystemResumed` ze story 2: aplikacja w Foreground przechodzi w Background jak przy Home ze story 10 (`MinimizeWindow`, `ShowShell`, `SetInputRouting{shell}`), host każdej działającej aplikacji webowej dostaje Command `RenewSession` (adapter „brak hosta” go ignoruje), a nowy `transitionId` sprawia, że wybudzenie w trakcie przełączania zastępuje poprzednią decyzję (aplikacja w Starting dostaje kompensację jak w story 6, a jej timeout `Starting` biegnie dalej)."
+verify = "Test Orchestratora z działającą aplikacją webową i Moonlightem daje po `SystemResumed` `SetInputRouting{shell}`, `focusRequest{default}` i `RenewSession` tylko dla aplikacji webowej, a `SystemResumed` w trakcie `Starting` daje kompensujące `MinimizeWindow` po dokończeniu startu."
+covers = ["CAP-2"]
+after = [7]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-10 (Wybudzenie z Modern Standby)"]
+
+[[entry]]
+id = 9
+type = "story"
+title = "Refactor sweep"
+description = "Sprząta kod epiki według planów stories 1–8 i 10 oraz odłożonych w nich findings z review; zakres ustala się przy starcie, tylko cleanup."
+verify = "`dotnet test` przechodzi, a `dotnet publish` na UM760 dalej spełnia Done when 2 epiki: snapshoty z Orchestratora w logu i `focusRequest{default}` po wybudzeniu z Modern Standby."
+covers = ["CAP-2"]
+after = [1, 2, 3, 10, 4, 5, 6, 7, 8]
+hitl = true
+risk = "low"
+done_checkpoint = true
