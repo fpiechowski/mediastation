@@ -2,7 +2,7 @@
 
 ## Acceptance and verification
 
-- Do not require UM760 or any other external machine for acceptance. bmad-loop runs on the current Windows machine (ALDER, B760 Pro RS/D4, Windows 11 Home).
-- Verify with automated tests, builds, app runs, and log assertions available on the current machine. Record the evidence in the plan.
-- For checks that need unavailable hardware (Modern Standby wake, TV/HDR, physical remote), mark them not applicable with the reason, use the strongest automated evidence, and accept the result. Do not park or block a ticket for operator-only hardware checks.
-- When a ticket text still names UM760, treat it as the current machine with best-effort hardware coverage.
+- Per ticket, verify on the current Windows machine (ALDER, B760 Pro RS/D4, Windows 11 Home) with automated tests, builds, app runs, and log assertions. Record the evidence in the plan.
+- Do not park or block a ticket for UM760 or other operator-only hardware checks. If a check needs unavailable hardware, mark it not applicable with the reason and continue with the strongest automated evidence.
+- The user performs the whole-epic acceptance on UM760 after delivery, testing the entire epic at once. Do not mark the epic accepted or close it; pause at the epic boundary with a short handoff: current-machine evidence plus the UM760 checks the user should run for the whole epic.
+- When a ticket text still names UM760, treat the per-ticket part as current-machine/best-effort; reserve the UM760 wording for the user's whole-epic acceptance.

@@ -17,7 +17,7 @@ Dodaje w Core Orchestrator jako czysty handler (komunikat → Commands i snapsho
 
 ## Acceptance Criteria
 
-Verify: `dotnet test` przechodzi z testami monotonicznego `rev`, `focusRequest{default}` w snapshocie z `OrchestratorStarted` i helpera `DispatcherLogged`, a Release self-contained uruchomiony automatycznie na aktualnej maszynie pokazuje placeholder shella i zostawia w logu `snapshotPublished` z `focusRequest {target: default, seq: 1}`; UM760 nie jest wymagany.
+Verify: `dotnet test` przechodzi z testami monotonicznego `rev`, `focusRequest{default}` w snapshocie z `OrchestratorStarted` i helpera `DispatcherLogged`, a Release self-contained uruchomiony automatycznie na aktualnej maszynie pokazuje placeholder shella i zostawia w logu `snapshotPublished` z `focusRequest {target: default, seq: 1}`; UM760 nie jest wymagany per ticket; całościowy test UM760 wykonuje użytkownik przy `epic-boundary`.
 
 ## References
 
@@ -30,6 +30,6 @@ Verify: `dotnet test` przechodzi z testami monotonicznego `rev`, `focusRequest{d
 ## Notes
 
 - Automated acceptance (current machine): `dotnet publish` projektu `MediaStation.App` w Release, self-contained win-x64; uruchomić `MediaStation.exe` na aktualnej maszynie; sprawdzić, że shell pokazuje placeholder; w `%LOCALAPPDATA%\MediaStation\logs\mediastation-<dzień UTC>.jsonl` ostatnie linie zawierają `snapshotPublished` z `focusRequest {target: default, seq: 1}`.
-- Automated acceptance: wynik z datą, HEAD i nazwą maszyny trafia do notatki odbioru epiku; UM760 nie jest wymagany.
+- Automated acceptance: wynik z datą, HEAD i nazwą maszyny trafia do notatki odbioru epiku; UM760 nie jest wymagany per ticket; całościowy test UM760 wykonuje użytkownik przy `epic-boundary`.
 - Obsługę `OrchestratorStarted` z tej story rozszerzają story 3 (`SetInputRouting{shell}`) i story 7 (`ProbeExisting{appId}`); ta story daje tylko pierwszy snapshot.
 - Monotoniczność `rev` dowodzi test jednostkowy, nie log; stałe `Rev: 1` z composition root znika w tej story.

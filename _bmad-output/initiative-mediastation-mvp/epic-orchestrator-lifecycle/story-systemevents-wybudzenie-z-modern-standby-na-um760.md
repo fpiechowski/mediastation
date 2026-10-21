@@ -17,7 +17,7 @@ Dodaje produkcyjny adapter power w `Platform/System`, który na aktualnej maszyn
 
 ## Acceptance Criteria
 
-Verify: Test Core sprawdza `SystemResumed` (`powerSignal`, `systemResumed`, `snapshotPublished` z nowym `seq`); na aktualnej maszynie uruchomić app i sprawdzić logi, a jeśli Modern Standby/wybudzenie nie jest dostępne, zanotować to i zaakceptować testy automatyczne; UM760 nie jest wymagany.
+Verify: Test Core sprawdza `SystemResumed` (`powerSignal`, `systemResumed`, `snapshotPublished` z nowym `seq`); na aktualnej maszynie uruchomić app i sprawdzić logi, a jeśli Modern Standby/wybudzenie nie jest dostępne, zanotować to i zaakceptować testy automatyczne; UM760 nie jest wymagany per ticket; całościowy test UM760 wykonuje użytkownik przy `epic-boundary`.
 
 ## References
 
@@ -30,4 +30,4 @@ Verify: Test Core sprawdza `SystemResumed` (`powerSignal`, `systemResumed`, `sna
 - Kontrola zewnętrzna (risk high): epika jest budowana w pełni automatycznie; test wybudzenia jest best-effort na aktualnej maszynie, a jeśli Modern Standby nie jest dostępny, zanotuj to i zaakceptuj testy Core.
 - Reguła wyboru sygnału i deduplikacji jest w Notes epiki (Decision z 2026-10-21); autor może ją zmienić przy odbiorze epiku na podstawie pomiaru.
 - Automated best-effort (current machine): uruchomić build i `MediaStation.exe`; jeśli Modern Standby jest dostępny, uśpić i wybudzić, a w logu sprawdzić `powerSignal`, jeden `systemResumed` i `snapshotPublished` z nowym `seq`; jeśli nie, zanotować brak sprzętu i zaakceptować test Core.
-- Automated acceptance: wynik z datą, HEAD i nazwą maszyny trafia do notatki odbioru epiku; UM760 nie jest wymagany.
+- Automated acceptance: wynik z datą, HEAD i nazwą maszyny trafia do notatki odbioru epiku; UM760 nie jest wymagany per ticket; całościowy test UM760 wykonuje użytkownik przy `epic-boundary`.

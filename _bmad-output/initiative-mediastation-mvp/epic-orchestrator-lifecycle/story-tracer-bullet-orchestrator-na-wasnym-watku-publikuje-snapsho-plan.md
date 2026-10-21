@@ -111,7 +111,7 @@ Bootstrap `rev: 0` is never logged; Orchestrator revs start at 1. `seq` advances
 - `dotnet publish src/MediaStation.App -c Release -r win-x64 --self-contained true` -- success.
 - Ran `MediaStation.exe` from the publish output with valid `%LOCALAPPDATA%\MediaStation\config`; process stayed alive.
 - Log `%LOCALAPPDATA%\MediaStation\logs\mediastation-2026-10-21.jsonl` contains `snapshotPublished` with `rev: 1` and `focusRequest {target: "default", seq: 1}`.
-- UM760 check waived by the user; current-machine automated evidence accepted.
+- UM760 check deferred to the user's whole-epic acceptance at epic boundary; current-machine automated evidence accepted for delivery.
 
 ## Auto Run Result
 
@@ -134,7 +134,7 @@ Status: awaiting-operator
 - `dotnet build MediaStation.slnx -c Release` — success, 0 warnings; schema/TS regenerated and Vite shell bundle built.
 - `dotnet build src/MediaStation.App -c Debug` — success, 0 warnings; contracts + `tsc` passed.
 
-**Residual risks:** App-only threading/dispatcher wiring has no unit tests (verified by build); `apps[]`/`focusRequest` are not rendered yet by design; the UM760 self-contained run was waived and replaced by the current-machine publish/run/log check above.
+**Residual risks:** App-only threading/dispatcher wiring has no unit tests (verified by build); `apps[]`/`focusRequest` are not rendered yet by design; the UM760 self-contained run is deferred to the user's whole-epic acceptance at epic boundary; the current-machine publish/run/log check above is the delivery evidence.
 
 ## Operator Confirmation
 

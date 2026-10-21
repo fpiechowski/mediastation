@@ -17,7 +17,7 @@ Sprząta kod epiki: zakresem są findings z dispozycją `defer` w planach storie
 
 ## Acceptance Criteria
 
-Verify: `dotnet test` przechodzi, a automatyczny smoke na aktualnej maszynie (publish, start, log `snapshotPublished` z `focusRequest{default}`) przechodzi; UM760 nie jest wymagany.
+Verify: `dotnet test` przechodzi, a automatyczny smoke na aktualnej maszynie (publish, start, log `snapshotPublished` z `focusRequest{default}`) przechodzi; UM760 nie jest wymagany per ticket; całościowy test UM760 wykonuje użytkownik przy `epic-boundary`.
 
 ## References
 
@@ -25,5 +25,5 @@ Verify: `dotnet test` przechodzi, a automatyczny smoke na aktualnej maszynie (pu
 
 ## Notes
 
-- Automated smoke (current machine): powtórzyć start i log `snapshotPublished` z `focusRequest{default}` na buildzie po sweepie; UM760 nie jest wymagany.
-- Automated acceptance: wynik z datą, HEAD i nazwą maszyny trafia do notatki odbioru epiku; UM760 nie jest wymagany.
+- Automated smoke (current machine): powtórzyć start i log `snapshotPublished` z `focusRequest{default}` na buildzie po sweepie; UM760 nie jest wymagany per ticket; całościowy test UM760 wykonuje użytkownik przy `epic-boundary`.
+- Automated acceptance: wynik z datą, HEAD i nazwą maszyny trafia do notatki odbioru epiku; UM760 nie jest wymagany per ticket; całościowy test UM760 wykonuje użytkownik przy `epic-boundary`.
