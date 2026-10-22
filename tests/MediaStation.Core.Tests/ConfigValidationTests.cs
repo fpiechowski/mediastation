@@ -36,8 +36,8 @@ public class ConfigValidationTests
     private static string Web(string id = "netflix", string port = "9222", string extra = "") =>
         $$"""{ "type": "web", "id": "{{id}}", "category": "video", "title": "T", "icon": "i.png", "service": "netflix", "browser": "edge", "cdpPort": {{port}}{{extra}} }""";
 
-    private static string InputJson(string keys = """{ "0x26": "up" }""", string signature = "VID_1915&PID_1025", string gamepadHome = """["back", "start"]""") =>
-        $$"""{ "devices": [ { "signature": "{{signature}}", "source": "remote", "keys": {{keys}} } ], "gamepadHome": {{gamepadHome}} }""";
+    private static string InputJson(string keys = """{ "0x26": "up" }""", string signature = "VID_1915&PID_1025", string gamepadHome = """["back", "start"]""", string extra = "") =>
+        $$"""{ "devices": [ { "signature": "{{signature}}", "source": "remote", "keys": {{keys}} } ], "gamepadHome": {{gamepadHome}}{{extra}} }""";
 
     private static Dictionary<string, ConfigFileState> Files(string? apps = null, string? input = null, string? settings = null) => new()
     {
@@ -104,6 +104,7 @@ public class ConfigValidationTests
         Assert.Equal(ActionKind.Ok, device.Keys["0x0D"]);
         Assert.Equal(ActionKind.Home, device.Keys["0xAC"]);
         Assert.Equal([GamepadButton.Back, GamepadButton.Start], config.Input.GamepadHome);
+        Assert.Equal(600, config.Input.Timing.LongPressMs);
 
         Assert.Equal(new Settings(), config.Settings);
         Assert.Equal(7, config.Settings.RatingPendingDays);
@@ -178,7 +179,10 @@ public class ConfigValidationTests
         Assert.Empty(result.Errors);
         var config = Assert.IsType<LoadedConfig>(result.Config);
         Assert.Equal(3, config.Apps.Apps.Count);
-        Assert.Single(config.Input.Devices);
+        var device = Assert.Single(config.Input.Devices);
+        Assert.Equal(7, device.Keys.Count);
+        Assert.Equal(ActionKind.Back, device.Keys["0xA6"]);
+        Assert.Equal(600, config.Input.Timing.LongPressMs);
     }
 
     public static TheoryData<string, string, string, string> InvalidSamples => new()
@@ -210,6 +214,7 @@ public class ConfigValidationTests
         { Apps, AppsJson(Moonlight, Web(extra: """, "back": "home" """)), "$.apps[1].back", "back" },
         { Input, InputJson().Replace("\"source\"", "\"foo\": 1, \"source\""), "$.devices[0].foo", "foo" },
         { Input, """{ "devices": [], "gamepadHome": ["back", "start"], "foo": 1 }""", "$.foo", "foo" },
+        { Input, """{ "devices": [], "gamepadHome": ["back", "start"], "timing": { "foo": 1 } }""", "$.timing.foo", "foo" },
         { SettingsJson, """{ "foo": 1 }""", "$.foo", "foo" },
         { SettingsJson, """{ "update": { "repo": "a/b", "foo": 1 } }""", "$.update.foo", "foo" },
     };
@@ -599,6 +604,80 @@ public class ConfigValidationTests
     }
 
     [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    public void Long_press_threshold_must_be_positive(string value)
+    {
+        var error = SingleError(input: InputJson(extra: $$""", "timing": { "longPressMs": {{value}} }"""));
+
+        Assert.Equal(new ConfigError(Input, "$.timing.longPressMs", "wartość musi być większa od 0"), error);
+    }
+
+    [Fact]
+    public void Long_press_threshold_must_be_an_integer()
+    {
+        var error = SingleError(input: InputJson(extra: """, "timing": { "longPressMs": "600" }"""));
+
+        Assert.Equal(new ConfigError(Input, "$.timing.longPressMs", "zła wartość albo typ"), error);
+    }
+
+    [Fact]
+    public void Missing_or_empty_timing_defaults_to_600_ms()
+    {
+        Assert.Equal(600, Loaded(input: InputJson()).Input.Timing.LongPressMs);
+        Assert.Equal(600, Loaded(input: InputJson(extra: """, "timing": {}""")).Input.Timing.LongPressMs);
+        Assert.Equal(
+            450,
+            Loaded(input: InputJson(extra: """, "timing": { "longPressMs": 450 }""")).Input.Timing.LongPressMs);
+    }
+
+    [Fact]
+    public void Same_vk_with_different_kind_in_two_devices_is_rejected_on_later_device()
+    {
+        var error = SingleError(input: """
+            { "devices": [
+                { "signature": "VID_1915&PID_1025", "source": "remote", "keys": { "0x0D": "ok" } },
+                { "signature": "HID\\VID_046D&PID_C52B", "source": "keyboard", "keys": { "0x0D": "home" } }
+              ], "gamepadHome": ["back", "start"] }
+            """);
+
+        Assert.Equal(
+            new ConfigError(
+                Input,
+                "$.devices[1].keys['0x0D']",
+                "kod VK „0x0D” ma już kind „ok” w $.devices[0].keys['0x0D']"),
+            error);
+    }
+
+    [Fact]
+    public void Vk_conflict_ignores_hex_case()
+    {
+        var error = SingleError(input: """
+            { "devices": [
+                { "signature": "VID_1915&PID_1025", "source": "remote", "keys": { "0x0d": "ok" } },
+                { "signature": "HID\\VID_046D&PID_C52B", "source": "keyboard", "keys": { "0x0D": "home" } }
+              ], "gamepadHome": ["back", "start"] }
+            """);
+
+        Assert.Equal("$.devices[1].keys['0x0D']", error.Path);
+        Assert.Equal("kod VK „0x0D” ma już kind „ok” w $.devices[0].keys['0x0d']", error.Reason);
+    }
+
+    [Fact]
+    public void Same_vk_with_same_kind_in_two_devices_is_valid()
+    {
+        var config = Loaded(input: """
+            { "devices": [
+                { "signature": "VID_1915&PID_1025", "source": "remote", "keys": { "0x0D": "ok" } },
+                { "signature": "HID\\VID_046D&PID_C52B", "source": "keyboard", "keys": { "0x0D": "ok" } }
+              ], "gamepadHome": ["back", "start"] }
+            """);
+
+        Assert.Equal(2, config.Input.Devices.Count);
+        Assert.Equal(ActionKind.Ok, config.Input.Devices[1].Keys["0x0D"]);
+    }
+
+    [Theory]
     [InlineData("[]")]
     [InlineData("""["back"]""")]
     public void Gamepad_home_needs_two_buttons(string combo)
@@ -862,6 +941,15 @@ public class ConfigValidationTests
         var button = schema["properties"]!["gamepadHome"]!["items"]!;
         Assert.Equal("GamepadButton", button["title"]!.GetValue<string>());
         Assert.Contains("start", Strings(button["enum"]));
+
+        Assert.Equal(["devices", "gamepadHome", "timing"], schema["properties"]!.AsObject().Select(p => p.Key));
+        Assert.Equal(["devices", "gamepadHome"], Strings(schema["required"]));
+
+        var timing = schema["properties"]!["timing"]!;
+        Assert.Equal("InputTiming", timing["title"]!.GetValue<string>());
+        Assert.Null(timing["required"]);
+        Assert.False(timing["additionalProperties"]!.GetValue<bool>());
+        Assert.Equal("integer", timing["properties"]!["longPressMs"]!["type"]!.GetValue<string>());
     }
 
     [Fact]

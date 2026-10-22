@@ -4,8 +4,12 @@
       "signature": "VID_1915&PID_1025",
       "source": "remote",
       "keys": {
+        "0x25": "left",
         "0x26": "up",
+        "0x27": "right",
+        "0x28": "down",
         "0x0D": "ok",
+        "0xA6": "back",
         "0xAC": "home"
       }
     }
@@ -13,5 +17,8 @@
   "gamepadHome": [
     "back",
     "start"
-  ]
+  ],
+  "timing": {
+    "longPressMs": 600
+  }
 }

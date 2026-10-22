@@ -284,6 +284,7 @@ public static class ConfigValidation
     {
         var devicesPath = JsonErrorPath.Property("$", "devices");
         var signatures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var kindsByVirtualKey = new Dictionary<int, (ActionKind Kind, string Path)>();
 
         for (var i = 0; i < config.Devices.Count; i++)
         {
@@ -313,22 +314,50 @@ public static class ConfigValidation
                 if (!VirtualKey.IsMatch(key))
                 {
                     errors.Add(keyPath, $"klucz {Quote(key)} nie jest kodem VK w formacie 0xNN");
+                    continue;
                 }
-                else if (Convert.ToInt32(key[2..], 16) is < 0x01 or > 0xFE)
+
+                var virtualKey = Convert.ToInt32(key[2..], 16);
+                if (virtualKey is < 0x01 or > 0xFE)
                 {
                     errors.Add(keyPath, $"kod VK {Quote(key)} poza zakresem 0x01–0xFE");
+                    continue;
                 }
-                else if (!codes.TryAdd(key, key))
+
+                if (!codes.TryAdd(key, key))
                 {
                     errors.Add(keyPath, $"kod VK {Quote(key)} powtarza {Quote(codes[key])}");
+                    continue;
                 }
 
                 if (kind == ActionKind.AppMenu)
                 {
                     errors.Add(keyPath, "„appMenu” niedozwolone w mapowaniu (AppMenu to długie „ok” w Shell)");
+                    continue;
+                }
+
+                // Ten sam VK w dwóch urządzeniach musi mieć ten sam kind: połknięcie i kind zapadają po samym VK,
+                // a walidacja broni politykę przed niejednoznacznym mapowaniem.
+                if (kindsByVirtualKey.TryGetValue(virtualKey, out var first))
+                {
+                    if (first.Kind != kind)
+                    {
+                        errors.Add(
+                            keyPath,
+                            $"kod VK {Quote(key)} ma już kind {Quote(KindName(first.Kind))} w {first.Path}");
+                    }
+                }
+                else
+                {
+                    kindsByVirtualKey.Add(virtualKey, (kind, keyPath));
                 }
             }
         }
+
+        CheckPositive(
+            config.Timing.LongPressMs,
+            JsonErrorPath.Property(JsonErrorPath.Property("$", "timing"), "longPressMs"),
+            errors);
 
         var homePath = JsonErrorPath.Property("$", "gamepadHome");
         var buttons = new Dictionary<GamepadButton, string>();
@@ -350,11 +379,11 @@ public static class ConfigValidation
 
     private static void CheckSettings(Settings settings, FileErrors errors)
     {
-        CheckPositive(settings.RatingPendingDays, "ratingPendingDays", errors);
-        CheckPositive(settings.StartingTimeout, "startingTimeout", errors);
-        CheckPositive(settings.StoppingTimeout, "stoppingTimeout", errors);
-        CheckPositive(settings.CdpConnectTimeout, "cdpConnectTimeout", errors);
-        CheckPositive(settings.CdpReconnectTimeout, "cdpReconnectTimeout", errors);
+        CheckPositive(settings.RatingPendingDays, JsonErrorPath.Property("$", "ratingPendingDays"), errors);
+        CheckPositive(settings.StartingTimeout, JsonErrorPath.Property("$", "startingTimeout"), errors);
+        CheckPositive(settings.StoppingTimeout, JsonErrorPath.Property("$", "stoppingTimeout"), errors);
+        CheckPositive(settings.CdpConnectTimeout, JsonErrorPath.Property("$", "cdpConnectTimeout"), errors);
+        CheckPositive(settings.CdpReconnectTimeout, JsonErrorPath.Property("$", "cdpReconnectTimeout"), errors);
         CheckAtMost(settings.StartingTimeout, MaxTimeoutSeconds, "startingTimeout", errors);
         CheckAtMost(settings.StoppingTimeout, MaxTimeoutSeconds, "stoppingTimeout", errors);
 
@@ -375,13 +404,16 @@ public static class ConfigValidation
         }
     }
 
-    private static void CheckPositive(int value, string name, FileErrors errors)
+    private static void CheckPositive(int value, string path, FileErrors errors)
     {
         if (value <= 0)
         {
-            errors.Add(JsonErrorPath.Property("$", name), "wartość musi być większa od 0");
+            errors.Add(path, "wartość musi być większa od 0");
         }
     }
+
+    /// <summary>Nazwa <c>kind</c> w komunikatach: camelCase, jak w <c>input.json</c>.</summary>
+    private static string KindName(ActionKind kind) => JsonNamingPolicy.CamelCase.ConvertName(kind.ToString());
 
     private static void CheckAtMost(int value, int max, string name, FileErrors errors)
     {

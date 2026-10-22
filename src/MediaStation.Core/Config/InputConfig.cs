@@ -7,7 +7,18 @@ namespace MediaStation.Core.Config;
 /// <c>config/input.json</c>: mapowanie wejścia kluczowane sygnaturą urządzenia i kodem VK (AD-8).
 /// </summary>
 /// <param name="GamepadHome">Kombinacja przycisków XInput dająca Home z pada; co najmniej 2 różne przyciski.</param>
-public sealed record InputConfig(IReadOnlyList<InputDevice> Devices, IReadOnlyList<GamepadButton> GamepadHome);
+public sealed record InputConfig(IReadOnlyList<InputDevice> Devices, IReadOnlyList<GamepadButton> GamepadHome)
+{
+    /// <summary>Progi timingu polityki wejścia; brak sekcji daje wartości domyślne.</summary>
+    public InputTiming Timing { get; init; } = new();
+}
+
+/// <summary>Progi timingu <c>config/input.json</c>; pola opcjonalne z wartościami domyślnymi.</summary>
+public sealed record InputTiming
+{
+    /// <summary>Próg long-press OK w Shell w milisekundach; po nim OK daje samo <c>long</c> (AD-8).</summary>
+    public int LongPressMs { get; init; } = 600;
+}
 
 /// <summary>Jedno urządzenie wejścia rozpoznane przez Raw Input.</summary>
 /// <param name="Signature">Sygnatura urządzenia, np. <c>VID_1915&amp;PID_1025</c>; unikalna.</param>
