@@ -67,7 +67,7 @@ Wiadomość z tym samym kluczem dwa razy jest przyjmowana i wygrywa ostatnia war
 ## References
 
 - parent — none
-- retro — _bmad-output/initiative-mediastation-mvp/epic-foundation-contracts/epic-foundation-contracts-retrospective.md, N7, R6
+- retro — _bmad-output/initiative-mediastation-mvp/tickets/epic-foundation-contracts/epic-foundation-contracts-retrospective.md, N7, R6
 - source — src/MediaStation.Core/Contracts/ContractJson.cs
 - source — src/MediaStation.Core/Contracts/StrictEnumConverter.cs
 - source — src/MediaStation.Core/Config/ConfigValidation.cs, `ConfigJson`

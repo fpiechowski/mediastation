@@ -21,7 +21,7 @@ Verify: Test Core sprawdza `SystemResumed` (`powerSignal`, `systemResumed`, `sna
 
 ## References
 
-- parent — _bmad-output/initiative-mediastation-mvp/epic-orchestrator-lifecycle/epic-orchestrator-lifecycle.md
+- parent — _bmad-output/initiative-mediastation-mvp/tickets/epic-orchestrator-lifecycle/epic-orchestrator-lifecycle.md
 - architecture-mediastation/architecture-mediastation.md, AD-10
 - research-browser-control-for-streaming-services/digests/spike-um760.md, claim S7/S8 (CDP zrywa się po Modern Standby)
 

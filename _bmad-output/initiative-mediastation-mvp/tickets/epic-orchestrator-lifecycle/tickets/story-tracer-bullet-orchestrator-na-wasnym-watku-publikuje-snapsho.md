@@ -21,7 +21,7 @@ Verify: `dotnet test` przechodzi z testami monotonicznego `rev`, `focusRequest{d
 
 ## References
 
-- parent — _bmad-output/initiative-mediastation-mvp/epic-orchestrator-lifecycle/epic-orchestrator-lifecycle.md
+- parent — _bmad-output/initiative-mediastation-mvp/tickets/epic-orchestrator-lifecycle/epic-orchestrator-lifecycle.md
 - architecture-mediastation/architecture-mediastation.md, AD-2
 - architecture-mediastation/architecture-mediastation.md, AD-14
 - architecture-mediastation/architecture-mediastation.md, AD-16

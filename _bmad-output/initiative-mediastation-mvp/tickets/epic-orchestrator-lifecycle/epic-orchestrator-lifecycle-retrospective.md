@@ -167,7 +167,7 @@ Why not `accepted`: F6 is a real defect on a transition boundary (fix-now), and 
 
 Choices made without the user, per headless mode:
 
-- **Epic resolution.** `-H epic-orchestrator-lifecycle` matched the initiative's `epics` entry by slug; the folder came from the first `tickets` row's `epic` field (`tickets.py find 2.1` → `_bmad-output/initiative-mediastation-mvp/epic-orchestrator-lifecycle`).
+- **Epic resolution.** `-H epic-orchestrator-lifecycle` matched the initiative's `epics` entry by slug; the folder came from the first `tickets` row's `epic` field (`tickets.py find 2.1` → `_bmad-output/initiative-mediastation-mvp/tickets/epic-orchestrator-lifecycle`).
 - **Completeness.** `status <folder>` reported all 11 tickets `done`, `pending_tickets` empty, none at `built`; no unfinished-ticket acceptance was needed.
 - **Verdict.** Rendered on evidence alone as `accepted-with-open-items`; no human override was invented. Criteria are declared, not profiled.
 - **Review narrowing.** `bmad-review` is unavailable (missing render entry), so the adversarial / edge-case / verification-gap lenses were run inline over the code diff and weighted to ticket boundaries; the per-story review logs were used as the per-story record instead of re-running them.

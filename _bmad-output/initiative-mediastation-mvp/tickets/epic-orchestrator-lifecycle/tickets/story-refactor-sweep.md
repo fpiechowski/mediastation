@@ -21,7 +21,7 @@ Verify: `dotnet test` przechodzi, a automatyczny smoke na aktualnej maszynie (pu
 
 ## References
 
-- parent — _bmad-output/initiative-mediastation-mvp/epic-orchestrator-lifecycle/epic-orchestrator-lifecycle.md
+- parent — _bmad-output/initiative-mediastation-mvp/tickets/epic-orchestrator-lifecycle/epic-orchestrator-lifecycle.md
 
 ## Notes
 

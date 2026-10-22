@@ -71,8 +71,8 @@ risk: low
 ## References
 
 - parent — none
-- retro — _bmad-output/initiative-mediastation-mvp/epic-foundation-contracts/epic-foundation-contracts-retrospective.md, N2, R3, A9 (sample configi)
-- plan — _bmad-output/initiative-mediastation-mvp/epic-foundation-contracts/story-scisa-koperta-i-diagnostyka-hosta-plan.md, Tasks i Verification
+- retro — _bmad-output/initiative-mediastation-mvp/tickets/epic-foundation-contracts/epic-foundation-contracts-retrospective.md, N2, R3, A9 (sample configi)
+- plan — _bmad-output/initiative-mediastation-mvp/tickets/epic-foundation-contracts/tickets/story-scisa-koperta-i-diagnostyka-hosta-plan.md, Tasks i Verification
 - source — tools/MediaStation.LogAppendCheck/
 - source — src/MediaStation.App/Logging/FileLogSink.cs
 
