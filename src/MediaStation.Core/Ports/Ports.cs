@@ -57,6 +57,18 @@ public interface IInputRoutingPort
 }
 
 /// <summary>
+/// Port wstrzyknięć klawiatury (AD-3, AD-8): wykonawca wysyła key-down i key-up ze znacznikiem
+/// <see cref="InjectionMarker.MediaStation"/>, więc polityka odróżni własny klawisz od naciśnięcia pilota.
+/// Fire-and-forget jak port routingu z 2.3: <c>SendKey</c> nie dostaje <see cref="CommandCompleted"/>,
+/// a porażkę widać w logu. Wykonawca nie przepuszcza wyjątku przez granicę portu (AD-4).
+/// </summary>
+public interface IKeyInjectionPort
+{
+    /// <summary>Zleca wstrzyknięcie jednego naciśnięcia klawisza; wywołanie nie blokuje się na Win32 i nie rzuca.</summary>
+    void Execute(SendKey command);
+}
+
+/// <summary>
 /// Port schedulera timerów (AD-14): wykonawca liczy termin na wstrzykniętym <see cref="TimeProvider"/>
 /// i publikuje <see cref="TimerElapsed"/> do kolejki Orchestratora. Wykonawca nie przepuszcza wyjątku
 /// przez granicę portu (AD-4).

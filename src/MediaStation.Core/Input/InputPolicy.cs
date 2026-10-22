@@ -16,10 +16,17 @@ public enum KeyTransition
 
 /// <summary>
 /// Jedno zdarzenie klawiatury z hooka LL. <paramref name="VirtualKey"/> to kod VK, <paramref name="Injected"/>
-/// odpowiada <c>LLKHF_INJECTED</c>, <paramref name="TimeMs"/> — polu <c>time</c> zdarzenia hooka, a
-/// <paramref name="Scan"/> — kod scan (surowy, czytany tylko przez kalibrację).
+/// odpowiada <c>LLKHF_INJECTED</c>, <paramref name="TimeMs"/> — polu <c>time</c> zdarzenia hooka,
+/// <paramref name="Scan"/> — kod scan (surowy, czytany tylko przez kalibrację), a <paramref name="ExtraInfo"/> —
+/// polu <c>dwExtraInfo</c> (znacznik własnego wstrzyknięcia, patrz <see cref="InjectionMarker"/>).
 /// </summary>
-public sealed record KeyStroke(int VirtualKey, KeyTransition Transition, bool Injected, long TimeMs, int Scan = 0);
+public sealed record KeyStroke(
+    int VirtualKey,
+    KeyTransition Transition,
+    bool Injected,
+    long TimeMs,
+    int Scan = 0,
+    long ExtraInfo = 0);
 
 /// <summary>
 /// Migawka stanu pada XInput (indeks 0) z jednego odczytu: czas monotoniczny i przyciski wciśnięte w tej chwili.
@@ -56,6 +63,8 @@ public sealed record InputDecision(bool Swallow, IReadOnlyList<ActionMessage> Ac
 /// Pad (XInput) używa tej samej siatki <c>repeat</c>/<c>long</c>, ale nie ma połknięcia: wiersz AD-8 decyduje
 /// wyłącznie o tym, czy przycisk daje Actions, a kombinacja <see cref="InputConfig.GamepadHome"/> daje jedno
 /// <c>home</c> na pełne złożenie. Czas płynie wyłącznie przez wstrzyknięty <see cref="TimeProvider"/> (AD-14).
+/// Zdarzenie ze <see cref="InjectionMarker.MediaStation"/> w <c>dwExtraInfo</c> nie daje Actions i nie jest połknięte,
+/// bo to własne wstrzyknięcie MediaStation wracające z hooka, a nie naciśnięcie użytkownika.
 /// Typ nie jest wątkowo bezpieczny: App woła go z jednego wątku Input (callback hooka i timer na tym samym
 /// wątku).
 /// </summary>
@@ -165,6 +174,13 @@ public sealed class InputPolicy : IInputTarget
     public InputDecision OnKey(KeyStroke key)
     {
         ArgumentNullException.ThrowIfNull(key);
+
+        // Własne wstrzyknięcie nie jest naciśnięciem: nie może uzbroić terminu `long`, wpisu trzymania ani zamknąć
+        // cudzego trzymania, a klawisz zostaje przepuszczony. `LLKHF_INJECTED` bez znacznika nadal mapuje się normalnie.
+        if (InjectionMarker.IsOurs(key.ExtraInfo))
+        {
+            return PassDecision;
+        }
 
         if (!_kinds.TryGetValue(key.VirtualKey, out var kind))
         {

@@ -175,6 +175,7 @@ public class OrchestratorLoopTests
             hosts,
             new LogWindowManagerPort(log),
             new InputHubRoutingPort(new InputRoutingState(), log),
+            new FakeKeyInjection(),
             timers,
             log);
         using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
@@ -228,6 +229,7 @@ public class OrchestratorLoopTests
             hosts,
             new LogWindowManagerPort(log),
             new InputHubRoutingPort(new InputRoutingState(), log),
+            new FakeKeyInjection(),
             timers,
             log);
         using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
@@ -270,6 +272,7 @@ public class OrchestratorLoopTests
             hosts,
             new LogWindowManagerPort(log),
             new InputHubRoutingPort(new InputRoutingState(), log),
+            new FakeKeyInjection(),
             timers,
             log);
         using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
@@ -324,6 +327,7 @@ public class OrchestratorLoopTests
             hosts,
             new LogWindowManagerPort(log),
             new InputHubRoutingPort(new InputRoutingState(), log),
+            new FakeKeyInjection(),
             timers,
             log);
         using var loop = new OrchestratorLoop(
@@ -396,6 +400,7 @@ public class OrchestratorLoopTests
             hosts,
             new LogWindowManagerPort(log),
             new InputHubRoutingPort(new InputRoutingState(), log),
+            new FakeKeyInjection(),
             timers,
             log);
         using var loop = new OrchestratorLoop(
@@ -466,6 +471,7 @@ public class OrchestratorLoopTests
             hosts,
             new LogWindowManagerPort(log),
             new InputHubRoutingPort(new InputRoutingState(), log),
+            new FakeKeyInjection(),
             timers,
             log);
         using var loop = new OrchestratorLoop(
@@ -529,6 +535,7 @@ public class OrchestratorLoopTests
             hosts,
             new LogWindowManagerPort(log),
             new InputHubRoutingPort(routing, log),
+            new FakeKeyInjection(),
             timers,
             log);
         using var loop = new OrchestratorLoop(
@@ -682,6 +689,13 @@ public class OrchestratorLoopTests
 
             Thread.Sleep(10);
         }
+    }
+
+    private sealed class FakeKeyInjection : IKeyInjectionPort
+    {
+        public List<SendKey> Executed { get; } = [];
+
+        public void Execute(SendKey command) => Executed.Add(command);
     }
 
     private sealed class NullLog : ILog

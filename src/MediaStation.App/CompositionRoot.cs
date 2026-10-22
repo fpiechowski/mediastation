@@ -204,13 +204,20 @@ public static class CompositionRoot
         // czekania na Orchestrator (AD-8), a port odrzuca `epoch` równy i starszy.
         var routing = new InputRoutingState();
 
+        // Wstrzyknięcia klawiszy idą na własny wątek pompy (AD-14): router tylko kolejkuje, więc pętla Orchestratora
+        // nie woła Win32 i Home nie czeka na SendInput. Pompa powstaje przed routerem, a startuje przed pętlą.
+        var keyInjection = new KeyInjectionPump(KeyInjector.TrySendKey, log);
+
         var router = new CommandRouter(
             appTypes,
             hosts,
             new LogWindowManagerPort(log),
             new InputHubRoutingPort(routing, log),
+            keyInjection,
             timers,
             log);
+
+        keyInjection.Start();
 
         var loop = new OrchestratorLoop(new CoreOrchestrator(config, time), router.Dispatch, bridge.Publish, log);
         postsTo = loop;
@@ -222,8 +229,8 @@ public static class CompositionRoot
         ActionPump? actionPump = null;
 
         // Handler przed startem adapterów: wyjątek w konstrukcji nie może zostawić pętli bez zwolnienia.
-        // Kolejność zwolnienia: najpierw hub wejścia (żadnych nowych Actions), potem pompa (domyka kolejkę),
-        // dalej adapter power, scheduler timerów i na końcu pętla.
+        // Kolejność zwolnienia: najpierw hub wejścia (żadnych nowych Actions), potem pompa Actions (domyka kolejkę),
+        // pompa wstrzyknięć (porzuca niewstrzyknięte komendy), dalej adapter power, scheduler timerów i na końcu pętla.
         app.Exit += (_, _) =>
         {
             try
@@ -240,23 +247,30 @@ public static class CompositionRoot
                 {
                     try
                     {
-                        notifications?.Dispose();
+                        keyInjection.Dispose();
                     }
                     finally
                     {
                         try
                         {
-                            reporter?.Dispose();
+                            notifications?.Dispose();
                         }
                         finally
                         {
                             try
                             {
-                                timers.Dispose();
+                                reporter?.Dispose();
                             }
                             finally
                             {
-                                loop.Dispose();
+                                try
+                                {
+                                    timers.Dispose();
+                                }
+                                finally
+                                {
+                                    loop.Dispose();
+                                }
                             }
                         }
                     }

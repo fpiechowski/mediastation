@@ -10,8 +10,9 @@ namespace MediaStation.App.Orchestrator;
 /// Jedno wyjście Orchestratora do wykonawców (decyzja epiki): <see cref="StartApp"/>, <see cref="StopApp"/>,
 /// <see cref="ProbeExisting"/> i <see cref="RenewSession"/> trafiają do hosta wybranego po <see cref="AppType"/>
 /// z mapy <c>appId → AppType</c> z configu, komendy okienkowe do <see cref="IWindowManagerPort"/>, komendy timerów
-/// do <see cref="ITimerPort"/>, a <see cref="SetInputRouting"/> do <see cref="IInputRoutingPort"/>.
-/// Komenda bez portu i komenda dla nieznanej aplikacji kończą się wpisem <c>warn</c>, nigdy wyjątkiem.
+/// do <see cref="ITimerPort"/>, <see cref="SendKey"/> do <see cref="IKeyInjectionPort"/>, a <see cref="SetInputRouting"/>
+/// do <see cref="IInputRoutingPort"/>. Komenda bez portu i komenda dla nieznanej aplikacji kończą się wpisem
+/// <c>warn</c>, nigdy wyjątkiem.
 /// </summary>
 public sealed class CommandRouter
 {
@@ -21,6 +22,7 @@ public sealed class CommandRouter
     private readonly IReadOnlyDictionary<AppType, IAppHostPort> _hosts;
     private readonly IWindowManagerPort _windowManager;
     private readonly IInputRoutingPort _inputRouting;
+    private readonly IKeyInjectionPort _keyInjection;
     private readonly ITimerPort _timers;
     private readonly ILog _log;
 
@@ -29,6 +31,7 @@ public sealed class CommandRouter
         IReadOnlyDictionary<AppType, IAppHostPort> hosts,
         IWindowManagerPort windowManager,
         IInputRoutingPort inputRouting,
+        IKeyInjectionPort keyInjection,
         ITimerPort timers,
         ILog log)
     {
@@ -36,6 +39,7 @@ public sealed class CommandRouter
         ArgumentNullException.ThrowIfNull(hosts);
         ArgumentNullException.ThrowIfNull(windowManager);
         ArgumentNullException.ThrowIfNull(inputRouting);
+        ArgumentNullException.ThrowIfNull(keyInjection);
         ArgumentNullException.ThrowIfNull(timers);
         ArgumentNullException.ThrowIfNull(log);
 
@@ -43,6 +47,7 @@ public sealed class CommandRouter
         _hosts = hosts;
         _windowManager = windowManager;
         _inputRouting = inputRouting;
+        _keyInjection = keyInjection;
         _timers = timers;
         _log = log;
     }
@@ -92,6 +97,9 @@ public sealed class CommandRouter
                     break;
                 case SetInputRouting routing:
                     _inputRouting.Execute(routing);
+                    break;
+                case SendKey key:
+                    _keyInjection.Execute(key);
                     break;
                 default:
                     _log.Warn(Src, "commandWithoutPort", new Dictionary<string, object?>

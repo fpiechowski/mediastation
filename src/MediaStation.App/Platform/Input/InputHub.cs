@@ -408,7 +408,8 @@ internal sealed unsafe class InputHub : IDisposable
                     down ? KeyTransition.Down : KeyTransition.Up,
                     (data.flags & KBDLLHOOKSTRUCT_FLAGS.LLKHF_INJECTED) != 0,
                     _clock.Normalize(data.time),
-                    (int)data.scanCode);
+                    (int)data.scanCode,
+                    unchecked((long)data.dwExtraInfo));
 
                 var decision = _target.OnKey(stroke);
                 Enqueue(decision.Actions);

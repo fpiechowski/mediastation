@@ -50,6 +50,19 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Send_key_as_command_serializes_with_cmd_id_first_and_round_trips()
+    {
+        Command command = new SendKey(11, 172);
+
+        var json = ContractJson.SerializeEnvelope(command);
+
+        Assert.Equal("""{"v":1,"type":"sendKey","payload":{"cmdId":11,"vk":172}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<SendKey>(back);
+        Assert.Equal(command, back);
+    }
+
+    [Fact]
     public void Command_completed_envelope_serializes_exactly_and_round_trips()
     {
         Event completed = new CommandCompleted(7);
@@ -458,7 +471,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
+        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "sendKey", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -498,6 +511,7 @@ public class CoreMessageContractTests
                 "renew-session.schema.json",
                 "restart-app.schema.json",
                 "schedule-timer.schema.json",
+                "send-key.schema.json",
                 "set-input-routing.schema.json",
                 "settings.schema.json",
                 "shell-snapshot.schema.json",
@@ -546,6 +560,21 @@ public class CoreMessageContractTests
         Assert.Equal(2, anyOf.Count);
         AssertNamedEnum(anyOf[0], "AppType", ["web", "moonlight", "native"]);
         Assert.Equal("null", anyOf[1]!["type"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Send_key_schema_has_title_required_and_integer_fields()
+    {
+        var schema = Schema("send-key.schema.json");
+
+        Assert.Equal("SendKey", schema["title"]!.GetValue<string>());
+        Assert.Equal("object", schema["type"]!.GetValue<string>());
+        Assert.Equal(["cmdId", "vk"], Strings(schema["required"]));
+        Assert.False(schema["additionalProperties"]!.GetValue<bool>());
+
+        var properties = schema["properties"]!;
+        Assert.Equal("integer", properties["cmdId"]!["type"]!.GetValue<string>());
+        Assert.Equal("integer", properties["vk"]!["type"]!.GetValue<string>());
     }
 
     [Fact]

@@ -97,11 +97,11 @@ public class InputPolicyTests
         return (new InputPolicy(Config(longPressMs, repeatDelayMs, repeatIntervalMs), time, routing), time, routing);
     }
 
-    private static KeyStroke Down(int virtualKey, long timeMs, bool injected = false) =>
-        new(virtualKey, KeyTransition.Down, injected, timeMs);
+    private static KeyStroke Down(int virtualKey, long timeMs, bool injected = false, long extraInfo = 0) =>
+        new(virtualKey, KeyTransition.Down, injected, timeMs, ExtraInfo: extraInfo);
 
-    private static KeyStroke Up(int virtualKey, long timeMs, bool injected = false) =>
-        new(virtualKey, KeyTransition.Up, injected, timeMs);
+    private static KeyStroke Up(int virtualKey, long timeMs, bool injected = false, long extraInfo = 0) =>
+        new(virtualKey, KeyTransition.Up, injected, timeMs, ExtraInfo: extraInfo);
 
     private static Action Press(ActionKind kind, ActionSource source, long tsMono) =>
         new(kind, ActionPhase.Press, source, tsMono);
@@ -965,6 +965,81 @@ public class InputPolicyTests
 
         Assert.False(timer.Swallow);
         Assert.Equal(Repeat(ActionKind.Up, ActionSource.Remote, 1400), Assert.Single(timer.Actions));
+    }
+
+    // ── Własne wstrzyknięcia (znacznik) ───────────────────────────────────────
+
+    /// <summary>
+    /// Wiersz macierzy „zdarzenie ze znacznikiem”: własne wstrzyknięcie MediaStation nie daje Actions i nie jest
+    /// połknięte, niezależnie od key-down/key-up i od wiersza AD-8. Home jest połknięty w każdym wierszu, więc bez
+    /// znacznika każde z tych zdarzeń dałoby Action — dowód, że reguła stoi przed mapowaniem, a nie w `ShouldSwallow`.
+    /// </summary>
+    [Theory]
+    [InlineData(InputMode.Shell, null)]
+    [InlineData(InputMode.Osk, null)]
+    [InlineData(InputMode.App, AppType.Web)]
+    [InlineData(InputMode.App, AppType.Moonlight)]
+    [InlineData(InputMode.App, AppType.Native)]
+    public void Marked_event_gives_no_action_and_is_not_swallowed_in_every_routing_row(InputMode mode, AppType? appType)
+    {
+        var (policy, _, _) = Create(mode, appType);
+        var marker = InjectionMarker.MediaStation;
+
+        var down = policy.OnKey(Down(0xAC, 1000, extraInfo: marker));
+        var up = policy.OnKey(Up(0xAC, 1100, extraInfo: marker));
+
+        Assert.False(down.Swallow);
+        Assert.Empty(down.Actions);
+        Assert.False(up.Swallow);
+        Assert.Empty(up.Actions);
+        Assert.Null(policy.NextDeadline);
+    }
+
+    [Fact]
+    public void Marked_key_up_leaves_real_hold_untouched()
+    {
+        var (policy, _, _) = Create();
+        var marker = InjectionMarker.MediaStation;
+
+        // Prawdziwy key-down OK uzbraja termin `long`; oznaczony key-up tego samego VK nie może go zamknąć.
+        Assert.True(policy.OnKey(Down(0x0D, 1000)).Swallow);
+        Assert.Equal(T0.AddMilliseconds(600), policy.NextDeadline);
+
+        var markedUp = policy.OnKey(Up(0x0D, 1100, extraInfo: marker));
+        Assert.False(markedUp.Swallow);
+        Assert.Empty(markedUp.Actions);
+        Assert.Equal(T0.AddMilliseconds(600), policy.NextDeadline);
+
+        // Dopiero prawdziwy key-up zamyka trzymanie i daje press.
+        var up = policy.OnKey(Up(0x0D, 1200));
+        Assert.True(up.Swallow);
+        Assert.Equal(Press(ActionKind.Ok, ActionSource.Keyboard, 1200), Assert.Single(up.Actions));
+        Assert.Null(policy.NextDeadline);
+    }
+
+    [Fact]
+    public void Marked_key_down_does_not_arm_long_press_or_repeat()
+    {
+        var (policy, _, _) = Create();
+
+        var down = policy.OnKey(Down(0x0D, 1000, extraInfo: InjectionMarker.MediaStation));
+
+        Assert.False(down.Swallow);
+        Assert.Empty(down.Actions);
+        Assert.Null(policy.NextDeadline);
+    }
+
+    [Fact]
+    public void Injected_without_marker_is_still_mapped_and_swallowed()
+    {
+        var policy = new InputPolicy(WildcardConfig(), new FakeTimeProvider(T0), new InputRoutingState());
+
+        // Sama flaga LLKHF_INJECTED nie jest ignorowana: brak znacznika to obce wstrzyknięcie (albo pilot),
+        // więc trafia do mapowania i zostaje połknięte.
+        var down = policy.OnKey(Down(0xAC, 1000, injected: true));
+
+        Assert.True(down.Swallow);
+        Assert.Equal(Press(ActionKind.Home, ActionSource.Keyboard, 1000), Assert.Single(down.Actions));
     }
 
     // ── Wildcard `*` ──────────────────────────────────────────────────────────
