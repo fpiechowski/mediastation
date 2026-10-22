@@ -154,6 +154,15 @@ public sealed class InputCalibration : IInputTarget
     }
 
     /// <summary>
+    /// Wskaźnik w trybie kalibracji: kalibracja nie mapuje myszy, więc zawsze przepuszcza bez Actions i bez clipu.
+    /// </summary>
+    public InputDecision OnPointer(PointerStroke pointer, ScreenRectangle? clip)
+    {
+        ArgumentNullException.ThrowIfNull(pointer);
+        return PassDecision;
+    }
+
+    /// <summary>
     /// Raport HID Consumer urządzenia <c>remote</c>: nowy usage otwiera (albo domyka poprzednie i otwiera nowe)
     /// naciśnięcie, a <c>usage == 0</c> to zwolnienie przycisku według konwencji HID Consumer i nie tworzy wpisu.
     /// </summary>

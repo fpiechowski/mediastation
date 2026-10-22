@@ -29,7 +29,7 @@ public class CoreMessageContractTests
         var json = ContractJson.SerializeEnvelope(command);
 
         Assert.Equal(
-            """{"v":1,"type":"setInputRouting","payload":{"cmdId":7,"mode":"shell","appType":null,"pointer":"blocked","epoch":3}}""",
+            """{"v":1,"type":"setInputRouting","payload":{"cmdId":7,"mode":"shell","appType":null,"pointer":"blocked","epoch":3,"clipHwnd":null}}""",
             json);
         var back = ContractJson.DeserializeEnvelope<Command>(json);
         Assert.IsType<SetInputRouting>(back);
@@ -44,9 +44,33 @@ public class CoreMessageContractTests
         var json = ContractJson.SerializeEnvelope<Command>(routing);
 
         Assert.Equal(
-            """{"v":1,"type":"setInputRouting","payload":{"cmdId":8,"mode":"app","appType":"web","pointer":"allowed","epoch":4}}""",
+            """{"v":1,"type":"setInputRouting","payload":{"cmdId":8,"mode":"app","appType":"web","pointer":"allowed","epoch":4,"clipHwnd":null}}""",
             json);
         Assert.Equal(routing, ContractJson.DeserializeEnvelope<SetInputRouting>(json));
+    }
+
+    [Fact]
+    public void Set_input_routing_with_clip_hwnd_round_trips()
+    {
+        var routing = new SetInputRouting(9, InputMode.Osk, null, PointerPolicy.Allowed, 5, ClipHwnd: 0x1234);
+
+        var json = ContractJson.SerializeEnvelope<Command>(routing);
+
+        Assert.Equal(
+            """{"v":1,"type":"setInputRouting","payload":{"cmdId":9,"mode":"osk","appType":null,"pointer":"allowed","epoch":5,"clipHwnd":4660}}""",
+            json);
+        Assert.Equal(routing, ContractJson.DeserializeEnvelope<SetInputRouting>(json));
+    }
+
+    [Fact]
+    public void Set_input_routing_without_clip_hwnd_key_reads_as_null()
+    {
+        // Koperta w starym kształcie (sprzed 3.8) nie ma `clipHwnd`: brak klucza to brak clipu, nie błąd kontraktu.
+        var routing = ContractJson.DeserializeEnvelope<SetInputRouting>(
+            """{"v":1,"type":"setInputRouting","payload":{"cmdId":7,"mode":"shell","appType":null,"pointer":"blocked","epoch":3}}""");
+
+        Assert.Null(routing.ClipHwnd);
+        Assert.Equal(new SetInputRouting(7, InputMode.Shell, null, PointerPolicy.Blocked, 3), routing);
     }
 
     [Fact]
@@ -560,6 +584,10 @@ public class CoreMessageContractTests
         Assert.Equal(2, anyOf.Count);
         AssertNamedEnum(anyOf[0], "AppType", ["web", "moonlight", "native"]);
         Assert.Equal("null", anyOf[1]!["type"]!.GetValue<string>());
+
+        // clipHwnd: opcjonalny (poza `required`) i jawnie nullowalny, bo stary nadawca go nie wysyła.
+        Assert.Equal(["integer", "null"], Strings(properties["clipHwnd"]!["type"]));
+        Assert.Null(properties["clipHwnd"]!["default"]);
     }
 
     [Fact]

@@ -103,6 +103,30 @@ public class LogActionSinkTests
         Assert.False(data.TryGetProperty("errorCode", out _));
     }
 
+    [Theory]
+    [InlineData(InputHubOperations.MouseHook)]
+    [InlineData(InputHubOperations.ClipCursor)]
+    public void Pointer_failure_logs_one_entry_with_only_the_operation_and_code(string operation)
+    {
+        var log = new RecordingLog();
+        var sink = new LogActionSink(log);
+
+        sink.Report(new InputHubError(operation, 1400));
+
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Error, entry.Level);
+        Assert.Equal("inputHubError", entry.Msg);
+        Assert.Equal(["operation", "errorCode"], entry.Data!.Keys.ToArray());
+        Assert.Equal(operation, entry.Data["operation"]);
+
+        var line = Line(entry);
+        Assert.DoesNotContain("\"vk\"", line);
+        Assert.DoesNotContain("\"scan\"", line);
+        Assert.DoesNotContain("\"usage\"", line);
+        Assert.DoesNotContain("\"x\"", line);
+        Assert.DoesNotContain("\"y\"", line);
+    }
+
     [Fact]
     public void Mapped_enter_before_the_long_threshold_gives_exactly_one_press_entry()
     {

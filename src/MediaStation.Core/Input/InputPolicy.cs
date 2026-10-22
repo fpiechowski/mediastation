@@ -65,6 +65,8 @@ public sealed record InputDecision(bool Swallow, IReadOnlyList<ActionMessage> Ac
 /// <c>home</c> na pełne złożenie. Czas płynie wyłącznie przez wstrzyknięty <see cref="TimeProvider"/> (AD-14).
 /// Zdarzenie ze <see cref="InjectionMarker.MediaStation"/> w <c>dwExtraInfo</c> nie daje Actions i nie jest połknięte,
 /// bo to własne wstrzyknięcie MediaStation wracające z hooka, a nie naciśnięcie użytkownika.
+/// Wskaźnik jest wyłącznie do połknięcia: <c>pointer: blocked</c> połyka ruch, kliknięcia i kółko, a w <c>osk</c>
+/// z prostokątem <c>ClipCursor</c> połykany jest także klik poza nim; mysz nigdy nie daje Actions.
 /// Typ nie jest wątkowo bezpieczny: App woła go z jednego wątku Input (callback hooka i timer na tym samym
 /// wątku).
 /// </summary>
@@ -467,6 +469,37 @@ public sealed class InputPolicy : IInputTarget
         {
             _lastConsumer = (report.TimeMs, device.Source);
         }
+    }
+
+    /// <summary>
+    /// Zdarzenie wskaźnika z hooka myszy: jedno odczytanie kopii routingu na zdarzenie. Wiersz
+    /// <see cref="PointerPolicy.Blocked"/> (<c>shell</c>, <c>app</c> + <c>web</c>) połyka ruch, kliknięcia i kółko;
+    /// <see cref="PointerPolicy.Allowed"/> przepuszcza wszystko poza kliknięciem poza prostokątem clipu w trybie
+    /// <c>osk</c>, bo kursor uwięziony przez <c>ClipCursor</c> i tak nie powinien trafić pod klawiaturę.
+    /// Wskaźnik nigdy nie daje Actions, a zdarzenie ze znacznikiem <see cref="InjectionMarker.MediaStation"/>
+    /// jest własnym wstrzyknięciem i zawsze przechodzi.
+    /// </summary>
+    public InputDecision OnPointer(PointerStroke pointer, ScreenRectangle? clip)
+    {
+        ArgumentNullException.ThrowIfNull(pointer);
+
+        if (InjectionMarker.IsOurs(pointer.ExtraInfo))
+        {
+            return PassDecision;
+        }
+
+        var routing = _routing.Current;
+        if (routing.Pointer == PointerPolicy.Blocked)
+        {
+            return new InputDecision(true, NoActions);
+        }
+
+        var outsideClip = routing.Mode == InputMode.Osk
+            && clip is { } rectangle
+            && pointer.Message is PointerMessage.ButtonDown or PointerMessage.ButtonUp
+            && !rectangle.Contains(pointer.X, pointer.Y);
+
+        return outsideClip ? new InputDecision(true, NoActions) : PassDecision;
     }
 
     /// <summary>

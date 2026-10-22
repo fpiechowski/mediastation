@@ -105,6 +105,20 @@ public class InputHubRoutingPortTests
         Assert.Equal(epoch, Assert.IsType<long>(stale.Data["epoch"]));
     }
 
+    [Fact]
+    public void Clip_hwnd_reaches_the_local_copy_without_a_new_log_key()
+    {
+        var log = new RecordingLog();
+        var routing = new InputRoutingState();
+
+        new InputHubRoutingPort(routing, log).Execute(
+            new SetInputRouting(5, InputMode.Osk, null, PointerPolicy.Allowed, 2, ClipHwnd: 0x1234));
+
+        Assert.Equal(0x1234, routing.Current.ClipHwnd);
+        var data = FormatData(Assert.Single(log.Entries));
+        Assert.Equal(["cmdId", "mode", "pointer", "epoch"], data.EnumerateObject().Select(property => property.Name).ToArray());
+    }
+
     private static JsonElement FormatData(LogEntry entry)
     {
         var line = JsonLinesLog.Format(T0, entry.Level, entry.Src, entry.Msg, entry.Data, null);

@@ -28,6 +28,7 @@
     <Compile Include="..\..\src\MediaStation.App\Orchestrator\CommandRouter.cs" Link="App\CommandRouter.cs" />
     <Compile Include="..\..\src\MediaStation.App\Orchestrator\OrchestratorLoop.cs" Link="App\OrchestratorLoop.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Input\ActionPump.cs" Link="App\ActionPump.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Input\ClipCursorGate.cs" Link="App\ClipCursorGate.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Input\InputClock.cs" Link="App\InputClock.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Input\InputTimerDelay.cs" Link="App\InputTimerDelay.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Input\InputHubRoutingPort.cs" Link="App\InputHubRoutingPort.cs" />

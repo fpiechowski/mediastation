@@ -137,8 +137,9 @@ public static class CompositionRoot
         InputHub? hub = null;
         try
         {
-            // Kalibracja nie emituje Actions, więc kolejka nie ma czytelnika i budzik jest pusty.
-            hub = new InputHub(calibration, new ActionQueue(static () => { }), rawSink, time);
+            // Kalibracja nie emituje Actions, więc kolejka nie ma czytelnika i budzik jest pusty. Świeża kopia
+            // routingu (bez zmian `epoch`) znaczy, że clip kursora nigdy nie obowiązuje w tym trybie.
+            hub = new InputHub(calibration, new ActionQueue(static () => { }), rawSink, time, new InputRoutingState());
             hub.Start();
 
             // Termin kalibracji to 60 s; zapas 10 s pokrywa start wątku Input i rotację timera. Przekroczenie
@@ -301,7 +302,7 @@ public static class CompositionRoot
             actionPump.Start();
 
             var inputPolicy = new InputPolicy(config.Input, time, routing);
-            inputHub = new InputHub(inputPolicy, actionPump.Queue, actionSink, time);
+            inputHub = new InputHub(inputPolicy, actionPump.Queue, actionSink, time, routing);
             inputHub.Start();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

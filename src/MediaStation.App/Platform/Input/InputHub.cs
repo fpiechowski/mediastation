@@ -15,15 +15,18 @@ using Windows.Win32.UI.WindowsAndMessaging;
 namespace MediaStation.App.Platform.Input;
 
 /// <summary>
-/// Wątek Input (AD-2, AD-8): własna pętla komunikatów i okno message-only, na nich hook <c>WH_KEYBOARD_LL</c>,
-/// Raw Input <c>RIDEV_INPUTSINK</c> (klawiatura i HID Consumer), polling XInput (indeks 0, co 10 ms) oraz
-/// <c>WM_TIMER</c> terminu long-press albo końca kalibracji. Adapter nie decyduje o niczym: połknięcie, <c>kind</c>
-/// i <c>source</c> pochodzą wprost z <see cref="IInputTarget"/> (tryb główny dostaje <see cref="InputPolicy"/>,
+/// Wątek Input (AD-2, AD-8): własna pętla komunikatów i okno message-only, na nich hooki <c>WH_KEYBOARD_LL</c>
+/// i <c>WH_MOUSE_LL</c>, Raw Input <c>RIDEV_INPUTSINK</c> (klawiatura i HID Consumer), polling XInput (indeks 0,
+/// co 10 ms) oraz <c>WM_TIMER</c> terminu long-press albo końca kalibracji. W trybie <c>osk</c> z <c>clipHwnd</c>
+/// hub więzi kursor w prostokącie okna klawiatury (<c>ClipCursor</c>) i zwalnia clip przy każdej zmianie wiersza
+/// routingu oraz w <see cref="Dispose"/>. Adapter nie decyduje o niczym: połknięcie, <c>kind</c> i <c>source</c>
+/// pochodzą wprost z <see cref="IInputTarget"/> (tryb główny dostaje <see cref="InputPolicy"/>,
 /// <c>--calibrate-input</c> — <see cref="InputCalibration"/>), a callback hooka tylko wkłada Actions do
 /// <see cref="ActionQueue"/> i uzbraja timer — nie czeka, nie loguje i nie gubi Action (także Home przy
 /// zawieszonym UI).
-/// Porażki rejestracji degradują: brak okna kończy wątek, brak Raw Input zostawia hook (tylko <c>source</c>
-/// spada do <c>keyboard</c>), brak hooka kończy wątek po wpisie <c>inputHubError</c>.
+/// Porażki rejestracji degradują: brak okna kończy wątek, brak Raw Input zostawia hooki (tylko <c>source</c>
+/// spada do <c>keyboard</c>), brak hooka myszy wyłącza połknięcia wskaźnika, a brak hooka klawiatury kończy wątek
+/// po wpisie <c>inputHubError</c>.
 /// </summary>
 internal sealed unsafe class InputHub : IDisposable
 {
@@ -38,6 +41,9 @@ internal sealed unsafe class InputHub : IDisposable
     /// <summary>Identyfikator timera pollingu pada XInput w oknie Input.</summary>
     private static readonly nuint GamepadTimerId = 2;
 
+    /// <summary><c>WM_APP + 1</c>: powiadomienie z wątku Orchestratora, że wiersz routingu się zmienił.</summary>
+    private const uint RoutingChangedMessage = 0x8000 + 1;
+
     /// <summary>Okres pollingu XInput; bez <c>timeBeginPeriod</c> ziarno zegara systemowego jest większe.</summary>
     private const uint GamepadPollMs = 10;
 
@@ -51,6 +57,8 @@ internal sealed unsafe class InputHub : IDisposable
     private readonly ActionQueue _queue;
     private readonly IInputHubErrorSink _errors;
     private readonly TimeProvider _time;
+    private readonly InputRoutingState _routing;
+    private readonly ClipCursorGate _clipGate;
     private readonly InputClock _clock = new();
     private readonly Dictionary<IntPtr, string> _devicePaths = [];
     private readonly List<GamepadButton> _gamepadButtons = [];
@@ -60,9 +68,11 @@ internal sealed unsafe class InputHub : IDisposable
     // Delegate w polach: GC nie może zebrać callbacków, dopóki hook i okno ich używają.
     private WNDPROC? _windowProc;
     private HOOKPROC? _hookProc;
+    private HOOKPROC? _mouseHookProc;
 
     private HWND _window;
     private HHOOK _hook;
+    private HHOOK _mouseHook;
     private byte[] _rawBuffer = new byte[256];
     private uint _threadId;
     private ushort _gamepadState;
@@ -70,23 +80,36 @@ internal sealed unsafe class InputHub : IDisposable
     private bool _gamepadFaulted;
     private bool _started;
     private bool _disposed;
+    private int? _clipErrorCode;
 
-    public InputHub(IInputTarget target, ActionQueue queue, IInputHubErrorSink errors, TimeProvider time)
+    public InputHub(
+        IInputTarget target,
+        ActionQueue queue,
+        IInputHubErrorSink errors,
+        TimeProvider time,
+        InputRoutingState routing)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(queue);
         ArgumentNullException.ThrowIfNull(errors);
         ArgumentNullException.ThrowIfNull(time);
+        ArgumentNullException.ThrowIfNull(routing);
 
         _target = target;
         _queue = queue;
         _errors = errors;
         _time = time;
+        _routing = routing;
+        _clipGate = new ClipCursorGate(MeasureClipWindow, ApplyClipCursor);
         _thread = new Thread(Run)
         {
             IsBackground = true,
             Name = "input",
         };
+
+        // Każda przyjęta zmiana wiersza routingu musi zwolnić albo przestawić clip kursora, nawet gdy wątek Input
+        // stoi w GetMessage; handler tylko kolejkuje komunikat na wątku Input.
+        _routing.Changed += OnRoutingChanged;
     }
 
     /// <summary>Startuje wątek Input; kolejne wywołanie jest błędem wołającego.</summary>
@@ -114,6 +137,7 @@ internal sealed unsafe class InputHub : IDisposable
         }
 
         _disposed = true;
+        _routing.Changed -= OnRoutingChanged;
 
         if (!_started)
         {
@@ -255,6 +279,7 @@ internal sealed unsafe class InputHub : IDisposable
     private bool InstallHook()
     {
         _hookProc = HookCallback;
+        _mouseHookProc = MouseHookCallback;
         var module = PInvoke.GetModuleHandle(default(PCWSTR));
 
         _hook = PInvoke.SetWindowsHookEx(WINDOWS_HOOK_ID.WH_KEYBOARD_LL, _hookProc, module, dwThreadId: 0);
@@ -262,6 +287,14 @@ internal sealed unsafe class InputHub : IDisposable
         {
             Report(InputHubOperations.KeyboardHook, Marshal.GetLastWin32Error());
             return false;
+        }
+
+        // Porażka hooka myszy tylko degraduje: polityka `pointer` nie ma wtedy połknięć ani clipu, ale klawiatura,
+        // pad i timer działają dalej (AD-8), a wątek Input nie może stanąć z powodu brakującego hooka.
+        _mouseHook = PInvoke.SetWindowsHookEx(WINDOWS_HOOK_ID.WH_MOUSE_LL, _mouseHookProc, module, dwThreadId: 0);
+        if (_mouseHook.IsNull)
+        {
+            Report(InputHubOperations.MouseHook, Marshal.GetLastWin32Error());
         }
 
         return true;
@@ -304,6 +337,11 @@ internal sealed unsafe class InputHub : IDisposable
         else if (message == PInvoke.WM_TIMER && (nuint)wParam == GamepadTimerId)
         {
             PollGamepad();
+        }
+        else if (message == RoutingChangedMessage)
+        {
+            // Powiadomienie z wątku Orchestratora: clip przelicza wyłącznie wątek Input (jeden właściciel cache).
+            SyncClip();
         }
 
         return PInvoke.DefWindowProc(hwnd, message, wParam, lParam);
@@ -425,6 +463,156 @@ internal sealed unsafe class InputHub : IDisposable
         }
 
         return PInvoke.CallNextHookEx(_hook, code, wParam, lParam);
+    }
+
+    /// <summary>
+    /// Callback hooka myszy: przelicza clip (jeśli wiersz routingu się zmienił), oddaje zdarzenie polityce i wraca
+    /// natychmiast do systemu (AD-8: <c>LowLevelHooksTimeout</c>). Wskaźnik nigdy nie daje Actions, a jego wyjątek
+    /// nie może wrócić do systemu — zdarzenie wtedy przechodzi.
+    /// </summary>
+    private LRESULT MouseHookCallback(int code, WPARAM wParam, LPARAM lParam)
+    {
+        if (code >= 0)
+        {
+            try
+            {
+                if (PointerStrokeOf(*(MSLLHOOKSTRUCT*)(nint)lParam, (uint)wParam) is { } pointer)
+                {
+                    SyncClip();
+                    var decision = _target.OnPointer(pointer, _clipGate.Current);
+                    Enqueue(decision.Actions);
+
+                    return decision.Swallow ? (LRESULT)1 : PInvoke.CallNextHookEx(_mouseHook, code, wParam, lParam);
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Hook nie może przerzucić wyjątku do systemu; zdarzenie przepuszczamy, żeby nie zawiesić myszy.
+                Report(InputHubOperations.HookCallback, null);
+            }
+        }
+
+        return PInvoke.CallNextHookEx(_mouseHook, code, wParam, lParam);
+    }
+
+    /// <summary>
+    /// Mapuje komunikat <c>WH_MOUSE_LL</c> i <c>MSLLHOOKSTRUCT</c> na zdarzenie wskaźnika w jednostkach Core;
+    /// <c>null</c> dla komunikatu spoza zestawu hooka (przepuszczany bez decyzji). Czas jest w tej samej jednostce
+    /// co <see cref="KeyStroke"/> (pole <c>time</c> hooka), a pozycja — w pikselach fizycznych, tak jak clip.
+    /// </summary>
+    private PointerStroke? PointerStrokeOf(MSLLHOOKSTRUCT data, uint message)
+    {
+        PointerMessage kind;
+        var button = PointerButton.None;
+        var wheelDelta = 0;
+
+        switch (message)
+        {
+            case PInvoke.WM_MOUSEMOVE:
+                kind = PointerMessage.Move;
+                break;
+            case PInvoke.WM_LBUTTONDOWN:
+            case PInvoke.WM_LBUTTONUP:
+                kind = message == PInvoke.WM_LBUTTONDOWN ? PointerMessage.ButtonDown : PointerMessage.ButtonUp;
+                button = PointerButton.Left;
+                break;
+            case PInvoke.WM_RBUTTONDOWN:
+            case PInvoke.WM_RBUTTONUP:
+                kind = message == PInvoke.WM_RBUTTONDOWN ? PointerMessage.ButtonDown : PointerMessage.ButtonUp;
+                button = PointerButton.Right;
+                break;
+            case PInvoke.WM_MBUTTONDOWN:
+            case PInvoke.WM_MBUTTONUP:
+                kind = message == PInvoke.WM_MBUTTONDOWN ? PointerMessage.ButtonDown : PointerMessage.ButtonUp;
+                button = PointerButton.Middle;
+                break;
+            case PInvoke.WM_XBUTTONDOWN:
+            case PInvoke.WM_XBUTTONUP:
+                kind = message == PInvoke.WM_XBUTTONDOWN ? PointerMessage.ButtonDown : PointerMessage.ButtonUp;
+                button = (data.mouseData >> 16) == 1 ? PointerButton.XButton1 : PointerButton.XButton2;
+                break;
+            case PInvoke.WM_MOUSEWHEEL:
+            case PInvoke.WM_MOUSEHWHEEL:
+                kind = PointerMessage.Wheel;
+                wheelDelta = (short)(data.mouseData >> 16);
+                break;
+            default:
+                return null;
+        }
+
+        return new PointerStroke(
+            kind,
+            button,
+            data.pt.X,
+            data.pt.Y,
+            wheelDelta,
+            (data.flags & PInvoke.LLMHF_INJECTED) != 0,
+            _clock.Normalize(data.time),
+            unchecked((long)data.dwExtraInfo));
+    }
+
+    /// <summary>
+    /// Przelicza clip kursora z lokalnej kopii routingu (AD-8). Decyzję i stan trzyma <see cref="ClipCursorGate"/>
+    /// bez Win32, a ten hub dostarcza tylko szwy <c>GetWindowRect</c> i <c>ClipCursor</c>; wątek Input jest jedynym
+    /// właścicielem stanu. Porażka pomiaru albo clipu zwalnia ograniczenie i zostawia jeden wpis
+    /// <c>inputHubError {operation: clipCursor}</c>, bo uwięzienie kursora w nieaktualnym prostokącie jest gorsze niż
+    /// brak ograniczenia.
+    /// </summary>
+    private void SyncClip()
+    {
+        if (_clipGate.Apply(_routing.Current) == ClipOutcome.Failed)
+        {
+            Report(InputHubOperations.ClipCursor, _clipErrorCode);
+        }
+    }
+
+    /// <summary>Szew <c>GetWindowRect</c>: prostokąt okna w pikselach fizycznych albo <c>null</c> w porażce.</summary>
+    private ScreenRectangle? MeasureClipWindow(long handle)
+    {
+        if (!PInvoke.GetWindowRect((HWND)(nint)handle, out var rect))
+        {
+            _clipErrorCode = Marshal.GetLastWin32Error();
+            return null;
+        }
+
+        return new ScreenRectangle(rect.left, rect.top, rect.right, rect.bottom);
+    }
+
+    /// <summary>Szew <c>ClipCursor</c>: prostokąt albo <c>null</c> do zwolnienia; <c>false</c> znaczy porażkę.</summary>
+    private bool ApplyClipCursor(ScreenRectangle? rectangle)
+    {
+        var applied = rectangle is { } clip
+            ? PInvoke.ClipCursor(new RECT
+            {
+                left = clip.Left,
+                top = clip.Top,
+                right = clip.Right,
+                bottom = clip.Bottom,
+            })
+            : PInvoke.ClipCursor(null);
+
+        if (applied)
+        {
+            return true;
+        }
+
+        _clipErrorCode = Marshal.GetLastWin32Error();
+        return false;
+    }
+
+    /// <summary>
+    /// Powiadomienie o nowym wierszu routingu z wątku Orchestratora: tylko nieblokujące <c>PostMessage</c>, bo zapis
+    /// kopii nie może czekać na wątek Input. Komunikat wysłany przed utworzeniem okna po prostu nie ma dokąd trafić —
+    /// pierwsze zdarzenie myszy i tak porówna <c>epoch</c>.
+    /// </summary>
+    private void OnRoutingChanged(InputRouting routing)
+    {
+        if (_window.IsNull)
+        {
+            return;
+        }
+
+        PInvoke.PostMessage(_window, RoutingChangedMessage, default, default);
     }
 
     /// <summary>
@@ -683,13 +871,26 @@ internal sealed unsafe class InputHub : IDisposable
         return path;
     }
 
-    /// <summary>Zwalnia hook, timer i okno na wątku, który je utworzył.</summary>
+    /// <summary>Zwalnia hooki, clip kursora, timer i okno na wątku, który je utworzył.</summary>
     private void ReleaseNativeResources()
     {
         if (!_hook.IsNull)
         {
             PInvoke.UnhookWindowsHookEx(_hook);
             _hook = default;
+        }
+
+        if (!_mouseHook.IsNull)
+        {
+            PInvoke.UnhookWindowsHookEx(_mouseHook);
+            _mouseHook = default;
+        }
+
+        // Bezwarunkowo, bo kursor nie może zostać uwięziony w prostokącie po wyjściu aplikacji, nawet gdy cache
+        // zdążył się rozjechać z rzeczywistym clipem.
+        if (!_clipGate.ForceRelease())
+        {
+            Report(InputHubOperations.ClipCursor, _clipErrorCode);
         }
 
         if (_window.IsNull)

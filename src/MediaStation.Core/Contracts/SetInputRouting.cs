@@ -29,5 +29,16 @@ public enum PointerPolicy
 /// </summary>
 /// <param name="AppType">Typ aktywnej aplikacji albo <c>null</c>, gdy żadna nie jest aktywna.</param>
 /// <param name="Epoch">Monotoniczny numer decyzji routingu.</param>
-public sealed record SetInputRouting(long CmdId, InputMode Mode, AppType? AppType, PointerPolicy Pointer, long Epoch)
+/// <param name="ClipHwnd">
+/// Uchwyt okna klawiatury ekranowej, do którego InputHub więzi kursor (<c>ClipCursor</c>) w trybie <c>osk</c>;
+/// <c>null</c> albo <c>0</c> znaczy brak ograniczenia. Opcjonalny na końcu, żeby kod epiki 2 kompilował się
+/// bez zmian; wysyła go dopiero epic-osk.
+/// </param>
+public sealed record SetInputRouting(
+    long CmdId,
+    InputMode Mode,
+    AppType? AppType,
+    PointerPolicy Pointer,
+    long Epoch,
+    long? ClipHwnd = null)
     : Command(CmdId);

@@ -29,4 +29,10 @@ public static class InputHubOperations
 
     /// <summary>Wywołanie <c>IActionSink.Deliver</c> przewrócone wyjątkiem sinka.</summary>
     public const string ActionSink = "actionSink";
+
+    /// <summary>Rejestracja hooka <c>WH_MOUSE_LL</c>; porażka degraduje tylko obsługę wskaźnika.</summary>
+    public const string MouseHook = "mouseHook";
+
+    /// <summary>Odczyt prostokąta okna clipu (<c>GetWindowRect</c>) albo samo <c>ClipCursor</c>.</summary>
+    public const string ClipCursor = "clipCursor";
 }

@@ -57,4 +57,56 @@ public class InputRoutingStateTests
         Assert.True(applied);
         Assert.Equal(new InputRouting(InputMode.Osk, null, PointerPolicy.Allowed, 8), routing.Current);
     }
+
+    [Fact]
+    public void Clip_hwnd_is_copied_into_the_local_copy()
+    {
+        var routing = new InputRoutingState();
+
+        routing.Apply(new SetInputRouting(1, InputMode.Osk, null, PointerPolicy.Allowed, 2, ClipHwnd: 0x1234));
+
+        Assert.Equal(new InputRouting(InputMode.Osk, null, PointerPolicy.Allowed, 2, 0x1234), routing.Current);
+    }
+
+    [Fact]
+    public void Accepted_row_raises_changed_once_with_the_applied_row()
+    {
+        var routing = new InputRoutingState();
+        var changed = new List<InputRouting>();
+        routing.Changed += changed.Add;
+
+        routing.Apply(new SetInputRouting(1, InputMode.Osk, null, PointerPolicy.Allowed, 4, ClipHwnd: 99));
+
+        var applied = Assert.Single(changed);
+        Assert.Equal(new InputRouting(InputMode.Osk, null, PointerPolicy.Allowed, 4, 99), applied);
+        Assert.Equal(routing.Current, applied);
+    }
+
+    [Theory]
+    [InlineData(3L)]
+    [InlineData(2L)]
+    public void Rejected_epoch_does_not_raise_changed(long epoch)
+    {
+        var routing = new InputRoutingState();
+        routing.Apply(new SetInputRouting(1, InputMode.Osk, null, PointerPolicy.Allowed, 3, ClipHwnd: 7));
+        var raised = 0;
+        routing.Changed += _ => raised++;
+
+        routing.Apply(new SetInputRouting(2, InputMode.Shell, null, PointerPolicy.Blocked, epoch));
+
+        Assert.Equal(0, raised);
+    }
+
+    [Theory]
+    [InlineData(InputMode.Osk, 0x1234L, 0x1234L)]
+    [InlineData(InputMode.Osk, 0L, null)]
+    [InlineData(InputMode.Osk, null, null)]
+    [InlineData(InputMode.Shell, 0x1234L, null)]
+    [InlineData(InputMode.App, 0x1234L, null)]
+    public void Pointer_clip_applies_only_to_osk_with_non_zero_window(InputMode mode, long? clipHwnd, long? expected)
+    {
+        var routing = new InputRouting(mode, null, PointerPolicy.Allowed, 1, clipHwnd);
+
+        Assert.Equal(expected, PointerClip.WindowOf(routing));
+    }
 }

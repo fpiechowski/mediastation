@@ -28,6 +28,14 @@ public interface IInputTarget
     /// <summary>Raport HID Consumer z Raw Input; nie decyduje o połknięciu.</summary>
     void OnHidConsumer(HidConsumerReport report);
 
+    /// <summary>
+    /// Zdarzenie wskaźnika z hooka myszy: czy połknąć ruch, kliknięcie albo kółko na podstawie wiersza
+    /// <c>pointer</c>. Decyzja nigdy nie niesie Actions — wskaźnik nie jest źródłem akcji MediaStation.
+    /// <paramref name="clip"/> to aktualny prostokąt <c>ClipCursor</c> (piksele fizyczne) albo <c>null</c>, gdy
+    /// clip nie obowiązuje; tylko w <c>osk</c> klik poza nim jest połykany.
+    /// </summary>
+    InputDecision OnPointer(PointerStroke pointer, ScreenRectangle? clip);
+
     /// <summary><c>WM_INPUT</c> klawiatury; nie decyduje o połknięciu.</summary>
     void OnRawKeyboard(RawKeyboardInput input);
 

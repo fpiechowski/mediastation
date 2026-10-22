@@ -61,6 +61,20 @@ public class InputCalibrationTests
     }
 
     [Fact]
+    public void Pointer_event_is_passed_through_without_an_entry()
+    {
+        var (calibration, _, sink) = Create();
+
+        var decision = calibration.OnPointer(
+            new PointerStroke(PointerMessage.ButtonDown, PointerButton.Left, 10, 10, 0, Injected: false, TimeMs: 1000),
+            new ScreenRectangle(0, 0, 100, 100));
+
+        Assert.False(decision.Swallow);
+        Assert.Empty(decision.Actions);
+        Assert.Empty(sink.Entries);
+    }
+
+    [Fact]
     public void Remote_press_with_hid_hook_and_raw_keyboard_yields_one_entry_with_all_fields()
     {
         var (calibration, time, sink) = Create();
