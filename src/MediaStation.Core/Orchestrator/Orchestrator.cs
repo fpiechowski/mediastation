@@ -165,12 +165,13 @@ public sealed class Orchestrator
     /// Wybór kafelka uruchamia aplikację w <c>NotRunning</c> (<c>cmdId</c> zostaje w korelacji startu) i planuje
     /// timeout <c>Starting</c> na <c>startingTimeout</c>, albo przywraca ją z <c>Background</c>. Start jest decyzją
     /// o pierwszym planie, więc przed <c>Starting</c> aplikacja dostaje bieżący <c>transitionId</c>; jeśli w międzyczasie
-    /// zapadnie nowsza decyzja (Home, wybudzenie), spóźnione okno nie wejdzie na wierzch. Przełączanie między dwiema
-    /// żywymi aplikacjami dokłada osobna gałąź.
+    /// zapadnie nowsza decyzja (Home, wybudzenie), spóźnione okno nie wejdzie na wierzch. Guard „inna aplikacja
+    /// w <c>Foreground</c>/<c>Starting</c>” stoi tu, we wspólnym wejściu obu gałęzi, więc launch jest wtedy odrzucany;
+    /// przełączanie między dwiema żywymi aplikacjami dokłada osobna gałąź.
     /// </summary>
     private OrchestratorResult OnLaunchApp(LaunchApp launch)
     {
-        if (!_appsById.TryGetValue(launch.AppId, out var app))
+        if (!_appsById.TryGetValue(launch.AppId, out var app) || AnotherAppIsActive(app))
         {
             return OrchestratorResult.None;
         }
@@ -194,17 +195,11 @@ public sealed class Orchestrator
 
     /// <summary>
     /// Powrót z tła: proces żyje, więc wystarczą <see cref="ActivateWindow"/> i routing wejścia aplikacji.
-    /// Guard „inna aplikacja w <c>Foreground</c>/<c>Starting</c>” chroni niezmiennik jednej aplikacji
-    /// na pierwszym planie; politykę przełączania ustala story 6. Powrót jest nową decyzją o pierwszym planie,
-    /// więc podbija <c>transitionId</c> i zapisuje je w aplikacji.
+    /// Guard niezmiennika jednej aplikacji na pierwszym planie stoi w <see cref="OnLaunchApp"/>. Powrót jest
+    /// nową decyzją o pierwszym planie, więc podbija <c>transitionId</c> i zapisuje je w aplikacji.
     /// </summary>
     private OrchestratorResult OnResume(AppState app, long hwnd)
     {
-        if (AnotherAppIsActive(app))
-        {
-            return OrchestratorResult.None;
-        }
-
         app.ForegroundTransition = NextTransitionId();
         app.State = AppLifecycleState.Foreground;
         var activate = new ActivateWindow(NextCmdId(), hwnd);
@@ -598,14 +593,16 @@ public sealed class Orchestrator
     /// Wspólny koniec stopu: restart startuje aplikację od nowa (i zdejmuje timeout <c>Stopping</c> na końcu batcha),
     /// zamknięcie kończy się w <c>NotRunning</c> z samym anulowaniem timeoutu <c>Stopping</c>. Restart używa
     /// <c>transitionId</c> z chwili decyzji w <see cref="OnStop"/>, nie z potwierdzenia stopu: inaczej stop
-    /// dokończony po Home albo wybudzeniu wyniósłby aplikację na wierzch nad shellem.
+    /// dokończony po Home albo wybudzeniu wyniósłby aplikację na wierzch nad shellem. Gdy w trakcie <c>Stopping</c>
+    /// inna aplikacja wzięła pierwszy plan, restart kończy się jak zamknięcie: dwie aplikacje w <c>Foreground</c>
+    /// byłyby gorsze niż utracony restart.
     /// </summary>
     private OrchestratorResult OnStopped(PendingStop stop)
     {
         var app = _appsById[stop.AppId];
         app.Hwnd = null;
 
-        if (!stop.Restart)
+        if (!stop.Restart || AnotherAppIsActive(app))
         {
             app.State = AppLifecycleState.NotRunning;
             var commands = new List<Command>();

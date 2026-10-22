@@ -156,7 +156,7 @@ public class OrchestratorTests
 
     /// <summary>
     /// Wybudzenie z pierwszego planu chowa aplikację i oddaje shellowi wejście, a na końcu odświeża sesję
-    /// każdej żywej aplikacji webowej. Aplikacja w <c>Starting</c> nie dostaje <see cref="RenewSession"/>,
+    /// każdej żywej aplikacji webowej. Aplikacja w <c>NotRunning</c> nie dostaje <see cref="RenewSession"/>,
     /// a Moonlight nie ma sesji CDP do odświeżenia.
     /// </summary>
     [Fact]
@@ -165,23 +165,22 @@ public class OrchestratorTests
         var (orchestrator, started) = StartedWith(TwoWebAndMoonlight());
         Background(orchestrator, "moonlight-pc", 0x3C4D);
         Foreground(orchestrator, "netflix", 0x1A2B);
-        orchestrator.Handle(new LaunchApp("plex-web"));
 
         var result = orchestrator.Handle(new SystemResumed("PBT_APMRESUMEAUTOMATIC"));
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new MinimizeWindow(20, 0x1A2B), command),
-            command => Assert.Equal(new ShowShell(21), command),
+            command => Assert.Equal(new MinimizeWindow(18, 0x1A2B), command),
+            command => Assert.Equal(new ShowShell(19), command),
             command => Assert.Equal(
-                new SetInputRouting(22, InputMode.Shell, null, PointerPolicy.Blocked, 5),
+                new SetInputRouting(20, InputMode.Shell, null, PointerPolicy.Blocked, 5),
                 command),
-            command => Assert.Equal(new RenewSession(23, "netflix"), command));
+            command => Assert.Equal(new RenewSession(21, "netflix"), command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
-        Assert.Equal(started.Rev + 7, snapshot.Rev);
+        Assert.Equal(started.Rev + 6, snapshot.Rev);
         Assert.Equal(new FocusRequest(FocusRequest.DefaultTarget, 2), snapshot.FocusRequest);
         Assert.Equal(AppLifecycleState.Background, StateOf(snapshot, "netflix"));
-        Assert.Equal(AppLifecycleState.Starting, StateOf(snapshot, "plex-web"));
+        Assert.Equal(AppLifecycleState.NotRunning, StateOf(snapshot, "plex-web"));
         Assert.Equal(AppLifecycleState.Background, StateOf(snapshot, "moonlight-pc"));
     }
 
@@ -813,41 +812,6 @@ public class OrchestratorTests
         Assert.Equal(AppLifecycleState.Foreground, StateOf(snapshot, "netflix"));
     }
 
-    /// <summary>
-    /// Home z pierwszego planu też jest nowszą decyzją: równolegle startująca aplikacja, której okno pojawi się
-    /// po Home, dostaje kompensację zamiast <c>ActivateWindow</c>.
-    /// </summary>
-    [Fact]
-    public void Home_from_foreground_makes_parallel_starting_app_lose_its_window()
-    {
-        var (orchestrator, _) = Started();
-        var foreground = Foreground(orchestrator, "plex");
-        orchestrator.Handle(new LaunchApp("netflix"));
-
-        var result = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 2));
-
-        Assert.Collection(
-            result.Commands,
-            command => Assert.Equal(new MinimizeWindow(11, 0x1A2B), command),
-            command => Assert.Equal(new ShowShell(12), command),
-            command => Assert.Equal(
-                new SetInputRouting(13, InputMode.Shell, null, PointerPolicy.Blocked, 3),
-                command));
-        var home = Assert.IsType<ShellSnapshot>(result.Snapshot);
-        Assert.Equal(foreground.Rev + 2, home.Rev);
-        Assert.Equal(foreground.FocusRequest, home.FocusRequest);
-        Assert.Equal(AppLifecycleState.Background, StateOf(home, "plex"));
-        Assert.Equal(AppLifecycleState.Starting, StateOf(home, "netflix"));
-
-        var late = orchestrator.Handle(new AppWindowAttached("netflix", 0x77, 7));
-
-        Assert.Collection(
-            late.Commands,
-            command => Assert.Equal(new MinimizeWindow(14, 0x77), command),
-            command => Assert.Equal(new CancelTimer(15, 2), command));
-        Assert.Equal(AppLifecycleState.Background, StateOf(Assert.IsType<ShellSnapshot>(late.Snapshot), "netflix"));
-    }
-
     [Fact]
     public void Home_when_app_is_already_background_is_ignored()
     {
@@ -930,6 +894,47 @@ public class OrchestratorTests
         var next = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
         Assert.Equal(AppLifecycleState.Background, StateOf(next, "netflix"));
         Assert.Equal(AppLifecycleState.Starting, StateOf(next, "plex"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Launch_not_running_app_while_another_app_is_active_is_ignored_and_never_yields_two_foregrounds(bool otherStarting)
+    {
+        var (orchestrator, _) = Started();
+        var last = otherStarting
+            ? Assert.IsType<ShellSnapshot>(orchestrator.Handle(new LaunchApp("plex")).Snapshot)
+            : Foreground(orchestrator, "plex");
+
+        var launch = orchestrator.Handle(new LaunchApp("netflix"));
+        var attached = orchestrator.Handle(new AppWindowAttached("netflix", 0x2B3C, 8765));
+
+        Assert.Empty(launch.Commands);
+        Assert.Null(launch.Snapshot);
+        Assert.DoesNotContain(attached.Commands, command => command is StartApp or ActivateWindow);
+        var next = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
+        foreach (var snapshot in new[] { attached.Snapshot, next })
+        {
+            Assert.True((snapshot as ShellSnapshot)?.Apps.Count(app => app.State == AppLifecycleState.Foreground) is null or <= 1);
+        }
+        Assert.Equal(last.Apps.Count(app => app.State == AppLifecycleState.Foreground), next.Apps.Count(app => app.State == AppLifecycleState.Foreground));
+        Assert.Equal(AppLifecycleState.Background, StateOf(next, "netflix"));
+    }
+
+    [Fact]
+    public void Restart_confirmed_stop_ends_not_running_when_another_app_took_the_foreground_meanwhile()
+    {
+        var (orchestrator, _) = Started();
+        Background(orchestrator, "plex");
+        orchestrator.Handle(new RestartApp("plex"));
+        Foreground(orchestrator, "netflix");
+
+        var result = orchestrator.Handle(new ProcessExited("plex"));
+
+        Assert.DoesNotContain(result.Commands, command => command is StartApp);
+        var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
+        Assert.Equal(AppLifecycleState.NotRunning, StateOf(snapshot, "plex"));
+        Assert.Equal(AppLifecycleState.Foreground, StateOf(snapshot, "netflix"));
     }
 
     // ── Zamknięcie i restart: Background → Stopping → NotRunning | Starting ────
