@@ -1,4 +1,5 @@
 using MediaStation.Core.Cli;
+using MediaStation.Core.Config;
 using MediaStation.Core.Logging;
 
 namespace MediaStation.Core.Tests;
@@ -78,15 +79,51 @@ public class StartDecisionTests
     }
 
     [Fact]
-    public void Free_instance_in_calibrate_mode_exits_unsupported_without_app_id()
+    public void Free_instance_in_calibrate_mode_starts_calibration()
     {
-        var decision = StartDecision.Decide(["--calibrate-input"], () => true);
+        var acquireCalls = 0;
+
+        var decision = StartDecision.Decide(["--calibrate-input"], () =>
+        {
+            acquireCalls++;
+            return true;
+        });
+
+        Assert.IsType<StartDecision.CalibrateInput>(decision);
+        Assert.Equal(1, acquireCalls);
+    }
+
+    [Fact]
+    public void Busy_instance_in_calibrate_mode_exits_already_running()
+    {
+        var decision = StartDecision.Decide(["--calibrate-input"], () => false);
 
         var exit = Assert.IsType<StartDecision.Exit>(decision);
-        Assert.Equal(ExitCode.Unsupported, exit.Code);
-        Assert.Equal("modeUnsupported", exit.Msg);
+        Assert.Equal(ExitCode.AlreadyRunning, exit.Code);
+        Assert.Equal(LogLevel.Warn, exit.Level);
+        Assert.Equal("instanceRejected", exit.Msg);
         Assert.Equal("calibrateInput", exit.Data["mode"]);
         Assert.Single(exit.Data);
+    }
+
+    [Fact]
+    public void Calibration_exit_code_is_config_invalid_when_config_has_errors()
+    {
+        Assert.Equal(ExitCode.ConfigInvalid, StartDecision.CalibrationExit(new ConfigResult(null, [])));
+    }
+
+    [Fact]
+    public void Calibration_exit_code_is_ok_for_a_valid_config()
+    {
+        var valid = new LoadedConfig(new AppsConfig([]), new InputConfig([], []), new Settings());
+
+        Assert.Equal(ExitCode.Ok, StartDecision.CalibrationExit(new ConfigResult(valid, [])));
+    }
+
+    [Fact]
+    public void Null_config_result_throws()
+    {
+        Assert.Throws<ArgumentNullException>(() => StartDecision.CalibrationExit(null!));
     }
 
     [Fact]

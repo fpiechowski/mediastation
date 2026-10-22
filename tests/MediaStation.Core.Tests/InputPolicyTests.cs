@@ -267,7 +267,7 @@ public class InputPolicyTests
     {
         var (policy, _) = Create();
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, 0x00B0));
         var decision = policy.OnKey(Down(0xAC, 1000, injected: true));
 
         Assert.True(decision.Swallow);
@@ -290,7 +290,7 @@ public class InputPolicyTests
     {
         var (policy, _) = Create();
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 949));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 949, 0x0C, 0x00B0));
 
         Assert.Equal(
             Press(ActionKind.Home, ActionSource.Keyboard, 1000),
@@ -302,7 +302,7 @@ public class InputPolicyTests
     {
         var (policy, _) = Create();
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 1010));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 1010, 0x0C, 0x00B0));
 
         Assert.Equal(
             Press(ActionKind.Home, ActionSource.Keyboard, 1000),
@@ -314,7 +314,7 @@ public class InputPolicyTests
     {
         var (policy, _) = Create();
 
-        policy.OnRawKeyboard(new RawKeyboardInput(DonglePath.ToLowerInvariant(), 980));
+        policy.OnRawKeyboard(new RawKeyboardInput(DonglePath.ToLowerInvariant(), 980, 0x26, 0x48, Down: true));
         var decision = policy.OnKey(Down(0x26, 1000));
 
         Assert.Equal(Press(ActionKind.Up, ActionSource.Remote, 1000), Assert.Single(decision.Actions));
@@ -325,7 +325,7 @@ public class InputPolicyTests
     {
         var (policy, _) = Create();
 
-        policy.OnRawKeyboard(new RawKeyboardInput(@"\\?\HID#VID_046D&PID_C52B#1", 980));
+        policy.OnRawKeyboard(new RawKeyboardInput(@"\\?\HID#VID_046D&PID_C52B#1", 980, 0x26, 0x48, Down: true));
 
         Assert.Equal(
             Press(ActionKind.Up, ActionSource.Keyboard, 1000),
@@ -350,7 +350,7 @@ public class InputPolicyTests
         var policy = new InputPolicy(config, new FakeTimeProvider(T0));
 
         // VK pochodzi z drugiego urządzenia, a skorelowany WM_INPUT należy do pierwszego.
-        policy.OnRawKeyboard(new RawKeyboardInput(DonglePath, 980));
+        policy.OnRawKeyboard(new RawKeyboardInput(DonglePath, 980, 0xA6, 0x0E, Down: true));
         var decision = policy.OnKey(Down(0xA6, 1000));
 
         Assert.True(decision.Swallow);
@@ -362,7 +362,7 @@ public class InputPolicyTests
     {
         var (policy, _) = Create();
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 990));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 990, 0x0C, 0x00B0));
 
         var decision = policy.OnKey(Down(0x26, 1000));
 
@@ -374,7 +374,7 @@ public class InputPolicyTests
     {
         var (policy, time) = Create();
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, 0x00B0));
         policy.OnKey(Down(0x0D, 1000, injected: true));
         time.Advance(TimeSpan.FromMilliseconds(600));
 
@@ -383,5 +383,33 @@ public class InputPolicyTests
         Assert.Equal(
             new Action(ActionKind.Ok, ActionPhase.Long, ActionSource.Remote, 1600),
             Assert.Single(timer.Actions));
+    }
+
+    [Fact]
+    public void Remote_button_mapped_to_keyboard_gives_one_swallowed_press_with_remote_source()
+    {
+        var config = new InputConfig(
+            [
+                new InputDevice(
+                    "VID_1915&PID_1025",
+                    ActionSource.Remote,
+                    new Dictionary<string, ActionKind> { ["0x5D"] = ActionKind.Keyboard }),
+            ],
+            [GamepadButton.Back, GamepadButton.Start]);
+        var policy = new InputPolicy(config, new FakeTimeProvider(T0));
+
+        // WM_INPUT dongla w oknie czyni przycisk źródłem `remote`, a nie zwykłą klawiaturą.
+        policy.OnRawKeyboard(new RawKeyboardInput(DonglePath, 980, 0x5D, 0x2B, Down: true));
+        var down = policy.OnKey(Down(0x5D, 1000));
+
+        Assert.True(down.Swallow);
+
+        var log = new RecordingLog();
+        new LogActionSink(log).Deliver(Assert.Single(down.Actions));
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal("action", entry.Msg);
+        Assert.Equal(ActionKind.Keyboard, entry.Data!["kind"]);
+        Assert.Equal(ActionPhase.Press, entry.Data["phase"]);
+        Assert.Equal(ActionSource.Remote, entry.Data["source"]);
     }
 }

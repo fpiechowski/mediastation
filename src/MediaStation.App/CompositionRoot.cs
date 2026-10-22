@@ -76,12 +76,24 @@ public static class CompositionRoot
             return;
         }
 
+        if (decision is StartDecision.CalibrateInput)
+        {
+            // Tryb bez okna i bez UI: AttachStopLogging rejestruje stop przed startem huba, więc ostatni wpis
+            // logu to stop także na ścieżce złego configu i porażki huba.
+            var code = StartCalibration(app, log, time);
+            app.Shutdown((int)code);
+            return;
+        }
+
         StartRun(app, log, time);
         AttachStopLogging(app, log);
     }
 
-    /// <summary>Tryb główny: config (I/O tylko w App), walidacja w Core, snapshot i okno shella.</summary>
-    private static void StartRun(Application app, ILog log, TimeProvider time)
+    /// <summary>
+    /// Odczyt configu i walidacja (AD-11) wspólne dla trybu głównego i kalibracji: App czyta pliki, Core waliduje,
+    /// a każdy błąd zostaje w logu jako <c>configError</c>. Zwraca też <see cref="Config"/> dla pozostałych epik.
+    /// </summary>
+    private static ConfigResult LoadConfig(ILog log)
     {
         var files = ConfigFileReader.ReadAll(ConfigDir, ConfigPreflight.RequiredFiles);
         var result = ConfigValidation.Validate(files);
@@ -96,6 +108,64 @@ public static class CompositionRoot
         }
 
         Config = result.Config;
+        return result;
+    }
+
+    /// <summary>
+    /// Tryb <c>--calibrate-input</c> (AD-13): sam InputHub z <see cref="InputCalibration"/> zamiast
+    /// <see cref="InputPolicy"/>, bez okna i UI. Kalibracja nie mapuje i nie połyka klawiszy, a wpisy
+    /// <c>rawInput</c> powstają wyłącznie dla urządzeń <c>source: remote</c>. App czeka na <c>Completed</c>
+    /// z ograniczeniem <see cref="InputCalibration.DurationSeconds"/> + 10 s, bo tryb nie ma pętli UI, a martwy
+    /// hub nie może zawiesić procesu; zwraca kod, którym <see cref="Start"/> kończy aplikację.
+    /// </summary>
+    private static ExitCode StartCalibration(Application app, ILog log, TimeProvider time)
+    {
+        AttachStopLogging(app, log);
+
+        var result = LoadConfig(log);
+        if (result.Config is not { } config)
+        {
+            // Bez ekranu błędu configu: tryb nie ma okna, więc samo configError i kod z decyzji Core.
+            return StartDecision.CalibrationExit(result);
+        }
+
+        var rawSink = new LogRawInputSink(log);
+        var calibration = new InputCalibration(config.Input, time, rawSink);
+        using var completed = new ManualResetEventSlim(initialState: false);
+        calibration.Completed += completed.Set;
+
+        InputHub? hub = null;
+        try
+        {
+            // Kalibracja nie emituje Actions, więc kolejka nie ma czytelnika i budzik jest pusty.
+            hub = new InputHub(calibration, new ActionQueue(static () => { }), rawSink, time);
+            hub.Start();
+
+            // Termin kalibracji to 60 s; zapas 10 s pokrywa start wątku Input i rotację timera. Przekroczenie
+            // znaczy, że hub nie domknął trybu, a całą pracą tego trybu jest wejście.
+            if (!completed.Wait(TimeSpan.FromSeconds(InputCalibration.DurationSeconds + 10)))
+            {
+                return ExitCode.InputHubFailed;
+            }
+
+            return StartDecision.CalibrationExit(result);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Padnięty hub w trybie, którego całą pracą jest wejście, nie może udawać sukcesu.
+            log.Error(LogRawInputSink.Src, "inputHubStartFailed", ex);
+            return ExitCode.InputHubFailed;
+        }
+        finally
+        {
+            hub?.Dispose();
+        }
+    }
+
+    /// <summary>Tryb główny: config (I/O tylko w App), walidacja w Core, snapshot i okno shella.</summary>
+    private static void StartRun(Application app, ILog log, TimeProvider time)
+    {
+        var result = LoadConfig(log);
 
         // Bootstrap ma rev 0 i nie jest logowany: pierwszy snapshot z Orchestratora ma rev 1.
         var snapshot = ShellSnapshotFactory.FromConfig(result, rev: 0);

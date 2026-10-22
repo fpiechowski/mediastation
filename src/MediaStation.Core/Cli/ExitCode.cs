@@ -18,9 +18,21 @@ public enum ExitCode
     /// <summary>Inna instancja MediaStation trzyma mutex; nowy proces nie otwiera okna.</summary>
     AlreadyRunning = 3,
 
-    /// <summary>Tryb rozpoznany, ale niezaimplementowany (dziś <c>--smoke</c> i <c>--calibrate-input</c>).</summary>
+    /// <summary>Tryb rozpoznany, ale niezaimplementowany (dziś tylko <c>--smoke</c>).</summary>
     Unsupported = 4,
 
     /// <summary>WebView2 albo pliki shella nie wystartowały; proces kończy się po komunikacie błędu.</summary>
     ShellStartFailed = 5,
+
+    /// <summary>
+    /// Config nie przeszedł walidacji w trybie bez ekranu błędu (<c>--calibrate-input</c>); proces kończy się
+    /// po wpisach <c>configError</c>, bez logowania surowych kodów.
+    /// </summary>
+    ConfigInvalid = 6,
+
+    /// <summary>
+    /// InputHub trybu kalibracji nie wystartował albo nie domknął trybu w ograniczonym czasie; całą pracą tego
+    /// trybu jest wejście, więc brak huba jest porażką, a nie degradacją jak w trybie głównym.
+    /// </summary>
+    InputHubFailed = 7,
 }

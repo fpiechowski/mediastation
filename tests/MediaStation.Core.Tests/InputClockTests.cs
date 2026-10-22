@@ -73,7 +73,7 @@ public class InputClockTests
         // Raport Consumer 32 ms przed klawiszem, po zawinięciu 32-bitowego licznika.
         var reportMs = clock.Normalize(0xFFFF_FFF0);
         var downMs = clock.Normalize(0x0000_0010);
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, reportMs));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, reportMs, 0x0C, 0x00B0));
         var down = policy.OnKey(new KeyStroke(0x0D, KeyTransition.Down, Injected: true, downMs));
 
         Assert.True(down.Swallow);

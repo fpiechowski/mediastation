@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using MediaStation.Core.Config;
 using MediaStation.Core.Logging;
 
 namespace MediaStation.Core.Cli;
@@ -16,6 +17,12 @@ public abstract record StartDecision
 
     /// <summary>Tryb główny: config, snapshot i okno shella.</summary>
     public sealed record Run : StartDecision;
+
+    /// <summary>
+    /// Kalibracja wejścia (AD-13): sam InputHub bez okna i bez UI, log wyłącznie surowych kodów urządzenia
+    /// <c>remote</c>, zamknięcie po 60 s albo Esc z klawiatury.
+    /// </summary>
+    public sealed record CalibrateInput : StartDecision;
 
     /// <summary>Zakończenie procesu z wpisem logu <paramref name="Msg"/> i kodem <paramref name="Code"/>.</summary>
     public sealed record Exit(
@@ -58,6 +65,11 @@ public abstract record StartDecision
             return new Run();
         }
 
+        if (mode is CliMode.CalibrateInput)
+        {
+            return new CalibrateInput();
+        }
+
         var data = new Dictionary<string, object?> { ["mode"] = mode.LogName };
         if (mode is CliMode.Smoke smoke)
         {
@@ -65,5 +77,17 @@ public abstract record StartDecision
         }
 
         return new Exit(ExitCode.Unsupported, LogLevel.Warn, "modeUnsupported", data);
+    }
+
+    /// <summary>
+    /// Kod zakończenia trybu <c>--calibrate-input</c> po odczycie configu (AD-11): tryb nie ma ekranu błędu, więc
+    /// każde naruszenie walidacji kończy proces kodem <see cref="ExitCode.ConfigInvalid"/> bez logowania kodów,
+    /// a poprawny config daje <see cref="ExitCode.Ok"/>. Decyzja w Core (AD-3), App tylko ją wykonuje.
+    /// </summary>
+    public static ExitCode CalibrationExit(ConfigResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        return result.Config is null ? ExitCode.ConfigInvalid : ExitCode.Ok;
     }
 }

@@ -14,6 +14,8 @@ public class ExitCodeTests
             ("AlreadyRunning", 3),
             ("Unsupported", 4),
             ("ShellStartFailed", 5),
+            ("ConfigInvalid", 6),
+            ("InputHubFailed", 7),
         ];
 
         var actual = Enum.GetValues<ExitCode>()

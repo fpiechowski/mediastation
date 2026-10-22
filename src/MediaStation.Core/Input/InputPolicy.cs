@@ -16,15 +16,22 @@ public enum KeyTransition
 
 /// <summary>
 /// Jedno zdarzenie klawiatury z hooka LL. <paramref name="VirtualKey"/> to kod VK, <paramref name="Injected"/>
-/// odpowiada <c>LLKHF_INJECTED</c>, a <paramref name="TimeMs"/> — polu <c>time</c> zdarzenia hooka.
+/// odpowiada <c>LLKHF_INJECTED</c>, <paramref name="TimeMs"/> — polu <c>time</c> zdarzenia hooka, a
+/// <paramref name="Scan"/> — kod scan (surowy, czytany tylko przez kalibrację).
 /// </summary>
-public sealed record KeyStroke(int VirtualKey, KeyTransition Transition, bool Injected, long TimeMs);
+public sealed record KeyStroke(int VirtualKey, KeyTransition Transition, bool Injected, long TimeMs, int Scan = 0);
 
-/// <summary>Raport HID Consumer (np. pilot na donglu) z Raw Input; <paramref name="DevicePath"/> to ścieżka urządzenia.</summary>
-public sealed record HidConsumerReport(string DevicePath, long TimeMs);
+/// <summary>
+/// Raport HID Consumer (np. pilot na donglu) z Raw Input; <paramref name="DevicePath"/> to ścieżka urządzenia,
+/// a <paramref name="UsagePage"/>/<paramref name="Usage"/> — surowy usage raportu (czytany tylko przez kalibrację).
+/// </summary>
+public sealed record HidConsumerReport(string DevicePath, long TimeMs, int UsagePage, int Usage);
 
-/// <summary>Zdarzenie klawiatury z Raw Input (<c>WM_INPUT</c>); służy tylko do identyfikacji urządzenia.</summary>
-public sealed record RawKeyboardInput(string DevicePath, long TimeMs);
+/// <summary>
+/// Zdarzenie klawiatury z Raw Input (<c>WM_INPUT</c>); polityka używa tylko <paramref name="DevicePath"/> i czasu,
+/// a surowe <paramref name="VirtualKey"/>/<paramref name="Scan"/>/<paramref name="Down"/> czyta wyłącznie kalibracja.
+/// </summary>
+public sealed record RawKeyboardInput(string DevicePath, long TimeMs, int VirtualKey, int Scan, bool Down);
 
 /// <summary>Decyzja polityki dla jednego zdarzenia: czy połknąć klawisz i jakie Actions dostarczyć.</summary>
 public sealed record InputDecision(bool Swallow, IReadOnlyList<ActionMessage> Actions);
@@ -38,7 +45,7 @@ public sealed record InputDecision(bool Swallow, IReadOnlyList<ActionMessage> Ac
 /// Czas płynie wyłącznie przez wstrzyknięty <see cref="TimeProvider"/> (AD-14). Typ nie jest wątkowo bezpieczny:
 /// App woła go z jednego wątku Input (callback hooka i timer progu na tym samym wątku).
 /// </summary>
-public sealed class InputPolicy
+public sealed class InputPolicy : IInputTarget
 {
     /// <summary>Okno korelacji raportu urządzenia z klawiszem; okno jest jednostronne (raport przed klawiszem).</summary>
     public const int CorrelationWindowMs = 50;
@@ -224,7 +231,7 @@ public sealed class InputPolicy
 
         foreach (var device in _devices)
         {
-            if (devicePath.Contains(device.Signature, StringComparison.OrdinalIgnoreCase))
+            if (DeviceSignature.Matches(devicePath, device.Signature))
             {
                 return device;
             }

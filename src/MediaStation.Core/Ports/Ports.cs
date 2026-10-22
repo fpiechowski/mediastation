@@ -88,3 +88,14 @@ public interface IInputHubErrorSink
     /// <summary>Raportuje jedną porażkę operacji huba; wywołanie nie blokuje i nie rzuca.</summary>
     void Report(InputHubError error);
 }
+
+/// <summary>
+/// Port surowych zdarzeń kalibracji wejścia (AD-13): jedno <see cref="Deliver"/> na jedno naciśnięcie przycisku
+/// urządzenia <c>source: remote</c>. Wołany z wątku Input poza callbackiem hooka: nie blokuje się długo i nie rzuca.
+/// Surowych kodów nie dostaje żaden inny tryb ani żaden inny port.
+/// </summary>
+public interface IRawInputSink
+{
+    /// <summary>Dostarcza jeden scalony wpis kalibracji; wywołanie nie blokuje się długo i nie rzuca.</summary>
+    void Deliver(RawInputEntry entry);
+}

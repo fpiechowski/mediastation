@@ -14,10 +14,11 @@ namespace MediaStation.App.Platform.Input;
 
 /// <summary>
 /// Wątek Input (AD-2, AD-8): własna pętla komunikatów i okno message-only, na nich hook <c>WH_KEYBOARD_LL</c>,
-/// Raw Input <c>RIDEV_INPUTSINK</c> (klawiatura i HID Consumer) oraz <c>WM_TIMER</c> terminu long-press.
-/// Adapter nie decyduje o niczym: połknięcie, <c>kind</c> i <c>source</c> pochodzą wprost z
-/// <see cref="InputPolicy"/>, a callback hooka tylko wkłada Actions do <see cref="ActionQueue"/> i uzbraja timer —
-/// nie czeka, nie loguje i nie gubi Action (także Home przy zawieszonym UI).
+/// Raw Input <c>RIDEV_INPUTSINK</c> (klawiatura i HID Consumer) oraz <c>WM_TIMER</c> terminu long-press albo
+/// końca kalibracji. Adapter nie decyduje o niczym: połknięcie, <c>kind</c> i <c>source</c> pochodzą wprost z
+/// <see cref="IInputTarget"/> (tryb główny dostaje <see cref="InputPolicy"/>, <c>--calibrate-input</c> —
+/// <see cref="InputCalibration"/>), a callback hooka tylko wkłada Actions do <see cref="ActionQueue"/> i uzbraja
+/// timer — nie czeka, nie loguje i nie gubi Action (także Home przy zawieszonym UI).
 /// Porażki rejestracji degradują: brak okna kończy wątek, brak Raw Input zostawia hook (tylko <c>source</c>
 /// spada do <c>keyboard</c>), brak hooka kończy wątek po wpisie <c>inputHubError</c>.
 /// </summary>
@@ -25,13 +26,16 @@ internal sealed unsafe class InputHub : IDisposable
 {
     private const string WindowClassName = "MediaStationInputHub";
 
+    /// <summary>Strona usage HID Consumer rejestrowana w Raw Input (<c>usUsagePage = 0x0C</c>).</summary>
+    private const int HidConsumerUsagePage = 0x0C;
+
     /// <summary>Identyfikator jedynego timera progu long-press w oknie Input.</summary>
     private static readonly nuint TimerId = 1;
 
     /// <summary>Górna granica czekania na zakończenie wątku w <see cref="Dispose"/>; zawieszony wątek nie może zamrozić wyjścia.</summary>
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(10);
 
-    private readonly InputPolicy _policy;
+    private readonly IInputTarget _target;
     private readonly ActionQueue _queue;
     private readonly IInputHubErrorSink _errors;
     private readonly TimeProvider _time;
@@ -51,14 +55,14 @@ internal sealed unsafe class InputHub : IDisposable
     private bool _started;
     private bool _disposed;
 
-    public InputHub(InputPolicy policy, ActionQueue queue, IInputHubErrorSink errors, TimeProvider time)
+    public InputHub(IInputTarget target, ActionQueue queue, IInputHubErrorSink errors, TimeProvider time)
     {
-        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(queue);
         ArgumentNullException.ThrowIfNull(errors);
         ArgumentNullException.ThrowIfNull(time);
 
-        _policy = policy;
+        _target = target;
         _queue = queue;
         _errors = errors;
         _time = time;
@@ -139,6 +143,10 @@ internal sealed unsafe class InputHub : IDisposable
             {
                 return;
             }
+
+            // Termin startowy celu (koniec kalibracji albo brak long-press) uzbrajamy po hooku: od tej chwili
+            // każdy WM_TIMER ma już prawo przyjść, a kalibracja kończy się także bez żadnego wejścia.
+            ArmTimer();
 
             PumpMessages();
         }
@@ -281,8 +289,10 @@ internal sealed unsafe class InputHub : IDisposable
     }
 
     /// <summary>
-    /// Czyta <c>WM_INPUT</c>: ścieżkę urządzenia z cache i czas w tej samej jednostce co hook, a potem oddaje
-    /// polityce sam raport (Consumer) albo <c>WM_INPUT</c> klawiatury — decyzja o <c>source</c> jest w Core.
+    /// Czyta <c>WM_INPUT</c>: ścieżkę urządzenia z cache, ciało raportu bez Win32 (<see cref="RawInputBody"/>) i czas
+    /// w tej samej jednostce co hook, a potem oddaje celowi sam raport (Consumer) albo <c>WM_INPUT</c> klawiatury —
+    /// decyzja o <c>source</c> jest w Core. Timer uzbrajamy także po <c>WM_INPUT</c>, bo kalibracja domyka wpis
+    /// terminem <c>flushAt</c> liczonym od zdarzenia urządzenia.
     /// </summary>
     private void OnRawInput(HRAWINPUT raw)
     {
@@ -328,14 +338,31 @@ internal sealed unsafe class InputHub : IDisposable
                 return;
             }
 
+            var body = buffer.Slice((int)headerSize, (int)(read - headerSize));
             var timeMs = CurrentTimeMs();
             if (header.dwType == (uint)RID_DEVICE_INFO_TYPE.RIM_TYPEKEYBOARD)
             {
-                _policy.OnRawKeyboard(new RawKeyboardInput(devicePath, timeMs));
+                if (!RawInputBody.TryReadKeyboard(body, out var virtualKey, out var scan, out var down))
+                {
+                    // Ciało niezgodne z RAWKEYBOARD: surowe wartości nieznane, ale polityka nadal dostaje
+                    // urządzenie i czas, żeby korelacja source w trybie głównym nie znikła.
+                    virtualKey = 0;
+                    scan = 0;
+                    down = false;
+                }
+
+                _target.OnRawKeyboard(new RawKeyboardInput(devicePath, timeMs, virtualKey, scan, down));
+                ArmTimer();
             }
             else if (header.dwType == (uint)RID_DEVICE_INFO_TYPE.RIM_TYPEHID)
             {
-                _policy.OnHidConsumer(new HidConsumerReport(devicePath, timeMs));
+                if (!RawInputBody.TryReadHidUsage(body, out var usage))
+                {
+                    usage = 0;
+                }
+
+                _target.OnHidConsumer(new HidConsumerReport(devicePath, timeMs, HidConsumerUsagePage, usage));
+                ArmTimer();
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -345,7 +372,7 @@ internal sealed unsafe class InputHub : IDisposable
         }
     }
 
-    /// <summary>Callback hooka: jedyna decyzja z <see cref="InputPolicy"/> i natychmiastowy powrót do systemu.</summary>
+    /// <summary>Callback hooka: jedyna decyzja z <see cref="IInputTarget"/> i natychmiastowy powrót do systemu.</summary>
     private LRESULT HookCallback(int code, WPARAM wParam, LPARAM lParam)
     {
         if (code >= 0)
@@ -359,9 +386,10 @@ internal sealed unsafe class InputHub : IDisposable
                     (int)data.vkCode,
                     down ? KeyTransition.Down : KeyTransition.Up,
                     (data.flags & KBDLLHOOKSTRUCT_FLAGS.LLKHF_INJECTED) != 0,
-                    _clock.Normalize(data.time));
+                    _clock.Normalize(data.time),
+                    (int)data.scanCode);
 
-                var decision = _policy.OnKey(stroke);
+                var decision = _target.OnKey(stroke);
                 Enqueue(decision.Actions);
                 ArmTimer();
 
@@ -377,12 +405,15 @@ internal sealed unsafe class InputHub : IDisposable
         return PInvoke.CallNextHookEx(_hook, code, wParam, lParam);
     }
 
-    /// <summary>Timer progu long-press: <see cref="InputPolicy.OnTimer"/> sam sprawdza termin i nie połyka.</summary>
+    /// <summary>
+    /// Timer progu long-press albo końca kalibracji: <see cref="IInputTarget.OnTimer"/> sam sprawdza termin
+    /// i nigdy nie połyka.
+    /// </summary>
     private void OnTimer()
     {
         try
         {
-            var decision = _policy.OnTimer(_time.GetUtcNow());
+            var decision = _target.OnTimer(_time.GetUtcNow());
             Enqueue(decision.Actions);
             ArmTimer();
         }
@@ -401,13 +432,13 @@ internal sealed unsafe class InputHub : IDisposable
     }
 
     /// <summary>
-    /// Ustawia timer na <see cref="InputPolicy.NextDeadline"/> liczony na <see cref="TimeProvider"/>. Wczesny
-    /// albo spóźniony <c>WM_TIMER</c> nic nie psuje: <see cref="InputPolicy.OnTimer"/> porównuje termin,
+    /// Ustawia timer na <see cref="IInputTarget.NextDeadline"/> liczony na <see cref="TimeProvider"/>. Wczesny
+    /// albo spóźniony <c>WM_TIMER</c> nic nie psuje: <see cref="IInputTarget.OnTimer"/> porównuje termin,
     /// a hub uzbraja timer ponownie, dopóki termin został.
     /// </summary>
     private void ArmTimer()
     {
-        if (InputTimerDelay.Compute(_policy.NextDeadline, _time.GetUtcNow()) is not { } elapsed)
+        if (InputTimerDelay.Compute(_target.NextDeadline, _time.GetUtcNow()) is not { } elapsed)
         {
             PInvoke.KillTimer(_window, TimerId);
             return;

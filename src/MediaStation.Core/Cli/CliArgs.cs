@@ -25,7 +25,7 @@ public abstract record CliMode
         public override string LogName => "smoke";
     }
 
-    /// <summary>Kalibracja wejścia (AD-8); dziś rozpoznawana, ale nieobsługiwana.</summary>
+    /// <summary>Kalibracja wejścia (AD-8, AD-13): tylko-log surowych kodów urządzenia <c>remote</c>, bez mapowania.</summary>
     public sealed record CalibrateInput : CliMode
     {
         public override string LogName => "calibrateInput";
