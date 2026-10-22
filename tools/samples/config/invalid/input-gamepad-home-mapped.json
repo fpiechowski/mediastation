@@ -1,0 +1,10 @@
+{
+  "devices": [],
+  "gamepadHome": [
+    "back",
+    "start"
+  ],
+  "gamepad": {
+    "back": "back"
+  }
+}

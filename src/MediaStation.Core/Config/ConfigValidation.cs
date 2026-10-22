@@ -361,6 +361,8 @@ public static class ConfigValidation
             }
         }
 
+        CheckGamepad(config, errors);
+
         var timingPath = JsonErrorPath.Property("$", "timing");
         CheckPositive(config.Timing.LongPressMs, JsonErrorPath.Property(timingPath, "longPressMs"), errors);
         CheckPositive(config.Timing.RepeatDelayMs, JsonErrorPath.Property(timingPath, "repeatDelayMs"), errors);
@@ -381,6 +383,36 @@ public static class ConfigValidation
         if (buttons.Count < 2)
         {
             errors.Add(homePath, "potrzeba co najmniej 2 różnych przycisków");
+        }
+    }
+
+    /// <summary>
+    /// Mapowanie pada (AD-8): <c>appMenu</c> nie ma odpowiednika na padzie, a przycisk kombinacji Home nie może mieć
+    /// własnego mapowania, żeby Home nie dublowało Actions składowych.
+    /// </summary>
+    private static void CheckGamepad(InputConfig config, FileErrors errors)
+    {
+        if (config.Gamepad is null)
+        {
+            errors.Add(JsonErrorPath.Property("$", "gamepad"), NullReason);
+            return;
+        }
+
+        var gamepadPath = JsonErrorPath.Property("$", "gamepad");
+        foreach (var (button, kind) in config.Gamepad.Mappings())
+        {
+            var name = JsonNamingPolicy.CamelCase.ConvertName(button.ToString());
+            var buttonPath = JsonErrorPath.Property(gamepadPath, name);
+            if (kind == ActionKind.AppMenu)
+            {
+                errors.Add(buttonPath, "„appMenu” niedozwolone w mapowaniu (AppMenu to długie „ok” w Shell)");
+            }
+            else if (config.GamepadHome.Contains(button))
+            {
+                errors.Add(
+                    buttonPath,
+                    $"przycisk {Quote(name)} należy do gamepadHome i nie może mieć własnego mapowania; ustaw dla niego null");
+            }
         }
     }
 

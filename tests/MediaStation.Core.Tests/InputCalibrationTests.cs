@@ -48,6 +48,19 @@ public class InputCalibrationTests
         new(virtualKey, KeyTransition.Down, injected, timeMs, scan);
 
     [Fact]
+    public void Gamepad_snapshot_is_passed_through_without_an_entry()
+    {
+        var (calibration, _, sink) = Create();
+
+        var decision = calibration.OnGamepad(
+            new GamepadSnapshot(1000, [GamepadButton.DpadUp, GamepadButton.A]));
+
+        Assert.False(decision.Swallow);
+        Assert.Empty(decision.Actions);
+        Assert.Empty(sink.Entries);
+    }
+
+    [Fact]
     public void Remote_press_with_hid_hook_and_raw_keyboard_yields_one_entry_with_all_fields()
     {
         var (calibration, time, sink) = Create();

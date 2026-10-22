@@ -17,6 +17,14 @@ public interface IInputTarget
     /// <summary>Decyzja dla jednego zdarzenia hooka: czy połknąć klawisz i jakie Actions dostarczyć.</summary>
     InputDecision OnKey(KeyStroke key);
 
+    /// <summary>
+    /// Migawka stanu pada XInput (indeks 0); decyzja nigdy nie połyka, bo XInput jest tylko odpytywany i aplikacja
+    /// i tak widzi przyciski — wiersz AD-8 decyduje wyłącznie o zestawie Actions. Migawka <c>Available=false</c>
+    /// nie jest zwolnieniem przycisków: trzymania pada znikają bez Actions, a pierwsza dostępna migawka po przerwie
+    /// jest nowym stanem początkowym.
+    /// </summary>
+    InputDecision OnGamepad(GamepadSnapshot snapshot);
+
     /// <summary>Raport HID Consumer z Raw Input; nie decyduje o połknięciu.</summary>
     void OnHidConsumer(HidConsumerReport report);
 

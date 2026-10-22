@@ -2,23 +2,26 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
+using MediaStation.Core.Config;
 using MediaStation.Core.Input;
 using MediaStation.Core.Ports;
 using ActionMessage = MediaStation.Core.Contracts.Action;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.UI.Input;
+using Windows.Win32.UI.Input.XboxController;
 using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace MediaStation.App.Platform.Input;
 
 /// <summary>
 /// Wątek Input (AD-2, AD-8): własna pętla komunikatów i okno message-only, na nich hook <c>WH_KEYBOARD_LL</c>,
-/// Raw Input <c>RIDEV_INPUTSINK</c> (klawiatura i HID Consumer) oraz <c>WM_TIMER</c> terminu long-press albo
-/// końca kalibracji. Adapter nie decyduje o niczym: połknięcie, <c>kind</c> i <c>source</c> pochodzą wprost z
-/// <see cref="IInputTarget"/> (tryb główny dostaje <see cref="InputPolicy"/>, <c>--calibrate-input</c> —
-/// <see cref="InputCalibration"/>), a callback hooka tylko wkłada Actions do <see cref="ActionQueue"/> i uzbraja
-/// timer — nie czeka, nie loguje i nie gubi Action (także Home przy zawieszonym UI).
+/// Raw Input <c>RIDEV_INPUTSINK</c> (klawiatura i HID Consumer), polling XInput (indeks 0, co 10 ms) oraz
+/// <c>WM_TIMER</c> terminu long-press albo końca kalibracji. Adapter nie decyduje o niczym: połknięcie, <c>kind</c>
+/// i <c>source</c> pochodzą wprost z <see cref="IInputTarget"/> (tryb główny dostaje <see cref="InputPolicy"/>,
+/// <c>--calibrate-input</c> — <see cref="InputCalibration"/>), a callback hooka tylko wkłada Actions do
+/// <see cref="ActionQueue"/> i uzbraja timer — nie czeka, nie loguje i nie gubi Action (także Home przy
+/// zawieszonym UI).
 /// Porażki rejestracji degradują: brak okna kończy wątek, brak Raw Input zostawia hook (tylko <c>source</c>
 /// spada do <c>keyboard</c>), brak hooka kończy wątek po wpisie <c>inputHubError</c>.
 /// </summary>
@@ -29,8 +32,17 @@ internal sealed unsafe class InputHub : IDisposable
     /// <summary>Strona usage HID Consumer rejestrowana w Raw Input (<c>usUsagePage = 0x0C</c>).</summary>
     private const int HidConsumerUsagePage = 0x0C;
 
-    /// <summary>Identyfikator jedynego timera progu long-press w oknie Input.</summary>
-    private static readonly nuint TimerId = 1;
+    /// <summary>Identyfikator timera progu long-press (i końca kalibracji) w oknie Input.</summary>
+    private static readonly nuint DeadlineTimerId = 1;
+
+    /// <summary>Identyfikator timera pollingu pada XInput w oknie Input.</summary>
+    private static readonly nuint GamepadTimerId = 2;
+
+    /// <summary>Okres pollingu XInput; bez <c>timeBeginPeriod</c> ziarno zegara systemowego jest większe.</summary>
+    private const uint GamepadPollMs = 10;
+
+    /// <summary><c>ERROR_DEVICE_NOT_CONNECTED</c> zwracane przez XInput, gdy pad nie jest podłączony.</summary>
+    private const uint ErrorDeviceNotConnected = (uint)WIN32_ERROR.ERROR_DEVICE_NOT_CONNECTED;
 
     /// <summary>Górna granica czekania na zakończenie wątku w <see cref="Dispose"/>; zawieszony wątek nie może zamrozić wyjścia.</summary>
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(10);
@@ -41,6 +53,7 @@ internal sealed unsafe class InputHub : IDisposable
     private readonly TimeProvider _time;
     private readonly InputClock _clock = new();
     private readonly Dictionary<IntPtr, string> _devicePaths = [];
+    private readonly List<GamepadButton> _gamepadButtons = [];
     private readonly ManualResetEventSlim _threadReady = new(initialState: false);
     private readonly Thread _thread;
 
@@ -52,6 +65,9 @@ internal sealed unsafe class InputHub : IDisposable
     private HHOOK _hook;
     private byte[] _rawBuffer = new byte[256];
     private uint _threadId;
+    private ushort _gamepadState;
+    private bool _gamepadPolled;
+    private bool _gamepadFaulted;
     private bool _started;
     private bool _disposed;
 
@@ -147,6 +163,7 @@ internal sealed unsafe class InputHub : IDisposable
             // Termin startowy celu (koniec kalibracji albo brak long-press) uzbrajamy po hooku: od tej chwili
             // każdy WM_TIMER ma już prawo przyjść, a kalibracja kończy się także bez żadnego wejścia.
             ArmTimer();
+            ArmGamepadPoll();
 
             PumpMessages();
         }
@@ -280,9 +297,13 @@ internal sealed unsafe class InputHub : IDisposable
         {
             OnRawInput((HRAWINPUT)(nint)lParam);
         }
-        else if (message == PInvoke.WM_TIMER && (nuint)wParam == TimerId)
+        else if (message == PInvoke.WM_TIMER && (nuint)wParam == DeadlineTimerId)
         {
             OnTimer();
+        }
+        else if (message == PInvoke.WM_TIMER && (nuint)wParam == GamepadTimerId)
+        {
+            PollGamepad();
         }
 
         return PInvoke.DefWindowProc(hwnd, message, wParam, lParam);
@@ -423,6 +444,143 @@ internal sealed unsafe class InputHub : IDisposable
         }
     }
 
+    /// <summary>
+    /// Polling XInput na wątku Input: migawka powstaje tylko przy zmianie stanu, więc powtarzany odczyt nic nie daje,
+    /// a brak pada albo błąd XInput daje jedną migawkę oznaczoną jako niedostępna (zwolnienie trzymań bez Actions).
+    /// Porażka inna niż brak urządzenia daje jeden wpis <c>inputHubError {operation: gamepad}</c> na przejście
+    /// w błąd, nigdy wpis na poll.
+    /// </summary>
+    private void PollGamepad()
+    {
+        ushort buttons;
+        try
+        {
+            if (!TryReadGamepad(out buttons))
+            {
+                MarkGamepadUnavailable();
+                return;
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Zły odczyt pada nie może wywrócić pętli komunikatów ani zatrzymać klawiatury.
+            if (!_gamepadFaulted)
+            {
+                _gamepadFaulted = true;
+                Report(InputHubOperations.Gamepad, null);
+            }
+
+            MarkGamepadUnavailable();
+            return;
+        }
+
+        if (_gamepadPolled && buttons == _gamepadState)
+        {
+            return;
+        }
+
+        _gamepadPolled = true;
+        _gamepadState = buttons;
+        BuildGamepadButtons(buttons);
+        DeliverGamepad(Environment.TickCount64, _gamepadButtons);
+    }
+
+    /// <summary>
+    /// Jeden odczyt XInput: sukces zwraca bitmaskę przycisków, a brak pada albo błąd — <c>false</c>.
+    /// Porażka inna niż <c>ERROR_DEVICE_NOT_CONNECTED</c> daje jeden wpis na przejście w błąd.
+    /// </summary>
+    private bool TryReadGamepad(out ushort buttons)
+    {
+        buttons = 0;
+        var result = PInvoke.XInputGetState(dwUserIndex: 0, out var state);
+        if (result == (uint)WIN32_ERROR.ERROR_SUCCESS)
+        {
+            _gamepadFaulted = false;
+            buttons = (ushort)state.Gamepad.wButtons;
+            return true;
+        }
+
+        if (result == ErrorDeviceNotConnected)
+        {
+            // Odpięcie i ponowne podpięcie kończy poprzedni błąd, więc następny fault znów jest nowym przejściem.
+            _gamepadFaulted = false;
+            return false;
+        }
+
+        if (!_gamepadFaulted)
+        {
+            _gamepadFaulted = true;
+            Report(InputHubOperations.Gamepad, (int)result);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Buduje migawkę przycisków z bitmaski <c>XINPUT_GAMEPAD</c> w kolejności <see cref="GamepadButton"/>; lista
+    /// jest wielokrotnego użytku, bo <see cref="IInputTarget.OnGamepad"/> czyta ją synchronicznie.
+    /// </summary>
+    private void BuildGamepadButtons(ushort buttons)
+    {
+        _gamepadButtons.Clear();
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_DPAD_UP, GamepadButton.DpadUp);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_DPAD_DOWN, GamepadButton.DpadDown);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_DPAD_LEFT, GamepadButton.DpadLeft);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_DPAD_RIGHT, GamepadButton.DpadRight);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_START, GamepadButton.Start);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_BACK, GamepadButton.Back);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_LEFT_THUMB, GamepadButton.LeftThumb);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_RIGHT_THUMB, GamepadButton.RightThumb);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_LEFT_SHOULDER, GamepadButton.LeftShoulder);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_RIGHT_SHOULDER, GamepadButton.RightShoulder);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_A, GamepadButton.A);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_B, GamepadButton.B);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_X, GamepadButton.X);
+        AddGamepadButton(buttons, XINPUT_GAMEPAD_BUTTON_FLAGS.XINPUT_GAMEPAD_Y, GamepadButton.Y);
+    }
+
+    private void AddGamepadButton(ushort buttons, XINPUT_GAMEPAD_BUTTON_FLAGS flag, GamepadButton button)
+    {
+        if (((XINPUT_GAMEPAD_BUTTON_FLAGS)buttons & flag) != 0)
+        {
+            _gamepadButtons.Add(button);
+        }
+    }
+
+    /// <summary>
+    /// Brak pada albo błąd XInput: jedna niedostępna migawka na przejście zwalnia trzymania pada bez Actions,
+    /// a kolejne pollowanie nie wysyła nic, dopóki odczyt nie wróci.
+    /// </summary>
+    private void MarkGamepadUnavailable()
+    {
+        if (!_gamepadPolled)
+        {
+            return;
+        }
+
+        _gamepadPolled = false;
+        _gamepadState = 0;
+        DeliverGamepad(Environment.TickCount64, Array.Empty<GamepadButton>(), available: false);
+    }
+
+    /// <summary>
+    /// Oddaje migawkę celowi i uzbraja timer terminu. Wyjątek celu nie może wrócić do <c>WndProc</c>; raport idzie
+    /// jako <c>hookCallback</c>, bo <c>gamepad</c> jest zarezerwowane dla porażki odczytu XInput.
+    /// </summary>
+    private void DeliverGamepad(long timeMs, IReadOnlyList<GamepadButton> buttons, bool available = true)
+    {
+        try
+        {
+            var decision = _target.OnGamepad(new GamepadSnapshot(timeMs, buttons, available));
+            Enqueue(decision.Actions);
+            ArmTimer();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Report(InputHubOperations.HookCallback, null);
+        }
+    }
+
     private void Enqueue(IReadOnlyList<ActionMessage> actions)
     {
         for (var i = 0; i < actions.Count; i++)
@@ -440,12 +598,24 @@ internal sealed unsafe class InputHub : IDisposable
     {
         if (InputTimerDelay.Compute(_target.NextDeadline, _time.GetUtcNow()) is not { } elapsed)
         {
-            PInvoke.KillTimer(_window, TimerId);
+            PInvoke.KillTimer(_window, DeadlineTimerId);
             return;
         }
 
         // Ten sam identyfikator zastępuje poprzedni termin; brak timera zostawiłby `long` bez terminu.
-        if (PInvoke.SetTimer(_window, TimerId, elapsed, default) == 0)
+        if (PInvoke.SetTimer(_window, DeadlineTimerId, elapsed, default) == 0)
+        {
+            Report(InputHubOperations.MessageWindow, Marshal.GetLastWin32Error());
+        }
+    }
+
+    /// <summary>
+    /// Uzbraja polling pada po starcie wątku. Porażka timera to <c>messageWindow</c>: degraduje tylko wejście z pada,
+    /// a hook i kalibracja działają dalej.
+    /// </summary>
+    private void ArmGamepadPoll()
+    {
+        if (PInvoke.SetTimer(_window, GamepadTimerId, GamepadPollMs, default) == 0)
         {
             Report(InputHubOperations.MessageWindow, Marshal.GetLastWin32Error());
         }
@@ -526,7 +696,8 @@ internal sealed unsafe class InputHub : IDisposable
             return;
         }
 
-        PInvoke.KillTimer(_window, TimerId);
+        PInvoke.KillTimer(_window, DeadlineTimerId);
+        PInvoke.KillTimer(_window, GamepadTimerId);
         PInvoke.DestroyWindow(_window);
         _window = default;
     }

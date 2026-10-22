@@ -146,6 +146,13 @@ public sealed class InputCalibration : IInputTarget
         return PassDecision;
     }
 
+    /// <summary>Migawka pada: kalibracja mapuje wyłącznie urządzenia <c>remote</c>, więc zawsze przepuszcza bez Actions.</summary>
+    public InputDecision OnGamepad(GamepadSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return PassDecision;
+    }
+
     /// <summary>
     /// Raport HID Consumer urządzenia <c>remote</c>: nowy usage otwiera (albo domyka poprzednie i otwiera nowe)
     /// naciśnięcie, a <c>usage == 0</c> to zwolnienie przycisku według konwencji HID Consumer i nie tworzy wpisu.

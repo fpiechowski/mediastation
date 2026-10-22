@@ -104,6 +104,15 @@ public class ConfigValidationTests
         Assert.Equal(ActionKind.Ok, device.Keys["0x0D"]);
         Assert.Equal(ActionKind.Home, device.Keys["0xAC"]);
         Assert.Equal([GamepadButton.Back, GamepadButton.Start], config.Input.GamepadHome);
+        Assert.Equal(ActionKind.Up, config.Input.Gamepad.DpadUp);
+        Assert.Equal(ActionKind.Down, config.Input.Gamepad.DpadDown);
+        Assert.Equal(ActionKind.Left, config.Input.Gamepad.DpadLeft);
+        Assert.Equal(ActionKind.Right, config.Input.Gamepad.DpadRight);
+        Assert.Equal(ActionKind.Ok, config.Input.Gamepad.A);
+        Assert.Equal(ActionKind.Back, config.Input.Gamepad.B);
+        Assert.Equal(ActionKind.Keyboard, config.Input.Gamepad.Y);
+        Assert.Null(config.Input.Gamepad.Start);
+        Assert.Equal(7, config.Input.Gamepad.Mappings().Count());
         Assert.Equal(600, config.Input.Timing.LongPressMs);
         Assert.Equal(400, config.Input.Timing.RepeatDelayMs);
         Assert.Equal(120, config.Input.Timing.RepeatIntervalMs);
@@ -191,6 +200,9 @@ public class ConfigValidationTests
         Assert.Equal(ActionSource.Keyboard, wildcard.Source);
         Assert.Equal(8, wildcard.Keys.Count);
         Assert.Equal(ActionKind.Keyboard, wildcard.Keys["0x71"]);
+        Assert.Equal(7, config.Input.Gamepad.Mappings().Count());
+        Assert.Equal(ActionKind.Ok, config.Input.Gamepad.A);
+        Assert.Null(config.Input.Gamepad.X);
         Assert.Equal(600, config.Input.Timing.LongPressMs);
         Assert.Equal(400, config.Input.Timing.RepeatDelayMs);
         Assert.Equal(120, config.Input.Timing.RepeatIntervalMs);
@@ -201,6 +213,12 @@ public class ConfigValidationTests
         { "apps-duplicate-port.json", Apps, "$.apps[1].cdpPort", "port 9222 jest już użyty w $.apps[0]" },
         { "apps-port-out-of-range.json", Apps, "$.apps[0].cdpPort", "port 9300 poza zakresem 9220–9239" },
         { "settings-unknown-field.json", SettingsJson, "$.x", "nieznane pole „x”" },
+        {
+            "input-gamepad-home-mapped.json",
+            Input,
+            "$.gamepad.back",
+            "przycisk „back” należy do gamepadHome i nie może mieć własnego mapowania; ustaw dla niego null"
+        },
     };
 
     [Theory]
@@ -226,6 +244,7 @@ public class ConfigValidationTests
         { Input, InputJson().Replace("\"source\"", "\"foo\": 1, \"source\""), "$.devices[0].foo", "foo" },
         { Input, """{ "devices": [], "gamepadHome": ["back", "start"], "foo": 1 }""", "$.foo", "foo" },
         { Input, """{ "devices": [], "gamepadHome": ["back", "start"], "timing": { "foo": 1 } }""", "$.timing.foo", "foo" },
+        { Input, """{ "devices": [], "gamepadHome": ["back", "start"], "gamepad": { "foo": "ok" } }""", "$.gamepad.foo", "foo" },
         { SettingsJson, """{ "foo": 1 }""", "$.foo", "foo" },
         { SettingsJson, """{ "update": { "repo": "a/b", "foo": 1 } }""", "$.update.foo", "foo" },
     };
@@ -795,6 +814,83 @@ public class ConfigValidationTests
         Assert.Equal([GamepadButton.LeftShoulder, GamepadButton.RightShoulder, GamepadButton.Start], config.Input.GamepadHome);
     }
 
+    [Fact]
+    public void Gamepad_button_of_the_home_combo_cannot_have_its_own_mapping()
+    {
+        var error = SingleError(input: """
+            { "devices": [], "gamepadHome": ["back", "start"], "gamepad": { "start": "ok" } }
+            """);
+
+        Assert.Equal(
+            new ConfigError(
+                Input,
+                "$.gamepad.start",
+                "przycisk „start” należy do gamepadHome i nie może mieć własnego mapowania; ustaw dla niego null"),
+            error);
+    }
+
+    [Fact]
+    public void Gamepad_home_with_a_default_mapped_button_is_rejected()
+    {
+        var error = SingleError(input: InputJson(gamepadHome: """["a", "start"]"""));
+
+        Assert.Equal(
+            new ConfigError(
+                Input,
+                "$.gamepad.a",
+                "przycisk „a” należy do gamepadHome i nie może mieć własnego mapowania; ustaw dla niego null"),
+            error);
+    }
+
+    [Fact]
+    public void Gamepad_mapping_rejects_app_menu()
+    {
+        var error = SingleError(input: """
+            { "devices": [], "gamepadHome": ["back", "start"], "gamepad": { "y": "appMenu" } }
+            """);
+
+        Assert.Equal(
+            new ConfigError(Input, "$.gamepad.y", "„appMenu” niedozwolone w mapowaniu (AppMenu to długie „ok” w Shell)"),
+            error);
+    }
+
+    [Fact]
+    public void Gamepad_buttons_outside_the_home_combo_are_mapped()
+    {
+        var config = Loaded(input: """
+            { "devices": [], "gamepadHome": ["back", "start"], "gamepad": {
+                "leftShoulder": "back", "rightShoulder": "keyboard", "x": "home" } }
+            """);
+
+        Assert.Equal(ActionKind.Back, config.Input.Gamepad.LeftShoulder);
+        Assert.Equal(ActionKind.Keyboard, config.Input.Gamepad.RightShoulder);
+        Assert.Equal(ActionKind.Home, config.Input.Gamepad.X);
+        Assert.Null(config.Input.Gamepad.Start);
+        Assert.Null(config.Input.Gamepad.Back);
+    }
+
+    [Fact]
+    public void Null_gamepad_section_is_rejected()
+    {
+        var error = SingleError(input: """
+            { "devices": [], "gamepadHome": ["back", "start"], "gamepad": null }
+            """);
+
+        Assert.Equal(new ConfigError(Input, "$.gamepad", "pole nie może być null"), error);
+    }
+
+    [Fact]
+    public void Explicit_null_disables_a_default_gamepad_mapping()
+    {
+        var config = Loaded(input: """
+            { "devices": [], "gamepadHome": ["back", "start"], "gamepad": { "a": null } }
+            """);
+
+        Assert.Null(config.Input.Gamepad.A);
+        Assert.DoesNotContain(config.Input.Gamepad.Mappings(), mapping => mapping.Button == GamepadButton.A);
+        Assert.Equal(ActionKind.Back, config.Input.Gamepad.B);
+    }
+
     // ── settings.json ─────────────────────────────────────────────────────────
 
     [Theory]
@@ -1031,8 +1127,33 @@ public class ConfigValidationTests
         Assert.Equal("GamepadButton", button["title"]!.GetValue<string>());
         Assert.Contains("start", Strings(button["enum"]));
 
-        Assert.Equal(["devices", "gamepadHome", "timing"], schema["properties"]!.AsObject().Select(p => p.Key));
+        Assert.Equal(["devices", "gamepadHome", "gamepad", "timing"], schema["properties"]!.AsObject().Select(p => p.Key));
         Assert.Equal(["devices", "gamepadHome"], Strings(schema["required"]));
+
+        var gamepad = schema["properties"]!["gamepad"]!;
+        Assert.Equal("InputGamepad", gamepad["title"]!.GetValue<string>());
+        Assert.Null(gamepad["required"]);
+        Assert.False(gamepad["additionalProperties"]!.GetValue<bool>());
+        Assert.Equal(
+            [
+                "dpadUp",
+                "dpadDown",
+                "dpadLeft",
+                "dpadRight",
+                "start",
+                "back",
+                "leftThumb",
+                "rightThumb",
+                "leftShoulder",
+                "rightShoulder",
+                "a",
+                "b",
+                "x",
+                "y",
+            ],
+            gamepad["properties"]!.AsObject().Select(p => p.Key));
+        Assert.Equal("ActionKind", gamepad["properties"]!["a"]!["anyOf"]![0]!["title"]!.GetValue<string>());
+        Assert.Equal("null", gamepad["properties"]!["a"]!["anyOf"]![1]!["type"]!.GetValue<string>());
 
         var timing = schema["properties"]!["timing"]!;
         Assert.Equal("InputTiming", timing["title"]!.GetValue<string>());

@@ -32,6 +32,15 @@
     "back",
     "start"
   ],
+  "gamepad": {
+    "dpadUp": "up",
+    "dpadDown": "down",
+    "dpadLeft": "left",
+    "dpadRight": "right",
+    "a": "ok",
+    "b": "back",
+    "y": "keyboard"
+  },
   "timing": {
     "longPressMs": 600,
     "repeatDelayMs": 400,

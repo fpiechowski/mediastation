@@ -24,6 +24,9 @@ public static class InputHubOperations
     /// <summary>Callback hooka i timer progu long-press przewrócone wyjątkiem.</summary>
     public const string HookCallback = "hookCallback";
 
+    /// <summary>Odczyt stanu pada przez XInput zakończony błędem innym niż brak urządzenia.</summary>
+    public const string Gamepad = "gamepad";
+
     /// <summary>Wywołanie <c>IActionSink.Deliver</c> przewrócone wyjątkiem sinka.</summary>
     public const string ActionSink = "actionSink";
 }

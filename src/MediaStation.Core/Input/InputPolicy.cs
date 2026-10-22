@@ -22,6 +22,13 @@ public enum KeyTransition
 public sealed record KeyStroke(int VirtualKey, KeyTransition Transition, bool Injected, long TimeMs, int Scan = 0);
 
 /// <summary>
+/// Migawka stanu pada XInput (indeks 0) z jednego odczytu: czas monotoniczny i przyciski wciśnięte w tej chwili.
+/// <paramref name="Available"/> odróżnia „pad bez wciśniętych przycisków” (<c>true</c>, pusta lista) od braku
+/// odczytu — brak pada albo błąd XInput (<c>false</c>); niedostępna migawka nie jest zwolnieniem przycisków (AD-8).
+/// </summary>
+public sealed record GamepadSnapshot(long TimeMs, IReadOnlyList<GamepadButton> Buttons, bool Available = true);
+
+/// <summary>
 /// Raport HID Consumer (np. pilot na donglu) z Raw Input; <paramref name="DevicePath"/> to ścieżka urządzenia,
 /// a <paramref name="UsagePage"/>/<paramref name="Usage"/> — surowy usage raportu (czytany tylko przez kalibrację).
 /// </summary>
@@ -45,9 +52,12 @@ public sealed record InputDecision(bool Swallow, IReadOnlyList<ActionMessage> Ac
 /// aż do key-up albo do <see cref="MaxRepeatHoldMs"/>. OK w trybie <see cref="InputMode.Shell"/> i
 /// <see cref="InputMode.Osk"/> dostaje <c>press</c> na key-up przed progiem albo samo <c>long</c> po progu,
 /// a wiersz <c>app</c> + <c>moonlight</c>/<c>native</c> przepuszcza D-pad i OK bez Actions. Decyzja zapada na
-/// key-down i rządzi key-upem oraz autorepeatem, także po zmianie trybu w trakcie trzymania. Czas płynie
-/// wyłącznie przez wstrzyknięty <see cref="TimeProvider"/> (AD-14). Typ nie jest wątkowo bezpieczny: App woła go
-/// z jednego wątku Input (callback hooka i timer progu na tym samym wątku).
+/// key-down i rządzi key-upem oraz autorepeatem, także po zmianie trybu w trakcie trzymania.
+/// Pad (XInput) używa tej samej siatki <c>repeat</c>/<c>long</c>, ale nie ma połknięcia: wiersz AD-8 decyduje
+/// wyłącznie o tym, czy przycisk daje Actions, a kombinacja <see cref="InputConfig.GamepadHome"/> daje jedno
+/// <c>home</c> na pełne złożenie. Czas płynie wyłącznie przez wstrzyknięty <see cref="TimeProvider"/> (AD-14).
+/// Typ nie jest wątkowo bezpieczny: App woła go z jednego wątku Input (callback hooka i timer na tym samym
+/// wątku).
 /// </summary>
 public sealed class InputPolicy : IInputTarget
 {
@@ -70,8 +80,14 @@ public sealed class InputPolicy : IInputTarget
     private readonly int _repeatIntervalMs;
     private readonly Dictionary<int, ActionKind> _kinds = [];
     private readonly List<(string Signature, ActionSource Source)> _devices = [];
-    private readonly Dictionary<int, HeldKey> _held = [];
+    private readonly List<(GamepadButton Button, ActionKind Kind)> _gamepadMappings = [];
+    private readonly HashSet<GamepadButton> _gamepadHome = [];
+    private readonly HashSet<GamepadButton> _pressed = [];
+    private readonly HashSet<GamepadButton> _gamepadBaseline = [];
+    private readonly Dictionary<HeldId, HeldKey> _held = [];
     private PendingLong? _pendingLong;
+    private bool _homeEmitted;
+    private bool _gamepadBaselinePending;
     private (long TimeMs, ActionSource Source)? _lastConsumer;
     private (long TimeMs, ActionSource Source)? _lastKeyboard;
 
@@ -110,6 +126,17 @@ public sealed class InputPolicy : IInputTarget
                 _devices.Add((device.Signature, device.Source));
             }
         }
+
+        // Brak sekcji w configu daje domyślne mapowanie; null całej sekcji (niepoprawny JSON) nie może wywrócić huba.
+        if (config.Gamepad is { } gamepad)
+        {
+            _gamepadMappings.AddRange(gamepad.Mappings());
+        }
+
+        foreach (var button in config.GamepadHome)
+        {
+            _gamepadHome.Add(button);
+        }
     }
 
     /// <summary>Najbliższy termin: próg long-press albo najbliższy <c>repeat</c>; <c>null</c>, gdy nic nie czeka.</summary>
@@ -146,13 +173,14 @@ public sealed class InputPolicy : IInputTarget
 
         if (key.Transition == KeyTransition.Down)
         {
-            if (_held.TryGetValue(key.VirtualKey, out var autorepeat))
+            var id = HeldId.ForKeyboard(key.VirtualKey);
+            if (_held.TryGetValue(id, out var autorepeat))
             {
                 // Zgubiony key-up przepuszczonego klawisza nie może uwięzić VK na zawsze: wpis starszy niż
                 // MaxRepeatHoldMs jest nieświeży, więc ten key-down zaczyna nowe trzymanie.
                 if (!autorepeat.Swallow && key.TimeMs - autorepeat.DownTimeMs > MaxRepeatHoldMs)
                 {
-                    _held.Remove(key.VirtualKey);
+                    _held.Remove(id);
                 }
                 else
                 {
@@ -164,7 +192,7 @@ public sealed class InputPolicy : IInputTarget
             var routing = _routing.Current;
             var swallow = ShouldSwallow(kind, routing);
             var source = ResolveSource(key);
-            _held.Add(key.VirtualKey, NewHeldKey(kind, source, key.TimeMs, swallow));
+            _held.Add(id, NewHeldKey(kind, source, key.TimeMs, swallow));
 
             if (!swallow)
             {
@@ -181,7 +209,7 @@ public sealed class InputPolicy : IInputTarget
                 }
 
                 _pendingLong = new PendingLong(
-                    key.VirtualKey,
+                    id,
                     kind,
                     source,
                     key.TimeMs,
@@ -192,9 +220,9 @@ public sealed class InputPolicy : IInputTarget
             return new InputDecision(true, [new ActionMessage(kind, ActionPhase.Press, source, key.TimeMs)]);
         }
 
-        if (_held.Remove(key.VirtualKey, out var held))
+        if (_held.Remove(HeldId.ForKeyboard(key.VirtualKey), out var held))
         {
-            if (_pendingLong is { } pending && pending.VirtualKey == key.VirtualKey)
+            if (_pendingLong is { } pending && pending.Id == HeldId.ForKeyboard(key.VirtualKey))
             {
                 _pendingLong = null;
                 return new InputDecision(
@@ -207,6 +235,207 @@ public sealed class InputPolicy : IInputTarget
 
         // Key-up bez key-down (np. hook startował w trakcie trzymania) rozstrzyga bieżący wiersz kopii.
         return new InputDecision(ShouldSwallow(kind, _routing.Current), NoActions);
+    }
+
+    /// <summary>
+    /// Migawka pada: krawędź naciśnięcia każdego zmapowanego przycisku daje jedną Action, a trzymanie prowadzi
+    /// siatkę <c>repeat</c> (D-pad) albo termin <c>long</c> (OK) tak jak klawiatura. Kombinacja
+    /// <see cref="InputConfig.GamepadHome"/> daje dokładnie jedno <c>home</c> na pełne złożenie; przerwanie
+    /// kombinacji uzbraja kolejne. Decyzja zawsze <c>Swallow=false</c>: XInput jest tylko odpytywany, więc
+    /// aplikacja i tak widzi przyciski, a wiersz AD-8 decyduje wyłącznie o zestawie Actions.
+    /// </summary>
+    public InputDecision OnGamepad(GamepadSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        _pressed.Clear();
+        foreach (var button in snapshot.Buttons)
+        {
+            _pressed.Add(button);
+        }
+
+        // Brak odczytu to nie „wszystkie przyciski zwolnione”: trzymania pada znikają bez Actions, a pierwsza
+        // dostępna migawka po przerwie jest nowym stanem początkowym (bez krawędzi press i bez Home).
+        if (!snapshot.Available)
+        {
+            DropGamepadState();
+            return PassDecision;
+        }
+
+        if (_gamepadBaselinePending)
+        {
+            AdoptGamepadBaseline();
+            return PassDecision;
+        }
+
+        var actions = new List<ActionMessage>();
+        EmitGamepadHome(snapshot.TimeMs, actions);
+        ReleaseGamepadButtons(snapshot.TimeMs, actions);
+        PressGamepadButtons(snapshot.TimeMs, actions);
+
+        return actions.Count == 0 ? PassDecision : new InputDecision(false, actions);
+    }
+
+    /// <summary>
+    /// Brak odczytu pada: zrzuca trzymania pada (także czekający <c>long</c>) bez żadnej Action i uzbraja nowy
+    /// stan początkowy dla pierwszej dostępnej migawki. Trzymania klawiatury zostają nietknięte.
+    /// </summary>
+    private void DropGamepadState()
+    {
+        List<HeldId>? gamepadHeld = null;
+        foreach (var id in _held.Keys)
+        {
+            if (id.IsGamepad)
+            {
+                (gamepadHeld ??= []).Add(id);
+            }
+        }
+
+        if (gamepadHeld is not null)
+        {
+            foreach (var id in gamepadHeld)
+            {
+                _held.Remove(id);
+            }
+        }
+
+        if (_pendingLong is { } pending && pending.Id.IsGamepad)
+        {
+            _pendingLong = null;
+        }
+
+        _homeEmitted = false;
+        _gamepadBaseline.Clear();
+        _gamepadBaselinePending = true;
+    }
+
+    /// <summary>
+    /// Pierwsza migawka po przerwie: bieżące przyciski stają się stanem początkowym, więc ich zwolnienie jest ciche,
+    /// a ponowne naciśnięcie dopiero po zwolnieniu daje krawędź. Pełna kombinacja Home jest już „trzymana”, więc
+    /// nie daje drugiego <c>home</c> po reconnect.
+    /// </summary>
+    private void AdoptGamepadBaseline()
+    {
+        _gamepadBaselinePending = false;
+        _gamepadBaseline.Clear();
+
+        foreach (var button in _pressed)
+        {
+            _gamepadBaseline.Add(button);
+        }
+
+        _homeEmitted = _gamepadHome.Count >= 2 && _gamepadHome.IsSubsetOf(_pressed);
+    }
+
+    /// <summary>
+    /// Pełna kombinacja daje jedno <c>home</c>; zwolnienie choćby jednego składnika uzbraja kolejne złożenie.
+    /// Home jest dostarczany w każdym wierszu AD-8, niezależnie od routingu.
+    /// </summary>
+    private void EmitGamepadHome(long timeMs, List<ActionMessage> actions)
+    {
+        if (_gamepadHome.Count < 2 || !_gamepadHome.IsSubsetOf(_pressed))
+        {
+            _homeEmitted = false;
+            return;
+        }
+
+        if (_homeEmitted)
+        {
+            return;
+        }
+
+        _homeEmitted = true;
+        actions.Add(new ActionMessage(ActionKind.Home, ActionPhase.Press, ActionSource.Gamepad, timeMs));
+    }
+
+    /// <summary>
+    /// Zwolnienie zmapowanego przycisku pada: kończy siatkę i domyka czekający <c>long</c> jako <c>press</c>,
+    /// zgodnie z decyzją naciśnięcia. Kolejność jest deterministyczna, bo przy jednym terminie long może czekać
+    /// tylko jeden przycisk.
+    /// </summary>
+    private void ReleaseGamepadButtons(long timeMs, List<ActionMessage> actions)
+    {
+        _gamepadBaseline.RemoveWhere(button => !_pressed.Contains(button));
+
+        List<HeldId>? released = null;
+        foreach (var (id, _) in _held)
+        {
+            if (id.IsGamepad && !_pressed.Contains(id.Button))
+            {
+                (released ??= []).Add(id);
+            }
+        }
+
+        if (released is null)
+        {
+            return;
+        }
+
+        released.Sort();
+        foreach (var id in released)
+        {
+            if (!_held.Remove(id, out var held))
+            {
+                continue;
+            }
+
+            if (_pendingLong is { } pending && pending.Id == id)
+            {
+                _pendingLong = null;
+                actions.Add(new ActionMessage(held.Kind, ActionPhase.Press, pending.Source, timeMs));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Krawędź naciśnięcia: przyciski kombinacji Home nie mają własnego mapowania (walidacja), a przycisk
+    /// niezmapowany nie dostaje wpisu w trzymanych. Wiersz AD-8 decyduje, czy naciśnięcie daje Actions; gdy nie,
+    /// wpis i tak pamięta decyzję do zwolnienia, ale nie uzbraja siatki ani terminu long.
+    /// </summary>
+    private void PressGamepadButtons(long timeMs, List<ActionMessage> actions)
+    {
+        // Jedno odczytanie kopii na migawkę: cała decyzja naciśnięć pochodzi z tego samego wiersza (AD-8).
+        var routing = _routing.Current;
+
+        foreach (var (button, kind) in _gamepadMappings)
+        {
+            if (!_pressed.Contains(button) || _gamepadHome.Contains(button) || _gamepadBaseline.Contains(button))
+            {
+                continue;
+            }
+
+            var id = HeldId.ForGamepad(button);
+            if (_held.ContainsKey(id))
+            {
+                continue;
+            }
+
+            var producesActions = GamepadProducesActions(kind, routing);
+            _held.Add(id, NewHeldKey(kind, ActionSource.Gamepad, timeMs, producesActions));
+            if (!producesActions)
+            {
+                continue;
+            }
+
+            if (RequiresLongPress(kind, routing))
+            {
+                if (_pendingLong is not null)
+                {
+                    actions.Add(new ActionMessage(kind, ActionPhase.Press, ActionSource.Gamepad, timeMs));
+                    continue;
+                }
+
+                _pendingLong = new PendingLong(
+                    id,
+                    kind,
+                    ActionSource.Gamepad,
+                    timeMs,
+                    _time.GetUtcNow().AddMilliseconds(_longPressMs));
+                continue;
+            }
+
+            actions.Add(new ActionMessage(kind, ActionPhase.Press, ActionSource.Gamepad, timeMs));
+        }
     }
 
     /// <summary>
@@ -289,8 +518,23 @@ public sealed class InputPolicy : IInputTarget
     }
 
     /// <summary>
-    /// Wpis trzymanego klawisza: repeat uzbraja się tylko dla połkniętych strzałek i dodatnich progów z configu,
-    /// a decyzja key-down zostaje w <c>Swallow</c> na key-up i autorepeat.
+    /// Tabela AD-8 dla pada: pad nie ma połknięcia, więc wiersz decyduje tylko o tym, czy naciśnięcie daje Actions.
+    /// <c>app</c> + <c>moonlight</c> daje wyłącznie Home, <c>app</c> + <c>native</c> przepuszcza D-pad i OK, a każdy
+    /// inny wiersz (także <c>app</c> bez <c>appType</c>, jak dla klawiatury) daje Actions.
+    /// </summary>
+    private static bool GamepadProducesActions(ActionKind kind, InputRouting routing) =>
+        routing.Mode != InputMode.App
+        || (routing.AppType switch
+        {
+            AppType.Moonlight => kind == ActionKind.Home,
+            AppType.Native => kind is not (ActionKind.Up or ActionKind.Down or ActionKind.Left or ActionKind.Right or ActionKind.Ok),
+            _ => true,
+        });
+
+    /// <summary>
+    /// Wpis trzymanego klawisza albo przycisku pada: repeat uzbraja się tylko dla strzałek należących do MediaStation
+    /// (klawisz połknięty, pad w wierszu dającym Actions) i dodatnich progów z configu, a decyzja naciśnięcia zostaje
+    /// w <c>Swallow</c> na zwolnienie i autorepeat.
     /// </summary>
     private HeldKey NewHeldKey(ActionKind kind, ActionSource source, long downTimeMs, bool swallow)
     {
@@ -321,12 +565,12 @@ public sealed class InputPolicy : IInputTarget
     /// </summary>
     private void CollectRepeats(DateTimeOffset now, List<ActionMessage> actions)
     {
-        List<int>? due = null;
-        foreach (var (virtualKey, held) in _held)
+        List<HeldId>? due = null;
+        foreach (var (id, held) in _held)
         {
             if (held.NextRepeatAt is { } nextRepeatAt && now >= nextRepeatAt)
             {
-                (due ??= []).Add(virtualKey);
+                (due ??= []).Add(id);
             }
         }
 
@@ -335,16 +579,16 @@ public sealed class InputPolicy : IInputTarget
             return;
         }
 
-        // Kolejność deterministyczna: najwcześniejszy termin, a przy remisie VK.
+        // Kolejność deterministyczna: najwcześniejszy termin, a przy remisie źródło i kod (VK albo przycisk pada).
         due.Sort((left, right) =>
         {
             var order = _held[left].NextRepeatAt!.Value.CompareTo(_held[right].NextRepeatAt!.Value);
             return order != 0 ? order : left.CompareTo(right);
         });
 
-        foreach (var virtualKey in due)
+        foreach (var id in due)
         {
-            var held = _held[virtualKey];
+            var held = _held[id];
             if (held.NextRepeatAt is not { } nextRepeatAt)
             {
                 continue;
@@ -352,7 +596,7 @@ public sealed class InputPolicy : IInputTarget
 
             if (held.RepeatEndsAt is { } endsAt && now >= endsAt)
             {
-                _held[virtualKey] = held with { NextRepeatAt = null, RepeatEndsAt = null };
+                _held[id] = held with { NextRepeatAt = null, RepeatEndsAt = null };
                 continue;
             }
 
@@ -367,7 +611,7 @@ public sealed class InputPolicy : IInputTarget
 
             var following = nextRepeatAt.AddMilliseconds((missed + 1) * _repeatIntervalMs);
             var finished = held.RepeatEndsAt is { } limit && following >= limit;
-            _held[virtualKey] = held with
+            _held[id] = held with
             {
                 NextRepeatAt = finished ? null : following,
                 RepeatEndsAt = finished ? null : held.RepeatEndsAt,
@@ -443,19 +687,41 @@ public sealed class InputPolicy : IInputTarget
             && int.TryParse(key.AsSpan(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out virtualKey);
     }
 
-    /// <summary>Jeden czekający long-press: kind, source, czas key-down z hooka i termin na <see cref="TimeProvider"/>.</summary>
+    /// <summary>
+    /// Tożsamość trzymanego wejścia: klawiatura (VK z hooka) albo pad (przycisk XInput), żeby jedna siatka
+    /// <c>repeat</c>/<c>long</c> obsługiwała oba źródła. <see cref="IComparable{T}"/> daje deterministyczną kolejność
+    /// przy remisie terminów.
+    /// </summary>
+    private readonly record struct HeldId(int Family, int Code) : IComparable<HeldId>
+    {
+        private const int KeyboardFamily = 0;
+        private const int GamepadFamily = 1;
+
+        public static HeldId ForKeyboard(int virtualKey) => new(KeyboardFamily, virtualKey);
+
+        public static HeldId ForGamepad(GamepadButton button) => new(GamepadFamily, (int)button);
+
+        public bool IsGamepad => Family == GamepadFamily;
+
+        public GamepadButton Button => (GamepadButton)Code;
+
+        public int CompareTo(HeldId other) =>
+            Family != other.Family ? Family.CompareTo(other.Family) : Code.CompareTo(other.Code);
+    }
+
+    /// <summary>Jeden czekający long-press: kind, source, czas naciśnięcia i termin na <see cref="TimeProvider"/>.</summary>
     private sealed record PendingLong(
-        int VirtualKey,
+        HeldId Id,
         ActionKind Kind,
         ActionSource Source,
         long DownTimeMs,
         DateTimeOffset Deadline);
 
     /// <summary>
-    /// Jeden trzymany klawisz: kind i source z key-down (repeat dziedziczy je bez nowej korelacji), decyzja
-    /// o połknięciu z key-down oraz siatka repeat — termin następnego <c>repeat</c>, jego indeks 0-based i termin
-    /// końca siatki (<see cref="MaxRepeatHoldMs"/>). Wpisy bez repeat mają <c>null</c> w terminach i służą tylko
-    /// do połykania autorepeatu systemu oraz do prowadzenia key-upu za decyzją key-down.
+    /// Jeden trzymany klawisz albo przycisk pada: kind i source z naciśnięcia (repeat dziedziczy je bez nowej
+    /// korelacji), decyzja naciśnięcia oraz siatka repeat — termin następnego <c>repeat</c>, jego indeks 0-based
+    /// i termin końca siatki (<see cref="MaxRepeatHoldMs"/>). Wpisy bez repeat mają <c>null</c> w terminach i służą
+    /// tylko do prowadzenia zwolnienia za decyzją naciśnięcia (dla klawiatury także do połykania autorepeatu systemu).
     /// </summary>
     private sealed record HeldKey(
         ActionKind Kind,
