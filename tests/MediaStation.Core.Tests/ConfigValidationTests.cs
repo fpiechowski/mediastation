@@ -105,6 +105,8 @@ public class ConfigValidationTests
         Assert.Equal(ActionKind.Home, device.Keys["0xAC"]);
         Assert.Equal([GamepadButton.Back, GamepadButton.Start], config.Input.GamepadHome);
         Assert.Equal(600, config.Input.Timing.LongPressMs);
+        Assert.Equal(400, config.Input.Timing.RepeatDelayMs);
+        Assert.Equal(120, config.Input.Timing.RepeatIntervalMs);
 
         Assert.Equal(new Settings(), config.Settings);
         Assert.Equal(7, config.Settings.RatingPendingDays);
@@ -179,10 +181,19 @@ public class ConfigValidationTests
         Assert.Empty(result.Errors);
         var config = Assert.IsType<LoadedConfig>(result.Config);
         Assert.Equal(3, config.Apps.Apps.Count);
-        var device = Assert.Single(config.Input.Devices);
-        Assert.Equal(7, device.Keys.Count);
-        Assert.Equal(ActionKind.Back, device.Keys["0xA6"]);
+        Assert.Equal(2, config.Input.Devices.Count);
+        var remote = config.Input.Devices[0];
+        Assert.Equal("VID_1915&PID_1025", remote.Signature);
+        Assert.Equal(7, remote.Keys.Count);
+        Assert.Equal(ActionKind.Back, remote.Keys["0xA6"]);
+        var wildcard = config.Input.Devices[1];
+        Assert.Equal(InputDevice.WildcardSignature, wildcard.Signature);
+        Assert.Equal(ActionSource.Keyboard, wildcard.Source);
+        Assert.Equal(8, wildcard.Keys.Count);
+        Assert.Equal(ActionKind.Keyboard, wildcard.Keys["0x71"]);
         Assert.Equal(600, config.Input.Timing.LongPressMs);
+        Assert.Equal(400, config.Input.Timing.RepeatDelayMs);
+        Assert.Equal(120, config.Input.Timing.RepeatIntervalMs);
     }
 
     public static TheoryData<string, string, string, string> InvalidSamples => new()
@@ -557,6 +568,46 @@ public class ConfigValidationTests
         Assert.Contains("$.devices[0]", error.Reason);
     }
 
+    [Fact]
+    public void Wildcard_signature_with_keyboard_source_is_valid()
+    {
+        var config = Loaded(input: """
+            { "devices": [ { "signature": "*", "source": "keyboard", "keys": { "0x71": "keyboard" } } ],
+              "gamepadHome": ["back", "start"] }
+            """);
+
+        Assert.Equal(ActionSource.Keyboard, Assert.Single(config.Input.Devices).Source);
+    }
+
+    [Theory]
+    [InlineData("remote")]
+    [InlineData("gamepad")]
+    public void Wildcard_signature_requires_keyboard_source(string source)
+    {
+        var error = SingleError(input: $$"""
+            { "devices": [ { "signature": "*", "source": "{{source}}", "keys": {} } ],
+              "gamepadHome": ["back", "start"] }
+            """);
+
+        Assert.Equal(Input, error.File);
+        Assert.Equal("$.devices[0].source", error.Path);
+        Assert.Contains("keyboard", error.Reason);
+    }
+
+    [Fact]
+    public void Second_wildcard_is_rejected_on_its_signature_path()
+    {
+        var error = SingleError(input: """
+            { "devices": [
+                { "signature": "*", "source": "keyboard", "keys": {} },
+                { "signature": "*", "source": "keyboard", "keys": {} }
+              ], "gamepadHome": ["back", "start"] }
+            """);
+
+        Assert.Equal("$.devices[1].signature", error.Path);
+        Assert.Contains("$.devices[0]", error.Reason);
+    }
+
     [Theory]
     [InlineData("38")]
     [InlineData("0x1")]
@@ -629,6 +680,44 @@ public class ConfigValidationTests
         Assert.Equal(
             450,
             Loaded(input: InputJson(extra: """, "timing": { "longPressMs": 450 }""")).Input.Timing.LongPressMs);
+    }
+
+    [Fact]
+    public void Missing_timing_defaults_repeat_to_400_and_120()
+    {
+        var timing = Loaded(input: InputJson()).Input.Timing;
+
+        Assert.Equal(400, timing.RepeatDelayMs);
+        Assert.Equal(120, timing.RepeatIntervalMs);
+
+        var explicitTiming = Loaded(
+            input: InputJson(extra: """, "timing": { "repeatDelayMs": 300, "repeatIntervalMs": 80 }""")).Input.Timing;
+
+        Assert.Equal(300, explicitTiming.RepeatDelayMs);
+        Assert.Equal(80, explicitTiming.RepeatIntervalMs);
+        Assert.Equal(600, explicitTiming.LongPressMs);
+    }
+
+    [Theory]
+    [InlineData("repeatDelayMs", "0")]
+    [InlineData("repeatDelayMs", "-1")]
+    [InlineData("repeatIntervalMs", "0")]
+    [InlineData("repeatIntervalMs", "-1")]
+    public void Repeat_thresholds_must_be_positive(string field, string value)
+    {
+        var error = SingleError(input: InputJson(extra: $$""", "timing": { "{{field}}": {{value}} }"""));
+
+        Assert.Equal(new ConfigError(Input, $"$.timing.{field}", "wartość musi być większa od 0"), error);
+    }
+
+    [Theory]
+    [InlineData("repeatDelayMs")]
+    [InlineData("repeatIntervalMs")]
+    public void Repeat_thresholds_must_be_integers(string field)
+    {
+        var error = SingleError(input: InputJson(extra: $$""", "timing": { "{{field}}": "400" }"""));
+
+        Assert.Equal(new ConfigError(Input, $"$.timing.{field}", "zła wartość albo typ"), error);
     }
 
     [Fact]
@@ -949,7 +1038,12 @@ public class ConfigValidationTests
         Assert.Equal("InputTiming", timing["title"]!.GetValue<string>());
         Assert.Null(timing["required"]);
         Assert.False(timing["additionalProperties"]!.GetValue<bool>());
+        Assert.Equal(
+            ["longPressMs", "repeatDelayMs", "repeatIntervalMs"],
+            timing["properties"]!.AsObject().Select(p => p.Key));
         Assert.Equal("integer", timing["properties"]!["longPressMs"]!["type"]!.GetValue<string>());
+        Assert.Equal("integer", timing["properties"]!["repeatDelayMs"]!["type"]!.GetValue<string>());
+        Assert.Equal("integer", timing["properties"]!["repeatIntervalMs"]!["type"]!.GetValue<string>());
     }
 
     [Fact]

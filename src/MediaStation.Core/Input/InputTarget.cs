@@ -1,4 +1,5 @@
 using System;
+using MediaStation.Core.Config;
 
 namespace MediaStation.Core.Input;
 
@@ -10,7 +11,7 @@ namespace MediaStation.Core.Input;
 /// </summary>
 public interface IInputTarget
 {
-    /// <summary>Najbliższy termin (long-press albo koniec kalibracji); <c>null</c>, gdy nic nie czeka.</summary>
+    /// <summary>Najbliższy termin (long-press, repeat albo koniec kalibracji); <c>null</c>, gdy nic nie czeka.</summary>
     DateTimeOffset? NextDeadline { get; }
 
     /// <summary>Decyzja dla jednego zdarzenia hooka: czy połknąć klawisz i jakie Actions dostarczyć.</summary>
@@ -28,13 +29,18 @@ public interface IInputTarget
 
 /// <summary>
 /// Dopasowanie ścieżki Raw Input do sygnatury urządzenia z <c>input.json</c> bez rozróżniania wielkości liter.
-/// Wspólne dla <see cref="InputPolicy"/> i <see cref="InputCalibration"/>, żeby filtr urządzeń miał jedną definicję.
+/// Sygnatura <see cref="InputDevice.WildcardSignature"/> pasuje do każdej niepustej ścieżki. Wspólne dla
+/// <see cref="InputPolicy"/> i <see cref="InputCalibration"/>, żeby filtr urządzeń miał jedną definicję.
 /// </summary>
 internal static class DeviceSignature
 {
-    /// <summary>Czy <paramref name="devicePath"/> zawiera <paramref name="signature"/>?</summary>
+    /// <summary>
+    /// Czy <paramref name="devicePath"/> pasuje do <paramref name="signature"/>? Pusta ścieżka i pusta sygnatura
+    /// nie pasują do niczego, także do wildcardu.
+    /// </summary>
     internal static bool Matches(string? devicePath, string? signature) =>
         !string.IsNullOrEmpty(devicePath)
         && !string.IsNullOrEmpty(signature)
-        && devicePath.Contains(signature, StringComparison.OrdinalIgnoreCase);
+        && (signature == InputDevice.WildcardSignature
+            || devicePath.Contains(signature, StringComparison.OrdinalIgnoreCase));
 }

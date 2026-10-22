@@ -7,7 +7,8 @@ namespace MediaStation.Core.Tests;
 
 /// <summary>
 /// Polityka wejścia (AD-8) na <see cref="FakeTimeProvider"/>: połknięcie i <c>kind</c> po VK, korelacja
-/// <c>source</c> w oknie 50 ms, jedno naciśnięcie = jedna Action i reguła long-press OK w Shell.
+/// <c>source</c> w oknie 50 ms, jedno naciśnięcie = jedna Action, reguła long-press OK w Shell, repeat trzymanej
+/// strzałki (z liveness guardem) i fallback dopasowania urządzenia przez sygnaturę <c>*</c>.
 /// </summary>
 public class InputPolicyTests
 {
@@ -17,33 +18,63 @@ public class InputPolicyTests
     private const string DonglePath =
         @"\\?\HID#VID_1915&PID_1025&MI_01#7&2a3b4c5d&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}";
 
-    private static InputConfig Config(int longPressMs = 600) => new(
-        [
-            new InputDevice(
-                "VID_1915&PID_1025",
-                ActionSource.Remote,
-                new Dictionary<string, ActionKind>
-                {
-                    ["0x25"] = ActionKind.Left,
-                    ["0x26"] = ActionKind.Up,
-                    ["0x27"] = ActionKind.Right,
-                    ["0x28"] = ActionKind.Down,
-                    ["0x0D"] = ActionKind.Ok,
-                    ["0xA6"] = ActionKind.Back,
-                    ["0xAC"] = ActionKind.Home,
-                }),
-        ],
+    private static InputDevice RemoteDevice() => new(
+        "VID_1915&PID_1025",
+        ActionSource.Remote,
+        new Dictionary<string, ActionKind>
+        {
+            ["0x25"] = ActionKind.Left,
+            ["0x26"] = ActionKind.Up,
+            ["0x27"] = ActionKind.Right,
+            ["0x28"] = ActionKind.Down,
+            ["0x0D"] = ActionKind.Ok,
+            ["0xA6"] = ActionKind.Back,
+            ["0xAC"] = ActionKind.Home,
+        });
+
+    /// <summary>Urządzenie zastępcze <c>*</c>: każda klawiatura bez własnego wpisu (source: keyboard).</summary>
+    private static InputDevice WildcardDevice() => new(
+        InputDevice.WildcardSignature,
+        ActionSource.Keyboard,
+        new Dictionary<string, ActionKind>
+        {
+            ["0x0D"] = ActionKind.Ok,
+            ["0x1B"] = ActionKind.Back,
+            ["0x24"] = ActionKind.Home,
+            ["0x25"] = ActionKind.Left,
+            ["0x26"] = ActionKind.Up,
+            ["0x27"] = ActionKind.Right,
+            ["0x28"] = ActionKind.Down,
+            ["0x71"] = ActionKind.Keyboard,
+        });
+
+    private static InputConfig Config(
+        int longPressMs = 600,
+        int repeatDelayMs = 400,
+        int repeatIntervalMs = 120) => new(
+        [RemoteDevice()],
         [GamepadButton.Back, GamepadButton.Start])
     {
-        Timing = new InputTiming { LongPressMs = longPressMs },
+        Timing = new InputTiming
+        {
+            LongPressMs = longPressMs,
+            RepeatDelayMs = repeatDelayMs,
+            RepeatIntervalMs = repeatIntervalMs,
+        },
     };
+
+    private static InputConfig WildcardConfig(bool wildcardFirst = true) => new(
+        wildcardFirst ? [WildcardDevice(), RemoteDevice()] : [RemoteDevice(), WildcardDevice()],
+        [GamepadButton.Back, GamepadButton.Start]);
 
     private static (InputPolicy Policy, FakeTimeProvider Time) Create(
         InputMode mode = InputMode.Shell,
-        int longPressMs = 600)
+        int longPressMs = 600,
+        int repeatDelayMs = 400,
+        int repeatIntervalMs = 120)
     {
         var time = new FakeTimeProvider(T0);
-        return (new InputPolicy(Config(longPressMs), time, mode), time);
+        return (new InputPolicy(Config(longPressMs, repeatDelayMs, repeatIntervalMs), time, mode), time);
     }
 
     private static KeyStroke Down(int virtualKey, long timeMs, bool injected = false) =>
@@ -54,6 +85,9 @@ public class InputPolicyTests
 
     private static Action Press(ActionKind kind, ActionSource source, long tsMono) =>
         new(kind, ActionPhase.Press, source, tsMono);
+
+    private static Action Repeat(ActionKind kind, ActionSource source, long tsMono) =>
+        new(kind, ActionPhase.Repeat, source, tsMono);
 
     // ── Mapowanie i połknięcie ────────────────────────────────────────────────
 
@@ -66,11 +100,12 @@ public class InputPolicyTests
 
         Assert.True(down.Swallow);
         Assert.Equal(Press(ActionKind.Up, ActionSource.Keyboard, 1000), Assert.Single(down.Actions));
-        Assert.Null(policy.NextDeadline);
+        Assert.Equal(T0.AddMilliseconds(400), policy.NextDeadline);
 
         var up = policy.OnKey(Up(0x26, 1080));
         Assert.True(up.Swallow);
         Assert.Empty(up.Actions);
+        Assert.Null(policy.NextDeadline);
     }
 
     [Fact]
@@ -260,6 +295,223 @@ public class InputPolicyTests
         Assert.Null(policy.NextDeadline);
     }
 
+    // ── Repeat trzymanej strzałki ─────────────────────────────────────────────
+
+    [Fact]
+    public void Held_arrow_repeats_after_delay_and_interval_until_key_up()
+    {
+        var (policy, time) = Create();
+
+        Assert.Equal(Press(ActionKind.Up, ActionSource.Keyboard, 1000), Assert.Single(policy.OnKey(Down(0x26, 1000)).Actions));
+        Assert.Equal(T0.AddMilliseconds(400), policy.NextDeadline);
+
+        time.Advance(TimeSpan.FromMilliseconds(399));
+        var early = policy.OnTimer(time.GetUtcNow());
+        Assert.False(early.Swallow);
+        Assert.Empty(early.Actions);
+        Assert.Equal(T0.AddMilliseconds(400), policy.NextDeadline);
+
+        time.Advance(TimeSpan.FromMilliseconds(1));
+        var first = policy.OnTimer(time.GetUtcNow());
+        Assert.False(first.Swallow);
+        Assert.Equal(Repeat(ActionKind.Up, ActionSource.Keyboard, 1400), Assert.Single(first.Actions));
+        Assert.Equal(T0.AddMilliseconds(520), policy.NextDeadline);
+
+        time.Advance(TimeSpan.FromMilliseconds(120));
+        var second = policy.OnTimer(time.GetUtcNow());
+        Assert.Equal(Repeat(ActionKind.Up, ActionSource.Keyboard, 1520), Assert.Single(second.Actions));
+        Assert.Equal(T0.AddMilliseconds(640), policy.NextDeadline);
+
+        var up = policy.OnKey(Up(0x26, 1650));
+        Assert.True(up.Swallow);
+        Assert.Empty(up.Actions);
+        Assert.Null(policy.NextDeadline);
+
+        time.Advance(TimeSpan.FromMilliseconds(120));
+        var late = policy.OnTimer(time.GetUtcNow());
+        Assert.False(late.Swallow);
+        Assert.Empty(late.Actions);
+        Assert.Null(policy.NextDeadline);
+    }
+
+    [Fact]
+    public void Repeat_thresholds_come_from_config()
+    {
+        var (policy, time) = Create(repeatDelayMs: 300, repeatIntervalMs: 80);
+
+        policy.OnKey(Down(0x28, 1000));
+        Assert.Equal(T0.AddMilliseconds(300), policy.NextDeadline);
+
+        time.Advance(TimeSpan.FromMilliseconds(300));
+        Assert.Equal(Repeat(ActionKind.Down, ActionSource.Keyboard, 1300), Assert.Single(policy.OnTimer(time.GetUtcNow()).Actions));
+        Assert.Equal(T0.AddMilliseconds(380), policy.NextDeadline);
+
+        time.Advance(TimeSpan.FromMilliseconds(80));
+        Assert.Equal(Repeat(ActionKind.Down, ActionSource.Keyboard, 1380), Assert.Single(policy.OnTimer(time.GetUtcNow()).Actions));
+    }
+
+    [Fact]
+    public void Late_timer_gives_one_repeat_and_snaps_the_grid_to_the_latest_deadline()
+    {
+        var (policy, time) = Create();
+
+        policy.OnKey(Down(0x26, 1000));
+
+        // 250 ms po pierwszym terminie 400: minęły trzy terminy siatki (400, 520 i 640), więc tsMono 1640
+        // to trzeci repeat (1000 + 400 + 2 * 120), a siatka staje na 760.
+        time.Advance(TimeSpan.FromMilliseconds(650));
+        var timer = policy.OnTimer(time.GetUtcNow());
+
+        Assert.False(timer.Swallow);
+        Assert.Equal(Repeat(ActionKind.Up, ActionSource.Keyboard, 1640), Assert.Single(timer.Actions));
+        Assert.Equal(T0.AddMilliseconds(760), policy.NextDeadline);
+    }
+
+    [Fact]
+    public void Two_due_keys_repeat_in_deadline_order()
+    {
+        var (policy, time) = Create();
+
+        policy.OnKey(Down(0x26, 1000));
+        time.Advance(TimeSpan.FromMilliseconds(50));
+        policy.OnKey(Down(0x25, 1050));
+
+        // Terminy 400 (Up) i 450 (Left) minęły w jednym OnTimer; kolejność wynika z terminów, nie z VK.
+        time.Advance(TimeSpan.FromMilliseconds(400));
+        var timer = policy.OnTimer(time.GetUtcNow());
+
+        Assert.False(timer.Swallow);
+        Assert.Collection(
+            timer.Actions,
+            action => Assert.Equal(Repeat(ActionKind.Up, ActionSource.Keyboard, 1400), action),
+            action => Assert.Equal(Repeat(ActionKind.Left, ActionSource.Keyboard, 1450), action));
+        Assert.Equal(T0.AddMilliseconds(520), policy.NextDeadline);
+    }
+
+    [Fact]
+    public void Autorepeat_does_not_shift_the_repeat_grid()
+    {
+        var (policy, time) = Create();
+
+        policy.OnKey(Down(0x25, 1000));
+        time.Advance(TimeSpan.FromMilliseconds(200));
+
+        var autorepeat = policy.OnKey(Down(0x25, 1200));
+        Assert.True(autorepeat.Swallow);
+        Assert.Empty(autorepeat.Actions);
+        Assert.Equal(T0.AddMilliseconds(400), policy.NextDeadline);
+
+        time.Advance(TimeSpan.FromMilliseconds(200));
+        Assert.Equal(
+            Repeat(ActionKind.Left, ActionSource.Keyboard, 1400),
+            Assert.Single(policy.OnTimer(time.GetUtcNow()).Actions));
+    }
+
+    [Theory]
+    [InlineData(0xA6, ActionKind.Back)]
+    [InlineData(0xAC, ActionKind.Home)]
+    public void Held_non_arrow_key_never_repeats(int virtualKey, ActionKind kind)
+    {
+        var (policy, time) = Create();
+
+        Assert.Equal(Press(kind, ActionSource.Keyboard, 1000), Assert.Single(policy.OnKey(Down(virtualKey, 1000)).Actions));
+        Assert.Null(policy.NextDeadline);
+
+        // repeatDelayMs + dwa interwały: gdyby siatka była uzbrojona, byłyby tu dwa repeat.
+        time.Advance(TimeSpan.FromMilliseconds(640));
+        var timer = policy.OnTimer(time.GetUtcNow());
+
+        Assert.False(timer.Swallow);
+        Assert.Empty(timer.Actions);
+        Assert.Null(policy.NextDeadline);
+    }
+
+    [Fact]
+    public void Held_ok_in_shell_keeps_long_and_gets_no_repeat()
+    {
+        var (policy, time) = Create();
+
+        Assert.True(policy.OnKey(Down(0x0D, 1000)).Swallow);
+
+        time.Advance(TimeSpan.FromMilliseconds(600));
+        var longDecision = policy.OnTimer(time.GetUtcNow());
+        Assert.Equal(
+            new Action(ActionKind.Ok, ActionPhase.Long, ActionSource.Keyboard, 1600),
+            Assert.Single(longDecision.Actions));
+
+        time.Advance(TimeSpan.FromMilliseconds(160));
+        var timer = policy.OnTimer(time.GetUtcNow());
+
+        Assert.Empty(timer.Actions);
+        Assert.Null(policy.NextDeadline);
+
+        var up = policy.OnKey(Up(0x0D, 1800));
+        Assert.True(up.Swallow);
+        Assert.Empty(up.Actions);
+    }
+
+    [Fact]
+    public void Held_keyboard_key_never_repeats()
+    {
+        var time = new FakeTimeProvider(T0);
+        var policy = new InputPolicy(WildcardConfig(), time);
+
+        var down = policy.OnKey(Down(0x71, 1000));
+        Assert.True(down.Swallow);
+        Assert.Equal(Press(ActionKind.Keyboard, ActionSource.Keyboard, 1000), Assert.Single(down.Actions));
+        Assert.Null(policy.NextDeadline);
+
+        time.Advance(TimeSpan.FromMilliseconds(640));
+        Assert.Empty(policy.OnTimer(time.GetUtcNow()).Actions);
+        Assert.Null(policy.NextDeadline);
+    }
+
+    [Theory]
+    [InlineData(0, 120)]
+    [InlineData(400, 0)]
+    [InlineData(-1, 120)]
+    [InlineData(400, -1)]
+    public void Non_positive_repeat_thresholds_arm_no_grid(int delay, int interval)
+    {
+        var (policy, time) = Create(repeatDelayMs: delay, repeatIntervalMs: interval);
+
+        policy.OnKey(Down(0x26, 1000));
+        Assert.Null(policy.NextDeadline);
+
+        time.Advance(TimeSpan.FromMilliseconds(640));
+        Assert.Empty(policy.OnTimer(time.GetUtcNow()).Actions);
+        Assert.Null(policy.NextDeadline);
+    }
+
+    [Fact]
+    public void Missing_key_up_stops_repeats_after_max_hold_and_keeps_the_key_swallowed()
+    {
+        var (policy, time) = Create();
+
+        Assert.True(policy.OnKey(Down(0x26, 1000)).Swallow);
+        time.Advance(TimeSpan.FromMilliseconds(400));
+        Assert.Equal(Repeat(ActionKind.Up, ActionSource.Keyboard, 1400), Assert.Single(policy.OnTimer(time.GetUtcNow()).Actions));
+
+        // Key-up nie dociera (blokada pulpitu, UAC, odpięta klawiatura): guard kończy siatkę bez emisji.
+        time.Advance(TimeSpan.FromMilliseconds(InputPolicy.MaxRepeatHoldMs));
+        var guard = policy.OnTimer(time.GetUtcNow());
+
+        Assert.False(guard.Swallow);
+        Assert.Empty(guard.Actions);
+        Assert.Null(policy.NextDeadline);
+
+        // Klawisz zostaje połknięty do key-up, jak przed tą story.
+        var autorepeat = policy.OnKey(Down(0x26, 70000));
+        Assert.True(autorepeat.Swallow);
+        Assert.Empty(autorepeat.Actions);
+        Assert.Null(policy.NextDeadline);
+
+        var up = policy.OnKey(Up(0x26, 80000));
+        Assert.True(up.Swallow);
+        Assert.Empty(up.Actions);
+        Assert.Null(policy.NextDeadline);
+    }
+
     // ── Korelacja source ──────────────────────────────────────────────────────
 
     [Fact]
@@ -411,5 +663,73 @@ public class InputPolicyTests
         Assert.Equal(ActionKind.Keyboard, entry.Data!["kind"]);
         Assert.Equal(ActionPhase.Press, entry.Data["phase"]);
         Assert.Equal(ActionSource.Remote, entry.Data["source"]);
+    }
+
+    [Fact]
+    public void Repeat_keeps_source_from_key_down()
+    {
+        var (policy, time) = Create();
+
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, 0x00B0));
+        policy.OnKey(Down(0x26, 1000, injected: true));
+        time.Advance(TimeSpan.FromMilliseconds(400));
+
+        var timer = policy.OnTimer(time.GetUtcNow());
+
+        Assert.False(timer.Swallow);
+        Assert.Equal(Repeat(ActionKind.Up, ActionSource.Remote, 1400), Assert.Single(timer.Actions));
+    }
+
+    // ── Wildcard `*` ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Wildcard_maps_a_keyboard_without_its_own_entry()
+    {
+        var policy = new InputPolicy(WildcardConfig(), new FakeTimeProvider(T0));
+
+        var down = policy.OnKey(Down(0x71, 1000));
+
+        Assert.True(down.Swallow);
+        Assert.Equal(Press(ActionKind.Keyboard, ActionSource.Keyboard, 1000), Assert.Single(down.Actions));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Concrete_device_wins_over_wildcard_regardless_of_config_order(bool wildcardFirst)
+    {
+        var policy = new InputPolicy(WildcardConfig(wildcardFirst), new FakeTimeProvider(T0));
+
+        policy.OnRawKeyboard(new RawKeyboardInput(DonglePath, 980, 0x26, 0x48, Down: true));
+
+        var decision = policy.OnKey(Down(0x26, 1000));
+
+        Assert.Equal(Press(ActionKind.Up, ActionSource.Remote, 1000), Assert.Single(decision.Actions));
+    }
+
+    [Fact]
+    public void Wildcard_is_not_the_consumer_correlation_source()
+    {
+        var policy = new InputPolicy(WildcardConfig(wildcardFirst: true), new FakeTimeProvider(T0));
+
+        // Raport HID Consumer zwykłej klawiatury (poza configiem) przy `*` nie może przykryć dongla:
+        // korelacja source bierze tylko wpisy konkretne, więc świeży WM_INPUT dongla decyduje o `remote`.
+        policy.OnHidConsumer(new HidConsumerReport(@"\\?\HID#VID_046D&PID_C52B#1", 970, 0x0C, 0x00B0));
+        policy.OnRawKeyboard(new RawKeyboardInput(DonglePath, 980, 0xAC, 0x45, Down: true));
+
+        var decision = policy.OnKey(Down(0xAC, 1000, injected: true));
+
+        Assert.True(decision.Swallow);
+        Assert.Equal(Press(ActionKind.Home, ActionSource.Remote, 1000), Assert.Single(decision.Actions));
+    }
+
+    [Fact]
+    public void Device_signature_wildcard_matches_any_non_empty_path()
+    {
+        Assert.True(DeviceSignature.Matches(DonglePath, InputDevice.WildcardSignature));
+        Assert.True(DeviceSignature.Matches(@"\\?\HID#VID_046D&PID_C52B#1", InputDevice.WildcardSignature));
+        Assert.False(DeviceSignature.Matches("", InputDevice.WildcardSignature));
+        Assert.False(DeviceSignature.Matches(null, InputDevice.WildcardSignature));
+        Assert.False(DeviceSignature.Matches(DonglePath, null));
     }
 }

@@ -305,6 +305,13 @@ public static class ConfigValidation
             {
                 errors.Add(signaturePath, $"sygnatura {Quote(device.Signature)} jest już użyta w {signatures[device.Signature]}");
             }
+            else if (device.Signature == InputDevice.WildcardSignature && device.Source != ActionSource.Keyboard)
+            {
+                // Wildcard z `remote` logowałby w kalibracji surowe kody zwykłej klawiatury (AD-13).
+                errors.Add(
+                    JsonErrorPath.Property(devicePath, "source"),
+                    $"sygnatura {Quote(InputDevice.WildcardSignature)} wymaga source {Quote("keyboard")}");
+            }
 
             var keysPath = JsonErrorPath.Property(devicePath, "keys");
             var codes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -354,10 +361,10 @@ public static class ConfigValidation
             }
         }
 
-        CheckPositive(
-            config.Timing.LongPressMs,
-            JsonErrorPath.Property(JsonErrorPath.Property("$", "timing"), "longPressMs"),
-            errors);
+        var timingPath = JsonErrorPath.Property("$", "timing");
+        CheckPositive(config.Timing.LongPressMs, JsonErrorPath.Property(timingPath, "longPressMs"), errors);
+        CheckPositive(config.Timing.RepeatDelayMs, JsonErrorPath.Property(timingPath, "repeatDelayMs"), errors);
+        CheckPositive(config.Timing.RepeatIntervalMs, JsonErrorPath.Property(timingPath, "repeatIntervalMs"), errors);
 
         var homePath = JsonErrorPath.Property("$", "gamepadHome");
         var buttons = new Dictionary<GamepadButton, string>();

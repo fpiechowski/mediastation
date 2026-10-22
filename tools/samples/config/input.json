@@ -12,6 +12,20 @@
         "0xA6": "back",
         "0xAC": "home"
       }
+    },
+    {
+      "signature": "*",
+      "source": "keyboard",
+      "keys": {
+        "0x0D": "ok",
+        "0x1B": "back",
+        "0x24": "home",
+        "0x25": "left",
+        "0x26": "up",
+        "0x27": "right",
+        "0x28": "down",
+        "0x71": "keyboard"
+      }
     }
   ],
   "gamepadHome": [
@@ -19,6 +33,8 @@
     "start"
   ],
   "timing": {
-    "longPressMs": 600
+    "longPressMs": 600,
+    "repeatDelayMs": 400,
+    "repeatIntervalMs": 120
   }
 }

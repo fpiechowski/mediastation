@@ -40,15 +40,23 @@ public sealed record InputDecision(bool Swallow, IReadOnlyList<ActionMessage> Ac
 /// Czysta polityka wejścia (AD-8): zamienia zdarzenia platformy na decyzję o połknięciu i Actions.
 /// Połknięcie i <c>kind</c> zapadają po samym VK ze scalonego mapowania wszystkich urządzeń z <c>input.json</c>,
 /// bo hook LL działa przed <c>WM_INPUT</c>, a połknięty klawisz może nie dojść do Raw Input. <c>source</c> pochodzi
-/// z korelacji w oknie <see cref="CorrelationWindowMs"/>. Jedno naciśnięcie daje jedną Action, a OK w trybie
-/// <see cref="InputMode.Shell"/> dostaje <c>press</c> na key-up przed progiem albo samo <c>long</c> po progu.
-/// Czas płynie wyłącznie przez wstrzyknięty <see cref="TimeProvider"/> (AD-14). Typ nie jest wątkowo bezpieczny:
-/// App woła go z jednego wątku Input (callback hooka i timer progu na tym samym wątku).
+/// z korelacji w oknie <see cref="CorrelationWindowMs"/>. Jedno naciśnięcie daje jedną Action, a strzałka trzymana
+/// dostaje <c>repeat</c> co <c>timing.repeatIntervalMs</c> po <c>timing.repeatDelayMs</c> (tylko Up|Down|Left|Right)
+/// aż do key-up albo do <see cref="MaxRepeatHoldMs"/>. OK w trybie <see cref="InputMode.Shell"/> dostaje
+/// <c>press</c> na key-up przed progiem albo samo <c>long</c> po progu. Czas płynie wyłącznie przez wstrzyknięty
+/// <see cref="TimeProvider"/> (AD-14). Typ nie jest wątkowo bezpieczny: App woła go z jednego wątku Input
+/// (callback hooka i timer progu na tym samym wątku).
 /// </summary>
 public sealed class InputPolicy : IInputTarget
 {
     /// <summary>Okno korelacji raportu urządzenia z klawiszem; okno jest jednostronne (raport przed klawiszem).</summary>
     public const int CorrelationWindowMs = 50;
+
+    /// <summary>
+    /// Górna granica trzymania klawisza z repeat: po niej siatka kończy się bez emisji, bo key-up mógł zginąć
+    /// (secure desktop, UAC, odpięta klawiatura, usunięty hook). Klawisz zostaje połknięty do key-up.
+    /// </summary>
+    public const int MaxRepeatHoldMs = 60_000;
 
     private static readonly IReadOnlyList<ActionMessage> NoActions = Array.Empty<ActionMessage>();
     private static readonly InputDecision PassDecision = new(false, NoActions);
@@ -56,15 +64,17 @@ public sealed class InputPolicy : IInputTarget
     private readonly TimeProvider _time;
     private readonly InputMode _mode;
     private readonly int _longPressMs;
+    private readonly int _repeatDelayMs;
+    private readonly int _repeatIntervalMs;
     private readonly Dictionary<int, ActionKind> _kinds = [];
     private readonly List<(string Signature, ActionSource Source)> _devices = [];
-    private readonly HashSet<int> _held = [];
+    private readonly Dictionary<int, HeldKey> _held = [];
     private PendingLong? _pendingLong;
     private (long TimeMs, ActionSource Source)? _lastConsumer;
     private (long TimeMs, ActionSource Source)? _lastKeyboard;
 
     /// <param name="config">Config wejścia; mapowanie jest scalane ze wszystkich urządzeń, pierwsze wygrywa.</param>
-    /// <param name="time">Zegar terminów long-press (AD-14).</param>
+    /// <param name="time">Zegar terminów long-press i repeat (AD-14).</param>
     /// <param name="mode">Tryb routingu; w tej story stały, routing dokłada story 5.</param>
     public InputPolicy(InputConfig config, TimeProvider time, InputMode mode = InputMode.Shell)
     {
@@ -74,6 +84,8 @@ public sealed class InputPolicy : IInputTarget
         _time = time;
         _mode = mode;
         _longPressMs = config.Timing.LongPressMs;
+        _repeatDelayMs = config.Timing.RepeatDelayMs;
+        _repeatIntervalMs = config.Timing.RepeatIntervalMs;
 
         foreach (var device in config.Devices)
         {
@@ -97,12 +109,27 @@ public sealed class InputPolicy : IInputTarget
         }
     }
 
-    /// <summary>Termin progu long-press; <c>null</c>, gdy żaden klawisz nie czeka na <c>long</c>.</summary>
-    public DateTimeOffset? NextDeadline => _pendingLong?.Deadline;
+    /// <summary>Najbliższy termin: próg long-press albo najbliższy <c>repeat</c>; <c>null</c>, gdy nic nie czeka.</summary>
+    public DateTimeOffset? NextDeadline
+    {
+        get
+        {
+            var next = _pendingLong?.Deadline;
+            foreach (var held in _held.Values)
+            {
+                if (held.NextRepeatAt is { } at && (next is null || at < next))
+                {
+                    next = at;
+                }
+            }
+
+            return next;
+        }
+    }
 
     /// <summary>
     /// Jedyna decyzja o połknięciu i Actions dla zdarzenia hooka. Autorepeat systemu (drugi key-down bez key-up)
-    /// jest połykany bez Actions, a key-up nieznanego VK nie jest połykany.
+    /// jest połykany bez Actions i bez przesunięcia terminu repeat, a key-up nieznanego VK nie jest połykany.
     /// </summary>
     public InputDecision OnKey(KeyStroke key)
     {
@@ -115,12 +142,14 @@ public sealed class InputPolicy : IInputTarget
 
         if (key.Transition == KeyTransition.Down)
         {
-            if (!_held.Add(key.VirtualKey))
+            if (_held.ContainsKey(key.VirtualKey))
             {
                 return new InputDecision(true, NoActions);
             }
 
             var source = ResolveSource(key);
+            _held.Add(key.VirtualKey, NewHeldKey(kind, source, key.TimeMs));
+
             if (RequiresLongPress(kind))
             {
                 if (_pendingLong is not null)
@@ -142,7 +171,7 @@ public sealed class InputPolicy : IInputTarget
             return new InputDecision(true, [new ActionMessage(kind, ActionPhase.Press, source, key.TimeMs)]);
         }
 
-        var wasHeld = _held.Remove(key.VirtualKey);
+        var wasHeld = _held.Remove(key.VirtualKey, out _);
         if (wasHeld && _pendingLong is { } pending && pending.VirtualKey == key.VirtualKey)
         {
             _pendingLong = null;
@@ -152,50 +181,145 @@ public sealed class InputPolicy : IInputTarget
         return new InputDecision(true, NoActions);
     }
 
-    /// <summary>Buforuje ostatni raport HID Consumer dopasowany do sygnatury z configu; nie decyduje o połknięciu.</summary>
+    /// <summary>
+    /// Buforuje ostatni raport HID Consumer dopasowany do konkretnej sygnatury z configu; wildcard nie uczestniczy
+    /// w korelacji <c>source</c>, żeby raport zwykłej klawiatury nie oznaczył pilota jako <c>keyboard</c>.
+    /// Nie decyduje o połknięciu.
+    /// </summary>
     public void OnHidConsumer(HidConsumerReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
 
-        if (MatchDevice(report.DevicePath) is { } device)
+        if (MatchDevice(report.DevicePath, includeWildcard: false) is { } device)
         {
             _lastConsumer = (report.TimeMs, device.Source);
         }
     }
 
-    /// <summary>Buforuje ostatni <c>WM_INPUT</c> klawiatury dopasowany do sygnatury z configu; nie decyduje o połknięciu.</summary>
+    /// <summary>
+    /// Buforuje ostatni <c>WM_INPUT</c> klawiatury dopasowany do sygnatury z configu (wildcard jest fallbackiem);
+    /// nie decyduje o połknięciu.
+    /// </summary>
     public void OnRawKeyboard(RawKeyboardInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        if (MatchDevice(input.DevicePath) is { } device)
+        if (MatchDevice(input.DevicePath, includeWildcard: true) is { } device)
         {
             _lastKeyboard = (input.TimeMs, device.Source);
         }
     }
 
     /// <summary>
-    /// Callback terminu progu. Spóźniony timer (po key-up albo po <c>long</c>) nic nie robi, bo
-    /// <see cref="NextDeadline"/> jest już <c>null</c>; timer nie jest zdarzeniem wejścia, więc nie połyka.
+    /// Callback terminu: long-press jak dotąd oraz jeden <c>repeat</c> na każdy klucz, którego termin minął.
+    /// Spóźniony timer przeskakuje siatkę do najnowszego minionego terminu, a po <see cref="MaxRepeatHoldMs"/>
+    /// kończy siatkę bez emisji. Timer nie jest zdarzeniem wejścia, więc nie połyka.
     /// </summary>
     public InputDecision OnTimer(DateTimeOffset now)
     {
-        if (_pendingLong is not { } pending || now < pending.Deadline)
+        var actions = new List<ActionMessage>();
+
+        if (_pendingLong is { } pending && now >= pending.Deadline)
         {
-            return PassDecision;
+            _pendingLong = null;
+            actions.Add(new ActionMessage(
+                pending.Kind,
+                ActionPhase.Long,
+                pending.Source,
+                pending.DownTimeMs + _longPressMs));
         }
 
-        _pendingLong = null;
-        var action = new ActionMessage(
-            pending.Kind,
-            ActionPhase.Long,
-            pending.Source,
-            pending.DownTimeMs + _longPressMs);
-        return new InputDecision(false, [action]);
+        CollectRepeats(now, actions);
+
+        return actions.Count == 0 ? PassDecision : new InputDecision(false, actions);
     }
 
     /// <summary>Long-press dotyczy wyłącznie OK w Shell; OSK dokłada story 5.</summary>
     private bool RequiresLongPress(ActionKind kind) => kind == ActionKind.Ok && _mode == InputMode.Shell;
+
+    /// <summary>Wpis trzymanego klawisza: repeat uzbraja się tylko dla strzałek i dodatnich progów z configu.</summary>
+    private HeldKey NewHeldKey(ActionKind kind, ActionSource source, long downTimeMs)
+    {
+        if (!IsRepeatable(kind) || _repeatDelayMs <= 0 || _repeatIntervalMs <= 0)
+        {
+            return new HeldKey(kind, source, downTimeMs, null, 0, null);
+        }
+
+        var now = _time.GetUtcNow();
+        return new HeldKey(
+            kind,
+            source,
+            downTimeMs,
+            now.AddMilliseconds(_repeatDelayMs),
+            0,
+            now.AddMilliseconds(MaxRepeatHoldMs));
+    }
+
+    /// <summary><c>repeat</c> mają wyłącznie strzałki; OK, Back, Home i Keyboard zostają przy jednej Action.</summary>
+    private static bool IsRepeatable(ActionKind kind) =>
+        kind is ActionKind.Up or ActionKind.Down or ActionKind.Left or ActionKind.Right;
+
+    /// <summary>
+    /// Jeden <c>repeat</c> na każdy klucz, którego termin minął. Spóźniony timer przeskakuje siatkę do najnowszego
+    /// minionego terminu (bez serii po zacięciu wątku), a przekroczenie <see cref="MaxRepeatHoldMs"/> kończy siatkę
+    /// bez emisji i zostawia wpis w <c>_held</c> do key-up.
+    /// </summary>
+    private void CollectRepeats(DateTimeOffset now, List<ActionMessage> actions)
+    {
+        List<int>? due = null;
+        foreach (var (virtualKey, held) in _held)
+        {
+            if (held.NextRepeatAt is { } nextRepeatAt && now >= nextRepeatAt)
+            {
+                (due ??= []).Add(virtualKey);
+            }
+        }
+
+        if (due is null)
+        {
+            return;
+        }
+
+        // Kolejność deterministyczna: najwcześniejszy termin, a przy remisie VK.
+        due.Sort((left, right) =>
+        {
+            var order = _held[left].NextRepeatAt!.Value.CompareTo(_held[right].NextRepeatAt!.Value);
+            return order != 0 ? order : left.CompareTo(right);
+        });
+
+        foreach (var virtualKey in due)
+        {
+            var held = _held[virtualKey];
+            if (held.NextRepeatAt is not { } nextRepeatAt)
+            {
+                continue;
+            }
+
+            if (held.RepeatEndsAt is { } endsAt && now >= endsAt)
+            {
+                _held[virtualKey] = held with { NextRepeatAt = null, RepeatEndsAt = null };
+                continue;
+            }
+
+            // Ile terminów siatki minęło poza bieżącym; jeden repeat z najnowszego z nich.
+            var missed = (long)(now - nextRepeatAt).TotalMilliseconds / _repeatIntervalMs;
+            var index = held.RepeatIndex + (int)missed;
+            actions.Add(new ActionMessage(
+                held.Kind,
+                ActionPhase.Repeat,
+                held.Source,
+                held.DownTimeMs + _repeatDelayMs + (index * (long)_repeatIntervalMs)));
+
+            var following = nextRepeatAt.AddMilliseconds((missed + 1) * _repeatIntervalMs);
+            var finished = held.RepeatEndsAt is { } limit && following >= limit;
+            _held[virtualKey] = held with
+            {
+                NextRepeatAt = finished ? null : following,
+                RepeatEndsAt = finished ? null : held.RepeatEndsAt,
+                RepeatIndex = index + 1,
+            };
+        }
+    }
 
     /// <summary>
     /// Korelacja <c>source</c>: wstrzyknięty klawisz po raporcie HID Consumer dopasowanego urządzenia daje jego
@@ -221,8 +345,12 @@ public sealed class InputPolicy : IInputTarget
         && value.TimeMs <= timeMs
         && timeMs - value.TimeMs <= CorrelationWindowMs;
 
-    /// <summary>Dopasowanie ścieżki Raw Input do sygnatury z configu, bez rozróżniania wielkości liter.</summary>
-    private (string Signature, ActionSource Source)? MatchDevice(string devicePath)
+    /// <summary>
+    /// Dopasowanie ścieżki Raw Input do sygnatury z configu, bez rozróżniania wielkości liter. Wpisy konkretne mają
+    /// pierwszeństwo przed <see cref="InputDevice.WildcardSignature"/> niezależnie od kolejności w configu; wildcard
+    /// jest fallbackiem i w korelacji <c>source</c> z raportu HID Consumer nie bierze udziału.
+    /// </summary>
+    private (string Signature, ActionSource Source)? MatchDevice(string devicePath, bool includeWildcard)
     {
         if (string.IsNullOrEmpty(devicePath))
         {
@@ -231,9 +359,21 @@ public sealed class InputPolicy : IInputTarget
 
         foreach (var device in _devices)
         {
-            if (DeviceSignature.Matches(devicePath, device.Signature))
+            if (device.Signature != InputDevice.WildcardSignature
+                && DeviceSignature.Matches(devicePath, device.Signature))
             {
                 return device;
+            }
+        }
+
+        if (includeWildcard)
+        {
+            foreach (var device in _devices)
+            {
+                if (device.Signature == InputDevice.WildcardSignature)
+                {
+                    return device;
+                }
             }
         }
 
@@ -255,4 +395,17 @@ public sealed class InputPolicy : IInputTarget
         ActionSource Source,
         long DownTimeMs,
         DateTimeOffset Deadline);
+
+    /// <summary>
+    /// Jeden trzymany klawisz: kind i source z key-down (repeat dziedziczy je bez nowej korelacji) oraz siatka repeat
+    /// — termin następnego <c>repeat</c>, jego indeks 0-based i termin końca siatki (<see cref="MaxRepeatHoldMs"/>).
+    /// Wpisy bez repeat mają <c>null</c> w terminach i służą tylko do połykania autorepeatu systemu.
+    /// </summary>
+    private sealed record HeldKey(
+        ActionKind Kind,
+        ActionSource Source,
+        long DownTimeMs,
+        DateTimeOffset? NextRepeatAt,
+        int RepeatIndex,
+        DateTimeOffset? RepeatEndsAt);
 }
