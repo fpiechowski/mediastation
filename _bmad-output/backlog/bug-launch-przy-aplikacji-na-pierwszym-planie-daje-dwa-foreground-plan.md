@@ -3,7 +3,7 @@ title: 'Launch przy innej aplikacji na pierwszym planie daje dwa Foreground'
 type: 'bugfix'
 ticket: '3'
 created: '2026-10-22'
-status: 'built'
+status: done
 baseline_revision: 'e8990040f5786ba95070c7dc3b1c338d4ff8aae3'
 route: 'oneshot'
 route_source: 'auto'
