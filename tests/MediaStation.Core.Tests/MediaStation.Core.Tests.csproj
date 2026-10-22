@@ -24,6 +24,7 @@
     PowerNotifications (hook, RegisterPowerSettingNotification, SystemEvents, Marshal payloadu).
   -->
   <ItemGroup>
+    <Compile Include="..\..\src\MediaStation.App\Diagnostics\UiHang.cs" Link="App\UiHang.cs" />
     <Compile Include="..\..\src\MediaStation.App\Hosts\MissingHostPort.cs" Link="App\MissingHostPort.cs" />
     <Compile Include="..\..\src\MediaStation.App\Orchestrator\CommandRouter.cs" Link="App\CommandRouter.cs" />
     <Compile Include="..\..\src\MediaStation.App\Orchestrator\OrchestratorLoop.cs" Link="App\OrchestratorLoop.cs" />

@@ -2,7 +2,9 @@ using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using MediaStation.App.Config;
+using MediaStation.App.Diagnostics;
 using MediaStation.App.Hosts;
 using MediaStation.App.Logging;
 using MediaStation.App.Orchestrator;
@@ -13,6 +15,7 @@ using MediaStation.App.Shell;
 using MediaStation.Core.Cli;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
+using MediaStation.Core.Diagnostics;
 using MediaStation.Core.Input;
 using MediaStation.Core.Logging;
 using MediaStation.Core.Orchestrator;
@@ -87,6 +90,13 @@ public static class CompositionRoot
 
         StartRun(app, log, time);
         AttachStopLogging(app, log);
+
+        // Zawieszenie UI na żądanie (S10) dopiero po pierwszym renderze: ApplicationIdle jest niżej niż Render,
+        // więc okno istnieje i jest widoczne, a blokada nie zatrzymuje InputHubu ani pompy Actions.
+        if (DebugHangUi.Parse(Environment.GetEnvironmentVariable(DebugHangUi.EnvVarName)) is { } hang)
+        {
+            UiHang.Schedule(hang, log, action => app.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, action));
+        }
     }
 
     /// <summary>

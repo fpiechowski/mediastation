@@ -1,0 +1,10 @@
+{"ts":"2026-10-21T12:00:00.000Z","level":"info","src":"app","msg":"start","data":{"version":"0.0.0-selftest","pid":4242,"args":[]}}
+{"ts":"2026-10-21T12:00:02.000Z","level":"info","src":"input","msg":"action","data":{"kind":"ok","phase":"press","source":"remote"}}
+{"ts":"2026-10-21T12:00:04.500Z","level":"info","src":"input","msg":"action","data":{"kind":"home","phase":"press","source":"remote"}}
+{"ts":"2026-10-21T12:00:05.500Z","level":"info","src":"input","msg":"action","data":{"kind":"home","phase":"press","source":"remote"}}
+{"ts":"2026-10-21T12:00:08.000Z","level":"info","src":"input","msg":"action","data":{"kind":"home","phase":"press","source":"remote"}}
+{"ts":"2026-10-21T12:00:09.500Z","level":"info","src":"input","msg":"action","data":{"kind":"home","phase":"press","source":"remote"}}
+{"ts":"2026-10-21T12:00:11.000Z","level":"info","src":"input","msg":"action","data":{"kind":"home","phase":"press","source":"remote"}}
+{"ts":"2026-10-21T12:00:12.000Z","level":"info","src":"input","msg":"action","data":{"kind":"home","phase":"press","source":"remote"}}
+{"ts":"2026-10-21T12:00:13.000Z","level":"error","src":"input","msg":"inputHubError","data":{"operation":"rawInput"}}
+{"ts":"2026-10-21T12:00:14.000Z","level":"info","src":"app","msg":"stop","data":{"exitCode":0}}

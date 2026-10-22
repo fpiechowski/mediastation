@@ -91,3 +91,17 @@ source_spec: `tickets/epic-input/tickets/story-pointer-hook-myszy-i-clipcursor-w
 severity: low
 reason: `architecture-mediastation.md:194` nie wymienia `clipHwnd`, a `set-input-routing.schema.json` i testy kontraktu pinują klucz `clipHwnd` w każdej kopercie. Epika już to przewidziała: `epic-input.md:61` każe dopisać `clipHwnd` do AD-8 (`bmad-architecture`) przed epic-osk, więc luka jest śledzona, ale nie ma wykonawcy w tym przebiegu.
 status: open
+
+### DW-13: Wykrywanie nowego okna przeglądarki po `pid:handle` jednego `MainWindowHandle` na proces może przeoczyć drugie okno w istniejącym procesie Edge.
+origin: spec-deferred 68662efb5eca
+location: tools/check-home-s10.ps1 Get-BrowserWindows
+source_spec: `tickets/epic-input/tickets/story-home-zawsze-zawieszony-ui-i-skrypt-s10-plan.md`
+reason: Niesprawdzone bez prawdziwego Edge i pilota; rozstrzygnie to przebieg na UM760 (porównanie z `EnumWindows` po klasie `Chrome_WidgetWin_1`).
+status: open
+
+### DW-14: Kontrola `target not foreground` po PID może odrzucić poprawny press Edge przy wielu procesach `msedge` lub innym profilu.
+origin: spec-deferred 94e635089e98
+location: tools/check-home-s10.ps1 Measure-Press
+source_spec: `tickets/epic-input/tickets/story-home-zawsze-zawieszony-ui-i-skrypt-s10-plan.md`
+reason: Niesprawdzone na ALDER; potwierdzić na UM760 przy odbiorze epiku.
+status: open
