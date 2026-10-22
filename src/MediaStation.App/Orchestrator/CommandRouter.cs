@@ -7,10 +7,10 @@ using MediaStation.Core.Ports;
 namespace MediaStation.App.Orchestrator;
 
 /// <summary>
-/// Jedno wyjście Orchestratora do wykonawców (decyzja epiki): <see cref="StartApp"/>, <see cref="StopApp"/> i
-/// <see cref="ProbeExisting"/> trafiają do hosta wybranego po <see cref="AppType"/> z mapy <c>appId → AppType</c>
-/// z configu, komendy okienkowe do <see cref="IWindowManagerPort"/>, komendy timerów do <see cref="ITimerPort"/>,
-/// a <see cref="SetInputRouting"/> do <see cref="IInputRoutingPort"/>.
+/// Jedno wyjście Orchestratora do wykonawców (decyzja epiki): <see cref="StartApp"/>, <see cref="StopApp"/>,
+/// <see cref="ProbeExisting"/> i <see cref="RenewSession"/> trafiają do hosta wybranego po <see cref="AppType"/>
+/// z mapy <c>appId → AppType</c> z configu, komendy okienkowe do <see cref="IWindowManagerPort"/>, komendy timerów
+/// do <see cref="ITimerPort"/>, a <see cref="SetInputRouting"/> do <see cref="IInputRoutingPort"/>.
 /// Komenda bez portu i komenda dla nieznanej aplikacji kończą się wpisem <c>warn</c>, nigdy wyjątkiem.
 /// </summary>
 public sealed class CommandRouter
@@ -74,6 +74,13 @@ public sealed class CommandRouter
                     if (TryGetHost(probe.CmdId, probe.AppId, out var probeHost))
                     {
                         probeHost.Probe(probe);
+                    }
+
+                    break;
+                case RenewSession renew:
+                    if (TryGetHost(renew.CmdId, renew.AppId, out var renewHost))
+                    {
+                        renewHost.Renew(renew);
                     }
 
                     break;

@@ -15,7 +15,8 @@ public abstract record Intent : IOrchestratorMessage;
 /// <summary>
 /// Baza komend z Orchestratora do wykonawców (AD-4). Każda komenda ma <see cref="CmdId"/>,
 /// a wykonawca odpowiada <see cref="CommandCompleted"/> albo <see cref="CommandFailed"/>.
-/// Wyjątkiem jest <see cref="ProbeExisting"/>: sonda jest fire-and-forget, a cisza hosta jest poprawną odpowiedzią.
+/// Wyjątkami są <see cref="ProbeExisting"/> i <see cref="RenewSession"/>: obie są fire-and-forget,
+/// a cisza hosta jest poprawną odpowiedzią (sonda bez żywej aplikacji, odświeżenie sesji bez wyniku).
 /// </summary>
 /// <param name="CmdId">Identyfikator komendy nadawany przez Orchestrator; zawsze pierwsze pole payloadu.</param>
 public abstract record Command([property: JsonPropertyOrder(-1)] long CmdId);
@@ -51,7 +52,10 @@ public sealed record RestartApp(string AppId) : Intent;
 
 /// <summary>
 /// Komputer wrócił z uśpienia; adapter power raportuje fakt, a Orchestrator przechodzi na ekran główny
-/// z nowym <c>seq</c> fokusu. <see cref="Source"/> niesie nazwę sygnału Windows 1:1 do logu i JSON-a.
+/// z nowym <c>seq</c> fokusu. Aplikacja z <c>Foreground</c> schodzi w <c>Background</c> batchem
+/// <c>MinimizeWindow</c> → <c>ShowShell</c> → routing <c>shell</c>, a każda aplikacja webowa w
+/// <c>Foreground</c> albo <c>Background</c> dostaje <see cref="RenewSession"/>. <see cref="Source"/>
+/// niesie nazwę sygnału Windows 1:1 do logu i JSON-a.
 /// </summary>
 public sealed record SystemResumed(string Source) : Event;
 

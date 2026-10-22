@@ -435,6 +435,73 @@ public class OrchestratorLoopTests
         Assert.Contains(dispatched, command => command is SetInputRouting { Mode: InputMode.App });
     }
 
+    /// <summary>
+    /// Wybudzenie z aplikacją na pierwszym planie dochodzi do wykonawców jako batch Home
+    /// (<c>MinimizeWindow</c> → <c>ShowShell</c> → routing <c>shell</c>) plus <c>RenewSession</c>, a snapshot
+    /// pokazuje <c>Background</c> i nowy fokus.
+    /// </summary>
+    [Fact]
+    public void System_resumed_from_foreground_dispatches_shell_batch_and_renew_session()
+    {
+        var time = new FakeTimeProvider(T0);
+        var log = new RecordingLog();
+        var published = new ConcurrentQueue<ShellSnapshot>();
+        var dispatched = new ConcurrentQueue<Command>();
+        var web = new SilentHost();
+        OrchestratorLoop? postsTo = null;
+        var hosts = new Dictionary<AppType, IAppHostPort>
+        {
+            [AppType.Web] = web,
+            [AppType.Moonlight] = new SilentHost(),
+            [AppType.Native] = new SilentHost(),
+        };
+        using var timers = new TimerScheduler(time, message => postsTo?.Post(message));
+        var router = new CommandRouter(
+            new Dictionary<string, AppType>(StringComparer.Ordinal)
+            {
+                ["netflix"] = AppType.Web,
+                ["plex"] = AppType.Native,
+            },
+            hosts,
+            new LogWindowManagerPort(log),
+            new LogInputRoutingPort(log),
+            timers,
+            log);
+        using var loop = new OrchestratorLoop(
+            new CoreOrchestrator(TwoApps(), time),
+            batch =>
+            {
+                foreach (var command in batch)
+                {
+                    dispatched.Enqueue(command);
+                }
+
+                router.Dispatch(batch);
+            },
+            published.Enqueue,
+            log);
+        postsTo = loop;
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        loop.Post(new LaunchApp("netflix"));
+        WaitFor(() => published.Count >= 2);
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        WaitFor(() => published.Count >= 3);
+        loop.Post(new SystemResumed("PBT_APMRESUMEAUTOMATIC"));
+        WaitFor(() => published.Count >= 4);
+
+        var resumed = published.Last();
+        Assert.Equal(AppLifecycleState.Background, resumed.Apps.Single(app => app.AppId == "netflix").State);
+        Assert.Equal(new FocusRequest(FocusRequest.DefaultTarget, 2), resumed.FocusRequest);
+        Assert.Contains(dispatched, command => command is MinimizeWindow minimize && minimize.Hwnd == 0x1A2B);
+        Assert.Contains(dispatched, command => command is ShowShell);
+        Assert.Contains(dispatched, command => command is SetInputRouting { Mode: InputMode.Shell });
+        Assert.Equal(new RenewSession(12, "netflix"), Assert.Single(dispatched.OfType<RenewSession>()));
+        Assert.Equal([new RenewSession(12, "netflix")], web.Renewed);
+        Assert.DoesNotContain(log.Entries, entry => entry.Level >= LogLevel.Warn);
+    }
+
     [Fact]
     public void Post_after_dispose_is_a_noop()
     {
@@ -552,6 +619,8 @@ public class OrchestratorLoopTests
     /// <summary>Host, który przyjmuje komendy i nigdy nie odpowiada: tylko timeout może zamknąć start.</summary>
     private sealed class SilentHost : IAppHostPort
     {
+        public List<RenewSession> Renewed { get; } = [];
+
         public void Start(StartApp command)
         {
         }
@@ -563,6 +632,8 @@ public class OrchestratorLoopTests
         public void Probe(ProbeExisting command)
         {
         }
+
+        public void Renew(RenewSession command) => Renewed.Add(command);
     }
 
     /// <summary>Host odpowiadający na sondę <c>AppWindowAttached</c>: tak wygląda żywe okno po restarcie.</summary>
@@ -586,5 +657,9 @@ public class OrchestratorLoopTests
         }
 
         public void Probe(ProbeExisting command) => _post(new AppWindowAttached(command.AppId, _hwnd, 4321));
+
+        public void Renew(RenewSession command)
+        {
+        }
     }
 }

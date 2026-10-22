@@ -21,6 +21,7 @@ public static class MessageTypes
         typeof(StartApp),
         typeof(StopApp),
         typeof(ProbeExisting),
+        typeof(RenewSession),
         typeof(ActivateWindow),
         typeof(MinimizeWindow),
         typeof(ShowShell),

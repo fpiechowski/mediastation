@@ -23,6 +23,14 @@ public sealed record StopApp(long CmdId, string AppId) : Command(CmdId);
 public sealed record ProbeExisting(long CmdId, string AppId) : Command(CmdId);
 
 /// <summary>
+/// Komenda odświeżenia sesji CDP przeglądarki aplikacji (AD-4, AD-10): host web odtwarza połączenie
+/// i <c>addBinding</c>, a wynik nie jest korelowany. Cisza jest poprawną odpowiedzią — świeża sesja nie
+/// wysyła <see cref="CommandCompleted"/>, a awarię raportuje <see cref="CdpLost"/>. Niesie wyłącznie
+/// <see cref="AppId"/>, bo host zna swoje aplikacje.
+/// </summary>
+public sealed record RenewSession(long CmdId, string AppId) : Command(CmdId);
+
+/// <summary>
 /// Baza komend WindowManagera, jedynego kodu zmieniającego widoczność, Z-order i foreground okien (AD-15).
 /// </summary>
 public abstract record WindowCommand(long CmdId) : Command(CmdId);

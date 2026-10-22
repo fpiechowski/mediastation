@@ -6,9 +6,9 @@ using MediaStation.Core.Ports;
 namespace MediaStation.Core.Tests;
 
 /// <summary>
-/// Jedno wyjście Orchestratora: komenda trafia do portu po typie, a <c>StartApp</c>, <c>StopApp</c> i
-/// <c>ProbeExisting</c> do hosta po <see cref="AppType"/> z mapy <c>appId → AppType</c>. Brak portu i nieznana
-/// aplikacja to <c>warn</c>, nie wyjątek.
+/// Jedno wyjście Orchestratora: komenda trafia do portu po typie, a <c>StartApp</c>, <c>StopApp</c>,
+/// <c>ProbeExisting</c> i <c>RenewSession</c> do hosta po <see cref="AppType"/> z mapy <c>appId → AppType</c>.
+/// Brak portu i nieznana aplikacja to <c>warn</c>, nie wyjątek.
 /// </summary>
 public class CommandRouterTests
 {
@@ -65,6 +65,38 @@ public class CommandRouterTests
         Assert.Equal(LogLevel.Warn, entry.Level);
         Assert.Equal("commandForUnknownApp", entry.Msg);
         Assert.Equal(13L, entry.Data!["cmdId"]);
+        Assert.Equal("nope", entry.Data["appId"]);
+    }
+
+    [Fact]
+    public void Renew_session_goes_to_host_of_its_app_type()
+    {
+        var (router, hosts, _, _, _, _) = CreateRouter();
+
+        router.Dispatch([
+            new RenewSession(1, "netflix"),
+            new RenewSession(2, "plex"),
+            new RenewSession(3, "moonlight-pc"),
+        ]);
+
+        Assert.Equal([new RenewSession(1, "netflix")], hosts[AppType.Web].Renewed);
+        Assert.Equal([new RenewSession(2, "plex")], hosts[AppType.Native].Renewed);
+        Assert.Equal([new RenewSession(3, "moonlight-pc")], hosts[AppType.Moonlight].Renewed);
+    }
+
+    [Fact]
+    public void Renew_session_for_unknown_app_logs_warn_without_throwing()
+    {
+        var (router, hosts, _, _, _, log) = CreateRouter();
+
+        var exception = Record.Exception(() => router.Dispatch([new RenewSession(14, "nope")]));
+
+        Assert.Null(exception);
+        Assert.All(hosts.Values, host => Assert.Empty(host.Renewed));
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Warn, entry.Level);
+        Assert.Equal("commandForUnknownApp", entry.Msg);
+        Assert.Equal(14L, entry.Data!["cmdId"]);
         Assert.Equal("nope", entry.Data["appId"]);
     }
 
@@ -236,11 +268,15 @@ public class CommandRouterTests
 
         public List<ProbeExisting> Probed { get; } = [];
 
+        public List<RenewSession> Renewed { get; } = [];
+
         public void Start(StartApp command) => Started.Add(command);
 
         public void Stop(StopApp command) => Stopped.Add(command);
 
         public void Probe(ProbeExisting command) => Probed.Add(command);
+
+        public void Renew(RenewSession command) => Renewed.Add(command);
     }
 
     private sealed class FakeWindowManager : IWindowManagerPort

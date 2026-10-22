@@ -10,7 +10,8 @@ namespace MediaStation.App.Hosts;
 /// Adapter „brak hosta” do czasu epik hostów: <see cref="StartApp"/> i <see cref="StopApp"/> nie robią niczego,
 /// tylko logują <c>startWithoutHost</c>/<c>stopWithoutHost</c> i odpowiadają <see cref="CommandFailed"/> z tym samym
 /// <c>cmdId</c> (AD-4). <see cref="ProbeExisting"/> jest trzecim no-opem: brak hosta to brak czegokolwiek do
-/// adopcji, więc sonda milczy bez Eventu i bez wpisu logu (cisza jest poprawną odpowiedzią).
+/// adopcji, więc sonda milczy bez Eventu i bez wpisu logu (cisza jest poprawną odpowiedzią). Czwartym jest
+/// <see cref="RenewSession"/>: bez CDP nie ma sesji do odświeżenia, więc komenda też milczy.
 /// Composition root stawia po jednym adapterze na <see cref="AppType"/>, żeby epiki hostów podmieniały osobno.
 /// </summary>
 public sealed class MissingHostPort : IAppHostPort
@@ -63,6 +64,15 @@ public sealed class MissingHostPort : IAppHostPort
     /// korelacji, a <c>warn</c> per aplikacja przy każdym starcie byłby stałym szumem).
     /// </summary>
     public void Probe(ProbeExisting command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+    }
+
+    /// <summary>
+    /// Brak hosta to brak sesji CDP do odświeżenia, więc komenda milczy: bez Eventu i bez wpisu logu — wynik
+    /// nie jest korelowany, a <c>warn</c> przy każdym wybudzeniu byłby stałym szumem.
+    /// </summary>
+    public void Renew(RenewSession command)
     {
         ArgumentNullException.ThrowIfNull(command);
     }

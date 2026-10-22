@@ -181,6 +181,19 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Renew_session_command_envelope_serializes_with_cmd_id_first_and_round_trips()
+    {
+        Command renew = new RenewSession(3, "netflix");
+
+        var json = ContractJson.SerializeEnvelope(renew);
+
+        Assert.Equal("""{"v":1,"type":"renewSession","payload":{"cmdId":3,"appId":"netflix"}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<RenewSession>(back);
+        Assert.Equal(renew, back);
+    }
+
+    [Fact]
     public void Process_exited_event_envelope_serializes_exactly_and_round_trips()
     {
         Event exited = new ProcessExited("netflix");
@@ -445,7 +458,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "startApp", "stopApp", "probeExisting", "activateWindow", "minimizeWindow", "showShell", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
+        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -482,6 +495,7 @@ public class CoreMessageContractTests
                 "orchestrator-started.schema.json",
                 "probe-existing.schema.json",
                 "process-exited.schema.json",
+                "renew-session.schema.json",
                 "restart-app.schema.json",
                 "schedule-timer.schema.json",
                 "set-input-routing.schema.json",
@@ -586,6 +600,7 @@ public class CoreMessageContractTests
     [InlineData("start-app.schema.json", "StartApp", "cmdId,appId")]
     [InlineData("stop-app.schema.json", "StopApp", "cmdId,appId")]
     [InlineData("probe-existing.schema.json", "ProbeExisting", "cmdId,appId")]
+    [InlineData("renew-session.schema.json", "RenewSession", "cmdId,appId")]
     [InlineData("schedule-timer.schema.json", "ScheduleTimer", "cmdId,timerId,owner,due")]
     [InlineData("cancel-timer.schema.json", "CancelTimer", "cmdId,timerId")]
     [InlineData("timer-elapsed.schema.json", "TimerElapsed", "timerId")]
