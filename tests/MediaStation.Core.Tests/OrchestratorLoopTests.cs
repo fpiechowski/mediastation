@@ -5,6 +5,7 @@ using MediaStation.App.Platform.Input;
 using MediaStation.App.Platform.Window;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
+using MediaStation.Core.Input;
 using MediaStation.Core.Logging;
 using MediaStation.Core.Orchestrator;
 using MediaStation.Core.Ports;
@@ -173,7 +174,7 @@ public class OrchestratorLoopTests
             },
             hosts,
             new LogWindowManagerPort(log),
-            new LogInputRoutingPort(log),
+            new InputHubRoutingPort(new InputRoutingState(), log),
             timers,
             log);
         using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
@@ -226,7 +227,7 @@ public class OrchestratorLoopTests
             new Dictionary<string, AppType>(StringComparer.Ordinal) { ["netflix"] = AppType.Web },
             hosts,
             new LogWindowManagerPort(log),
-            new LogInputRoutingPort(log),
+            new InputHubRoutingPort(new InputRoutingState(), log),
             timers,
             log);
         using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
@@ -268,7 +269,7 @@ public class OrchestratorLoopTests
             new Dictionary<string, AppType>(StringComparer.Ordinal) { ["netflix"] = AppType.Web },
             hosts,
             new LogWindowManagerPort(log),
-            new LogInputRoutingPort(log),
+            new InputHubRoutingPort(new InputRoutingState(), log),
             timers,
             log);
         using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
@@ -322,7 +323,7 @@ public class OrchestratorLoopTests
             new Dictionary<string, AppType>(StringComparer.Ordinal) { ["netflix"] = AppType.Web },
             hosts,
             new LogWindowManagerPort(log),
-            new LogInputRoutingPort(log),
+            new InputHubRoutingPort(new InputRoutingState(), log),
             timers,
             log);
         using var loop = new OrchestratorLoop(
@@ -394,7 +395,7 @@ public class OrchestratorLoopTests
             },
             hosts,
             new LogWindowManagerPort(log),
-            new LogInputRoutingPort(log),
+            new InputHubRoutingPort(new InputRoutingState(), log),
             timers,
             log);
         using var loop = new OrchestratorLoop(
@@ -464,7 +465,7 @@ public class OrchestratorLoopTests
             },
             hosts,
             new LogWindowManagerPort(log),
-            new LogInputRoutingPort(log),
+            new InputHubRoutingPort(new InputRoutingState(), log),
             timers,
             log);
         using var loop = new OrchestratorLoop(
@@ -500,6 +501,80 @@ public class OrchestratorLoopTests
         Assert.Equal(new RenewSession(12, "netflix"), Assert.Single(dispatched.OfType<RenewSession>()));
         Assert.Equal([new RenewSession(12, "netflix")], web.Renewed);
         Assert.DoesNotContain(log.Entries, entry => entry.Level >= LogLevel.Warn);
+    }
+
+    /// <summary>
+    /// Home z wątku Input wchodzi do pętli przez <see cref="OrchestratorActionSink"/> i domyka aplikację webową:
+    /// dispatch ma <c>MinimizeWindow</c>, <c>ShowShell</c> i routing <c>shell</c>, a lokalna kopia routingu jest
+    /// w <c>shell</c> z nowszym <c>epoch</c>.
+    /// </summary>
+    [Fact]
+    public void Home_action_from_the_sink_returns_to_shell_and_updates_the_local_copy()
+    {
+        var time = new FakeTimeProvider(T0);
+        var log = new RecordingLog();
+        var published = new ConcurrentQueue<ShellSnapshot>();
+        var dispatched = new ConcurrentQueue<Command>();
+        var routing = new InputRoutingState();
+        OrchestratorLoop? postsTo = null;
+        var hosts = new Dictionary<AppType, IAppHostPort>
+        {
+            [AppType.Web] = new SilentHost(),
+            [AppType.Moonlight] = new SilentHost(),
+            [AppType.Native] = new SilentHost(),
+        };
+        using var timers = new TimerScheduler(time, message => postsTo?.Post(message));
+        var router = new CommandRouter(
+            new Dictionary<string, AppType>(StringComparer.Ordinal) { ["netflix"] = AppType.Web },
+            hosts,
+            new LogWindowManagerPort(log),
+            new InputHubRoutingPort(routing, log),
+            timers,
+            log);
+        using var loop = new OrchestratorLoop(
+            new CoreOrchestrator(TwoApps(), time),
+            batch =>
+            {
+                foreach (var command in batch)
+                {
+                    dispatched.Enqueue(command);
+                }
+
+                router.Dispatch(batch);
+            },
+            published.Enqueue,
+            log);
+        postsTo = loop;
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+        Assert.Equal(new InputRouting(InputMode.Shell, null, PointerPolicy.Blocked, 1), routing.Current);
+
+        loop.Post(new LaunchApp("netflix"));
+        WaitFor(() => published.Count >= 2);
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        WaitFor(() => published.Count >= 3);
+
+        Assert.Equal(
+            AppLifecycleState.Foreground,
+            published.Last().Apps.Single(app => app.AppId == "netflix").State);
+        Assert.Equal(new InputRouting(InputMode.App, AppType.Web, PointerPolicy.Blocked, 2), routing.Current);
+
+        // Ta sama droga co w composition root: pompa woła sink z wątku Input, sink wkłada Action do kolejki.
+        var sink = new OrchestratorActionSink(log, loop.Post);
+        sink.Deliver(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        WaitFor(() => published.Count >= 4);
+
+        var afterHome = published.Last();
+        Assert.Equal(AppLifecycleState.Background, afterHome.Apps.Single(app => app.AppId == "netflix").State);
+        Assert.Contains(dispatched, command => command is MinimizeWindow minimize && minimize.Hwnd == 0x1A2B);
+        Assert.Contains(dispatched, command => command is ShowShell);
+        Assert.Contains(dispatched, command => command is SetInputRouting { Mode: InputMode.Shell });
+        Assert.Equal(new InputRouting(InputMode.Shell, null, PointerPolicy.Blocked, 3), routing.Current);
+
+        var action = Assert.Single(log.Entries, entry => entry.Msg == "action");
+        Assert.Equal(ActionKind.Home, action.Data!["kind"]);
+        Assert.Equal(ActionPhase.Press, action.Data["phase"]);
+        Assert.Equal(ActionSource.Remote, action.Data["source"]);
     }
 
     [Fact]

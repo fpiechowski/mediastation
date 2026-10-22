@@ -42,10 +42,12 @@ public sealed record InputDecision(bool Swallow, IReadOnlyList<ActionMessage> Ac
 /// bo hook LL działa przed <c>WM_INPUT</c>, a połknięty klawisz może nie dojść do Raw Input. <c>source</c> pochodzi
 /// z korelacji w oknie <see cref="CorrelationWindowMs"/>. Jedno naciśnięcie daje jedną Action, a strzałka trzymana
 /// dostaje <c>repeat</c> co <c>timing.repeatIntervalMs</c> po <c>timing.repeatDelayMs</c> (tylko Up|Down|Left|Right)
-/// aż do key-up albo do <see cref="MaxRepeatHoldMs"/>. OK w trybie <see cref="InputMode.Shell"/> dostaje
-/// <c>press</c> na key-up przed progiem albo samo <c>long</c> po progu. Czas płynie wyłącznie przez wstrzyknięty
-/// <see cref="TimeProvider"/> (AD-14). Typ nie jest wątkowo bezpieczny: App woła go z jednego wątku Input
-/// (callback hooka i timer progu na tym samym wątku).
+/// aż do key-up albo do <see cref="MaxRepeatHoldMs"/>. OK w trybie <see cref="InputMode.Shell"/> i
+/// <see cref="InputMode.Osk"/> dostaje <c>press</c> na key-up przed progiem albo samo <c>long</c> po progu,
+/// a wiersz <c>app</c> + <c>moonlight</c>/<c>native</c> przepuszcza D-pad i OK bez Actions. Decyzja zapada na
+/// key-down i rządzi key-upem oraz autorepeatem, także po zmianie trybu w trakcie trzymania. Czas płynie
+/// wyłącznie przez wstrzyknięty <see cref="TimeProvider"/> (AD-14). Typ nie jest wątkowo bezpieczny: App woła go
+/// z jednego wątku Input (callback hooka i timer progu na tym samym wątku).
 /// </summary>
 public sealed class InputPolicy : IInputTarget
 {
@@ -62,7 +64,7 @@ public sealed class InputPolicy : IInputTarget
     private static readonly InputDecision PassDecision = new(false, NoActions);
 
     private readonly TimeProvider _time;
-    private readonly InputMode _mode;
+    private readonly InputRoutingState _routing;
     private readonly int _longPressMs;
     private readonly int _repeatDelayMs;
     private readonly int _repeatIntervalMs;
@@ -75,14 +77,15 @@ public sealed class InputPolicy : IInputTarget
 
     /// <param name="config">Config wejścia; mapowanie jest scalane ze wszystkich urządzeń, pierwsze wygrywa.</param>
     /// <param name="time">Zegar terminów long-press i repeat (AD-14).</param>
-    /// <param name="mode">Tryb routingu; w tej story stały, routing dokłada story 5.</param>
-    public InputPolicy(InputConfig config, TimeProvider time, InputMode mode = InputMode.Shell)
+    /// <param name="routing">Współdzielona kopia routingu (Orchestrator pisze, wątek Input czyta).</param>
+    public InputPolicy(InputConfig config, TimeProvider time, InputRoutingState routing)
     {
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(time);
+        ArgumentNullException.ThrowIfNull(routing);
 
         _time = time;
-        _mode = mode;
+        _routing = routing;
         _longPressMs = config.Timing.LongPressMs;
         _repeatDelayMs = config.Timing.RepeatDelayMs;
         _repeatIntervalMs = config.Timing.RepeatIntervalMs;
@@ -129,7 +132,8 @@ public sealed class InputPolicy : IInputTarget
 
     /// <summary>
     /// Jedyna decyzja o połknięciu i Actions dla zdarzenia hooka. Autorepeat systemu (drugi key-down bez key-up)
-    /// jest połykany bez Actions i bez przesunięcia terminu repeat, a key-up nieznanego VK nie jest połykany.
+    /// idzie za decyzją key-down: połknięty jest połykany bez Actions i bez przesunięcia terminu repeat,
+    /// a przepuszczony zostaje przepuszczony. Key-up nieznanego VK nie jest połykany.
     /// </summary>
     public InputDecision OnKey(KeyStroke key)
     {
@@ -142,15 +146,32 @@ public sealed class InputPolicy : IInputTarget
 
         if (key.Transition == KeyTransition.Down)
         {
-            if (_held.ContainsKey(key.VirtualKey))
+            if (_held.TryGetValue(key.VirtualKey, out var autorepeat))
             {
-                return new InputDecision(true, NoActions);
+                // Zgubiony key-up przepuszczonego klawisza nie może uwięzić VK na zawsze: wpis starszy niż
+                // MaxRepeatHoldMs jest nieświeży, więc ten key-down zaczyna nowe trzymanie.
+                if (!autorepeat.Swallow && key.TimeMs - autorepeat.DownTimeMs > MaxRepeatHoldMs)
+                {
+                    _held.Remove(key.VirtualKey);
+                }
+                else
+                {
+                    return new InputDecision(autorepeat.Swallow, NoActions);
+                }
             }
 
+            // Jedno odczytanie kopii na zdarzenie: cała decyzja key-down pochodzi z tego samego wiersza (AD-8).
+            var routing = _routing.Current;
+            var swallow = ShouldSwallow(kind, routing);
             var source = ResolveSource(key);
-            _held.Add(key.VirtualKey, NewHeldKey(kind, source, key.TimeMs));
+            _held.Add(key.VirtualKey, NewHeldKey(kind, source, key.TimeMs, swallow));
 
-            if (RequiresLongPress(kind))
+            if (!swallow)
+            {
+                return PassDecision;
+            }
+
+            if (RequiresLongPress(kind, routing))
             {
                 if (_pendingLong is not null)
                 {
@@ -171,14 +192,21 @@ public sealed class InputPolicy : IInputTarget
             return new InputDecision(true, [new ActionMessage(kind, ActionPhase.Press, source, key.TimeMs)]);
         }
 
-        var wasHeld = _held.Remove(key.VirtualKey, out _);
-        if (wasHeld && _pendingLong is { } pending && pending.VirtualKey == key.VirtualKey)
+        if (_held.Remove(key.VirtualKey, out var held))
         {
-            _pendingLong = null;
-            return new InputDecision(true, [new ActionMessage(kind, ActionPhase.Press, pending.Source, key.TimeMs)]);
+            if (_pendingLong is { } pending && pending.VirtualKey == key.VirtualKey)
+            {
+                _pendingLong = null;
+                return new InputDecision(
+                    held.Swallow,
+                    [new ActionMessage(kind, ActionPhase.Press, pending.Source, key.TimeMs)]);
+            }
+
+            return new InputDecision(held.Swallow, NoActions);
         }
 
-        return new InputDecision(true, NoActions);
+        // Key-up bez key-down (np. hook startował w trakcie trzymania) rozstrzyga bieżący wiersz kopii.
+        return new InputDecision(ShouldSwallow(kind, _routing.Current), NoActions);
     }
 
     /// <summary>
@@ -234,15 +262,41 @@ public sealed class InputPolicy : IInputTarget
         return actions.Count == 0 ? PassDecision : new InputDecision(false, actions);
     }
 
-    /// <summary>Long-press dotyczy wyłącznie OK w Shell; OSK dokłada story 5.</summary>
-    private bool RequiresLongPress(ActionKind kind) => kind == ActionKind.Ok && _mode == InputMode.Shell;
+    /// <summary>
+    /// <c>long</c> dotyczy wyłącznie OK w <see cref="InputMode.Shell"/> i <see cref="InputMode.Osk"/>; wiersz
+    /// <c>app</c> dostaje <c>press</c> od razu, bo aplikacja sama obsługuje przytrzymanie.
+    /// </summary>
+    private static bool RequiresLongPress(ActionKind kind, InputRouting routing) =>
+        kind == ActionKind.Ok && routing.Mode is InputMode.Shell or InputMode.Osk;
 
-    /// <summary>Wpis trzymanego klawisza: repeat uzbraja się tylko dla strzałek i dodatnich progów z configu.</summary>
-    private HeldKey NewHeldKey(ActionKind kind, ActionSource source, long downTimeMs)
+    /// <summary>
+    /// Tabela AD-8: Home jest połknięty w każdym wierszu, a D-pad i OK przechodzą do aplikacji wyłącznie
+    /// w <c>app</c> + <c>moonlight</c>/<c>native</c>. <c>app</c> bez <c>appType</c> i <c>osk</c> połykają,
+    /// jak <c>shell</c>, bo tabela nie ma dla nich wiersza przepuszczającego.
+    /// </summary>
+    private static bool ShouldSwallow(ActionKind kind, InputRouting routing)
     {
-        if (!IsRepeatable(kind) || _repeatDelayMs <= 0 || _repeatIntervalMs <= 0)
+        if (kind == ActionKind.Home)
         {
-            return new HeldKey(kind, source, downTimeMs, null, 0, null);
+            return true;
+        }
+
+        var passesThrough = routing.Mode == InputMode.App
+            && routing.AppType is AppType.Moonlight or AppType.Native
+            && kind is ActionKind.Up or ActionKind.Down or ActionKind.Left or ActionKind.Right or ActionKind.Ok;
+
+        return !passesThrough;
+    }
+
+    /// <summary>
+    /// Wpis trzymanego klawisza: repeat uzbraja się tylko dla połkniętych strzałek i dodatnich progów z configu,
+    /// a decyzja key-down zostaje w <c>Swallow</c> na key-up i autorepeat.
+    /// </summary>
+    private HeldKey NewHeldKey(ActionKind kind, ActionSource source, long downTimeMs, bool swallow)
+    {
+        if (!swallow || !IsRepeatable(kind) || _repeatDelayMs <= 0 || _repeatIntervalMs <= 0)
+        {
+            return new HeldKey(kind, source, downTimeMs, null, 0, null, swallow);
         }
 
         var now = _time.GetUtcNow();
@@ -252,7 +306,8 @@ public sealed class InputPolicy : IInputTarget
             downTimeMs,
             now.AddMilliseconds(_repeatDelayMs),
             0,
-            now.AddMilliseconds(MaxRepeatHoldMs));
+            now.AddMilliseconds(MaxRepeatHoldMs),
+            swallow);
     }
 
     /// <summary><c>repeat</c> mają wyłącznie strzałki; OK, Back, Home i Keyboard zostają przy jednej Action.</summary>
@@ -397,9 +452,10 @@ public sealed class InputPolicy : IInputTarget
         DateTimeOffset Deadline);
 
     /// <summary>
-    /// Jeden trzymany klawisz: kind i source z key-down (repeat dziedziczy je bez nowej korelacji) oraz siatka repeat
-    /// — termin następnego <c>repeat</c>, jego indeks 0-based i termin końca siatki (<see cref="MaxRepeatHoldMs"/>).
-    /// Wpisy bez repeat mają <c>null</c> w terminach i służą tylko do połykania autorepeatu systemu.
+    /// Jeden trzymany klawisz: kind i source z key-down (repeat dziedziczy je bez nowej korelacji), decyzja
+    /// o połknięciu z key-down oraz siatka repeat — termin następnego <c>repeat</c>, jego indeks 0-based i termin
+    /// końca siatki (<see cref="MaxRepeatHoldMs"/>). Wpisy bez repeat mają <c>null</c> w terminach i służą tylko
+    /// do połykania autorepeatu systemu oraz do prowadzenia key-upu za decyzją key-down.
     /// </summary>
     private sealed record HeldKey(
         ActionKind Kind,
@@ -407,5 +463,6 @@ public sealed class InputPolicy : IInputTarget
         long DownTimeMs,
         DateTimeOffset? NextRepeatAt,
         int RepeatIndex,
-        DateTimeOffset? RepeatEndsAt);
+        DateTimeOffset? RepeatEndsAt,
+        bool Swallow);
 }

@@ -68,7 +68,8 @@ public class InputClockTests
                     ActionSource.Remote,
                     new Dictionary<string, ActionKind> { ["0x0D"] = ActionKind.Ok })],
                 [GamepadButton.Back, GamepadButton.Start]),
-            time);
+            time,
+            new InputRoutingState());
 
         // Raport Consumer 32 ms przed klawiszem, po zawinięciu 32-bitowego licznika.
         var reportMs = clock.Normalize(0xFFFF_FFF0);

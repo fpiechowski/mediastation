@@ -14,7 +14,7 @@ namespace MediaStation.Core.Input;
 /// </summary>
 public sealed class LogActionSink : IActionSink, IInputHubErrorSink
 {
-    /// <summary>Źródło wpisów logu wejścia (jak <c>LogInputRoutingPort.Src</c>).</summary>
+    /// <summary>Źródło wpisów logu wejścia (jak <c>InputHubRoutingPort.Src</c>).</summary>
     public const string Src = "input";
 
     private readonly ILog _log;

@@ -60,3 +60,11 @@ source_spec: `tickets/epic-input/tickets/story-dowolna-klawiatura-i-repeat-strza
 severity: low
 reason: `DeviceSignature.Matches` specjalnie traktuje wyłącznie `InputDevice.WildcardSignature` i poza tym używa `Contains`, a ścieżka Raw Input nigdy nie zawiera `*`; walidacja wymaga tylko niepustej sygnatury. Zachowanie samo w sobie jest sprzed tej story (nowe jest tylko znaczenie `*`), a naprawa to reguła walidacji odrzucająca `*` w sygnaturze innej niż dokładnie `*` — decyzja planistyczna, nie poprawka tej zmiany.
 status: open
+
+### DW-9: Checklista odbioru epiku („Jedno naciśnięcie daje jedną Action”, „każde naciśnięcie … daje w logu dokładnie jeden wpis `action`”) nie mówi, że D-pad i OK w `app` + `moonlight`/`native` są celowo
+origin: spec-deferred f2c6f5214410
+location: _bmad-output/initiative-mediastation-mvp/tickets/epic-input/epic-input.md:23,70
+source_spec: `tickets/epic-input/tickets/story-routing-z-lokalnej-kopii-setinputrouting-i-actions-do-orches-plan.md`
+severity: low
+reason: Zweryfikowane: `architecture-mediastation.md:202` (wiersz tabeli AD-8) każe przepuszczać D-pad i OK w `app` + `moonlight`/`native`, a `epic-input.md:23` (Done when 1) i `:70` (checklista po story 2) nadal obiecują jedną Action i dokładnie jeden wpis `action` na naciśnięcie. Nowy test `App_with_moonlight_or_native_passes_dpad_and_ok_without_actions_or_grid` pinuje zero Actions. Ten sam typ luki (checklista nie opisuje `repeat`) jest już zapisany jako DW-7 z uzasadnieniem „żeby operator nie odczytał checklisty jako porażki”; poprawka edytuje dokumentację architektury i notatkę odbioru epiki, więc należy do passa dokumentacyjnego epiki, nie do tej story.
+status: open

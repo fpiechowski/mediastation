@@ -200,11 +200,15 @@ public static class CompositionRoot
         // bo pętla powstaje po routerze.
         var timers = new TimerScheduler(time, message => postsTo?.Post(message));
 
+        // Jedna kopia routingu dla portu (wątek Orchestratora) i polityki (wątek Input): key-down czyta ją bez
+        // czekania na Orchestrator (AD-8), a port odrzuca `epoch` równy i starszy.
+        var routing = new InputRoutingState();
+
         var router = new CommandRouter(
             appTypes,
             hosts,
             new LogWindowManagerPort(log),
-            new LogInputRoutingPort(log),
+            new InputHubRoutingPort(routing, log),
             timers,
             log);
 
@@ -277,12 +281,12 @@ public static class CompositionRoot
         try
         {
             // InputHub po pętli i oknie: callback hooka wkłada Actions do kolejki Core, a pompa opróżnia ją
-            // poza wątkiem Input (AD-2, AD-8). Do story 5 Actions trafiają tylko do logu (LogActionSink).
-            var actionSink = new LogActionSink(log);
+            // poza wątkiem Input (AD-2, AD-8). Sink loguje Action i wkłada ją do kolejki Orchestratora bez czekania.
+            var actionSink = new OrchestratorActionSink(log, loop.Post);
             actionPump = new ActionPump(actionSink, actionSink);
             actionPump.Start();
 
-            var inputPolicy = new InputPolicy(config.Input, time, InputMode.Shell);
+            var inputPolicy = new InputPolicy(config.Input, time, routing);
             inputHub = new InputHub(inputPolicy, actionPump.Queue, actionSink, time);
             inputHub.Start();
         }

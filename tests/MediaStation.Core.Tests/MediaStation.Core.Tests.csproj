@@ -30,7 +30,7 @@
     <Compile Include="..\..\src\MediaStation.App\Platform\Input\ActionPump.cs" Link="App\ActionPump.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Input\InputClock.cs" Link="App\InputClock.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Input\InputTimerDelay.cs" Link="App\InputTimerDelay.cs" />
-    <Compile Include="..\..\src\MediaStation.App\Platform\Input\LogInputRoutingPort.cs" Link="App\LogInputRoutingPort.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Input\InputHubRoutingPort.cs" Link="App\InputHubRoutingPort.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Input\RawInputBody.cs" Link="App\RawInputBody.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Input\RawInputReport.cs" Link="App\RawInputReport.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\DisplayStateNotification.cs" Link="App\DisplayStateNotification.cs" />

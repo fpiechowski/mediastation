@@ -93,7 +93,7 @@ public class ActionPumpTests
         pump.Start();
 
         var time = new FakeTimeProvider(T0);
-        var policy = new InputPolicy(Input(), time);
+        var policy = new InputPolicy(Input(), time, new InputRoutingState());
 
         // Krótkie naciśnięcie: `press` na key-up przed progiem long-press.
         EnqueueDecision(pump.Queue, policy.OnKey(new KeyStroke(0x0D, KeyTransition.Down, Injected: false, TimeMs: 1000)));

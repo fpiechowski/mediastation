@@ -155,7 +155,8 @@ public class LogActionSinkTests
         {
             Timing = new InputTiming { LongPressMs = 600 },
         },
-        time);
+        time,
+        new InputRoutingState());
 
     private static void Deliver(LogActionSink sink, InputDecision decision)
     {
