@@ -1,0 +1,125 @@
+# Remote, keyboard & gamepad input — entries w kolejności budowy. tickets.py reads it.
+# Kolejność tabel = kolejność budowy; `id` nie jest kolejnością.
+# Jeden lane: każda story zmienia politykę wejścia w Core albo InputHub w `Platform/Input`, więc `after` tworzy łańcuch.
+# `verify` to check, który pętla uruchamia sama; checki na UM760 są w Notes epiki (Odbiór na UM760).
+# Decyzje przecinające kilka stories (decyzja po VK, korelacja, progi, kolejka Actions, CsWin32, znacznik `dwExtraInfo`, `clipHwnd`, kolizje z epiką 2) są w Notes epiki.
+# Ścieżki w `references` są względne do folderu inicjatywy.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Polityka wejścia w Core: jedna Action i reguła long"
+description = "Dodaje w Core czystą politykę wejścia bez Win32: decyzję o połknięciu i `ActionKind` po samym VK ze scalonego mapowania urządzeń z `input.json` (walidacja odrzuca ten sam VK z różnym `kind` w dwóch urządzeniach), `source` z korelacji (wstrzyknięty VK z `LLKHF_INJECTED` przypisany do raportu HID Consumer tej samej sygnatury najwyżej 50 ms wcześniej daje `remote`, inaczej urządzenie z ostatniego `WM_INPUT` w oknie 50 ms, w ostateczności `keyboard`; sygnatura pasuje, gdy ścieżka urządzenia Raw Input zawiera ją bez rozróżniania wielkości liter), regułę jedno naciśnięcie = jedna Action (autorepeat systemu nie daje kolejnej), `press` na key-down, a dla OK w trybie `shell` (tryb jest parametrem polityki; routing dokłada story 5) `press` na key-up przed progiem albo samo `long` po progu z nowego opcjonalnego `timing.longPressMs` w `input.json` (domyślnie 600; schemat, walidacja, sample z Back `0xA6` i czterema strzałkami dongla), `tsMono` z pola `time` zdarzenia hooka, timer progu przez szew `NextDeadline`/`OnTimer(now)` na wstrzykniętym `TimeProvider` (bez ambient time, zakaz z 2.5), oraz kolejkę Actions bez ograniczenia rozmiaru, do której zapis nigdy nie czeka i nigdy nie gubi Action."
+verify = "`dotnet test` przechodzi z testami polityki na `FakeTimeProvider`: połknięcie i `kind` po VK, `source: remote` dla wstrzykniętego `0xAC` po raporcie HID 0x0223 dongla w oknie i `keyboard` bez raportu, autorepeat bez drugiej Action, OK z `press` na key-up przed progiem i samym `long` po progu, nieznany VK bez Action i bez połknięcia, zapis do kolejki bez czytelnika nie czeka, oraz walidacja `timing.longPressMs` i konfliktu VK między urządzeniami."
+covers = ["CAP-3"]
+after = ["1.2", "1.4", "1.6"]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8", "architecture-mediastation/architecture-mediastation.md, AD-14", "research-browser-control-for-streaming-services/digests/spike-um760.md, claims S10", "../../spike/spike-results.md, S10 (tabela kodów dongla)"]
+
+[[entry]]
+id = 2
+type = "story"
+title = "Tracer bullet: pilot na donglu daje Actions z wątku Input"
+description = "Dodaje w `Platform/Input` (`Platform/` z 2.2; pakiet `Microsoft.Windows.CsWin32` 0.3.363 i `NativeMethods.txt`, jeśli 2.2 ich nie dodała) InputHub na dedykowanym wątku z własną pętlą komunikatów, hookiem `WH_KEYBOARD_LL` i Raw Input (`RIDEV_INPUTSINK`, klawiatura i HID Consumer 0x0C), który podaje zdarzenia polityce ze story 1, decyduje w callbacku bez blokowania i wkłada Actions do kolejki z Core (timer progu `long` wraca na wątek Input komunikatem), połyka zmapowane klawisze w stałym trybie `shell`, a osobny wątek opróżnia kolejkę do portu `IActionSink`; adapter tylko-log sinka i budowanie wpisów żyją w Core (App je tylko podpina w composition root z 2.1): jedyny wpis InputHub to `action {kind, phase, source}`, a błędy rejestracji hooka i Raw Input idą jako `inputHubError` bez kodów klawiszy."
+verify = "`dotnet test` przechodzi z testem Core, że adapter tylko-log sinka dla sekwencji Actions zapisuje wyłącznie wpisy `action` (bez VK, scan i usage), a `inputHubError` nie zawiera kodów klawiszy; build Release self-contained przechodzi."
+covers = ["CAP-3"]
+after = [1, "1.3", "2.1", "2.2", "2.3"]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-2 (wątki)", "architecture-mediastation/architecture-mediastation.md, AD-13 (Logi)", "../../spike/win/HomeLogger.cs (referencja zachowania, nie kod do skopiowania)"]
+
+[[entry]]
+id = 3
+type = "story"
+title = "`--calibrate-input` i przycisk Klawiatura"
+description = "Zastępuje `modeUnsupported` dla `CliMode.CalibrateInput` (mutex jak w każdym trybie: wymaga zatrzymanej instancji głównej) trybem, który uruchamia źródła InputHub ze story 2 bez mapowania i bez połykania, przez 60 s albo do Esc z klawiatury loguje dla każdego przycisku urządzeń z `source: remote` w `input.json` (i wstrzykniętych VK przypisanych do nich) wpis `rawInput {signature, vk, scan, usagePage, usage, injected, hasVk, llBeforeRawMs}` z kolejnością zdarzenia hooka i `WM_INPUT`, i kończy się kodem 0, tak że autor wybiera przycisk Klawiatura spośród przycisków z VK i wpisuje go do `input.json` jako `keyboard`."
+verify = "`dotnet test` przechodzi z testami Core: decyzja startu dla `--calibrate-input` nie daje już `modeUnsupported`, filtr kalibracji przepuszcza zdarzenia urządzeń `remote` i odrzuca zwykłą klawiaturę, `hasVk` jest `false` dla raportu HID bez VK, a wpis `\"0x..\": \"keyboard\"` w `input.json` daje Action `Keyboard`."
+covers = ["CAP-3"]
+after = [2, "1.5"]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-13 (Logi: surowe kody tylko w --calibrate-input)", "spec-mediastation/spec-mediastation.md, Open Questions (Przycisk Klawiatura na G20S Pro)"]
+
+[[entry]]
+id = 4
+type = "story"
+title = "Dowolna klawiatura i repeat strzałek"
+description = "Dodaje w `input.json` urządzenie z sygnaturą `*` jako fallback dla każdej klawiatury bez własnego wpisu (`source: keyboard`; walidacja: najwyżej jedno; sample: Enter → ok, Escape → back, strzałki, `0x24` Home → home, `0x71` F2 → keyboard) oraz `phase: repeat` tylko dla strzałek: polityka sama generuje `repeat` po `timing.repeatDelayMs` co `timing.repeatIntervalMs` (nowe opcjonalne pola, domyślnie 400 i 120), ignoruje autorepeat systemu i przestaje na key-up; OK, Back, Home i Keyboard nie dostają `repeat`."
+verify = "`dotnet test` przechodzi z testami na `FakeTimeProvider`: trzymana strzałka daje jedno `press`, potem `repeat` po progu i w interwale i koniec na key-up, trzymany Home i Back dają jedną Action bez `repeat`, walidacja odrzuca dwa urządzenia `*`, a klawisz zmapowany tylko w `*` daje Action z `source: keyboard`."
+covers = ["CAP-3"]
+after = [3]
+hitl = false
+risk = "low"
+references = ["ux-mediastation/EXPERIENCE.md, Interaction Primitives (`phase: repeat` przewija wiersze)"]
+
+[[entry]]
+id = 5
+type = "story"
+title = "Routing z lokalnej kopii SetInputRouting i Actions do Orchestratora"
+description = "Podmienia adapter tylko-log `SetInputRouting` z 2.3 na adapter InputHub, który trzyma lokalną kopię `{mode, appType, pointer, epoch}` (start: `shell`, `epoch` 0; przyjmowany tylko `epoch` ściśle większy od bieżącego), a polityka według tabeli AD-8 dla źródeł klawiatury decyduje: połyka i emituje Action albo przepuszcza (D-pad i OK w `app` + `moonlight`/`native`), Home zawsze połyka, `long` tylko dla OK w `shell` i `osk`, a key-up i autorepeat idą za decyzją pierwszego key-down także po zmianie trybu; adapter tylko-log `IActionSink` ze story 2 zastępuje wkładanie Actions do kolejki Orchestratora z 2.1 bez czekania (wpis `action` zostaje)."
+verify = "`dotnet test` przechodzi z testami polityki routingu dla każdego wiersza tabeli AD-8 (klawiatura), odrzucenia równego i starszego `epoch`, OK w `app` + `web` jako `press` na key-down oraz key-up i autorepeat strzałki połkniętej w `shell` połykane także po przełączeniu na `app` + `moonlight`."
+covers = ["CAP-3"]
+after = [4, "2.3"]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (tabela routingu)", "epic-orchestrator-lifecycle/epic-orchestrator-lifecycle.md, Notes (tryb wejścia, porty)"]
+
+[[entry]]
+id = 6
+type = "story"
+title = "Gamepad przez XInput i Home z pada"
+description = "Dodaje na wątku Input polling XInput co 10 ms i w polityce mapowanie przycisków pada na `ActionKind` z nowej sekcji `gamepad` w `input.json` (domyślnie D-pad, A → ok, B → back, Y → keyboard; schemat, walidacja, sample), `source: gamepad`, `repeat` D-pada i `long` z tej samej polityki co klawiatura, kombinację `gamepadHome` (domyślnie XInput Back + Start) dającą jedną Action Home, przy czym walidacja odrzuca mapowanie przycisku należącego do kombinacji, a routing według AD-8: w `app` + `moonlight` żadnych Actions z pada poza Home, w `app` + `native` D-pad i A bez Actions, a B i Y dają Actions."
+verify = "`dotnet test` przechodzi z testami polityki na sekwencjach stanów XInput: jedna Action na naciśnięcie, `repeat` trzymanego D-pada, jedna Action Home dla Back + Start, odrzucenie mapowania `start` przy `gamepadHome` z `start`, w `app` + `moonlight` żadna Action poza Home, a w `app` + `native` tylko B, Y i Home."
+covers = ["CAP-3"]
+after = [5]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (gamepad w Moonlight, Home z pada)"]
+
+[[entry]]
+id = 7
+type = "story"
+title = "Wstrzyknięcie klawisza ze znacznikiem"
+description = "Dodaje Command `SendKey{ vk }` (rekord Core, eksport do JSON Schema i TS, rejestracja w routingu Command pętli jak porty z 2.3) i jego adapter w `Platform/Input`, który wysyła key-down i key-up przez `SendInput` ze znacznikiem MediaStation w `dwExtraInfo`, a polityka ignoruje każde zdarzenie z tym znacznikiem (bez Action, bez połykania), ale nie samą flagę `LLKHF_INJECTED`; znacznik i helper `SendInput` są wspólne dla `TextSink foreground` (epic-osk) i odblokowania foreground symulowanym Alt (epic-windows-audio), a gałąź Orchestratora dla polityki `back: key:<VK>` dokłada epic-moonlight-native."
+verify = "`dotnet test` przechodzi z testami: zdarzenie ze znacznikiem nie daje Action i nie jest połykane, wstrzyknięty `0xAC` z `LLKHF_INJECTED` bez znacznika daje Action Home, a `SendKey` serializuje się w kopercie i jest w eksporcie schematów."
+covers = ["CAP-3"]
+after = [6]
+hitl = false
+risk = "low"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (własne SendInput)", "architecture-mediastation/architecture-mediastation.md, AD-9 (TextSink foreground)"]
+
+[[entry]]
+id = 8
+type = "story"
+title = "Pointer: hook myszy i ClipCursor w osk"
+description = "Dodaje na wątku Input hook `WH_MOUSE_LL`, a w polityce decyzję według `pointer` z lokalnej kopii routingu: połknięcie ruchu, kliknięć i kółka (`blocked`) albo przepuszczenie (`allowed`), oraz opcjonalne pole `clipHwnd` w `SetInputRouting` (ostatni parametr z domyślnym `null`, kod epiki 2 się nie zmienia), z którym w trybie `osk` InputHub ogranicza kursor do prostokąta okna (`ClipCursor`), połyka kliknięcia poza nim i zwalnia ograniczenie przy każdej zmianie trybu; ukrycie kursora zostaje w CSS shella i PageRuntime, a wysyłanie `clipHwnd` dokłada epic-osk."
+verify = "`dotnet test` przechodzi z testami polityki pointer: połknięcie dla `blocked`, przepuszczenie dla `allowed`, połknięcie kliknięcia poza prostokątem `clipHwnd` w `osk`, zwolnienie clipu po przejściu na `shell`, a `SetInputRouting` bez `clipHwnd` deserializuje się jak dotąd."
+covers = ["CAP-3"]
+after = [7]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (kolumna Mysz/żyroskop)", "ux-mediastation/EXPERIENCE.md, Interaction Primitives (Pointer)"]
+
+[[entry]]
+id = 9
+type = "story"
+title = "Home zawsze: zawieszony UI i skrypt S10"
+description = "Dodaje zmienną środowiskową `MEDIASTATION_DEBUG_HANG_UI=<s>`, działającą w każdym buildzie, która po starcie blokuje wątek UI na podany czas i zostawia `warn debugHangUi {seconds}`, oraz skrypt `tools/check-home-s10.ps1`, który jak `spike/helpers/s10-run.ps1` wysuwa po kolei Edge, Moonlight (borderless), pulpit i zawieszony shell, przed każdym z 4 naciśnięć na cel daje sygnał dźwiękowy, czyta log i liczy wynik X/16 (sukces: dokładnie jedna `action {kind: home}` i żadne nowe okno przeglądarki), plus osobny przebieg „shell na wierzchu, niezawieszony”; logikę liczenia wyniku sprawdza self-test na fixture logu."
+verify = "Self-test skryptu na zapisanym fixture logu (`-SelfTest`) daje oczekiwany wynik X/16 dla przypadków z brakującą, podwójną i poprawną `action home`, a test w Core parsowania `MEDIASTATION_DEBUG_HANG_UI` daje brak blokady dla braku zmiennej, `0` i wartości niepoprawnej oraz czas blokady dla liczby sekund."
+covers = ["CAP-3"]
+after = [8]
+hitl = false
+risk = "medium"
+references = ["research-browser-control-for-streaming-services/digests/spike-um760.md, claims S10", "../../spike/spike-results.md, S10 (przebieg rozstrzygający)", "../../spike/helpers/s10-run.ps1"]
+
+[[entry]]
+id = 10
+type = "story"
+title = "Refactor sweep"
+description = "Sprząta kod epiki: zakresem są findings z dyspozycją `defer` w planach stories 1–9, które dotyczą kodu tej epiki, bez zmiany zachowania; scope pushed out z innych stories nie wchodzi."
+verify = "`dotnet test` przechodzi, a build Release self-contained przechodzi."
+covers = ["CAP-3"]
+after = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+hitl = false
+risk = "low"

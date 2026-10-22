@@ -19,7 +19,10 @@ id = 3
 slug = "epic-input"
 title = "Remote, keyboard & gamepad input"
 covers = ["CAP-3"]
-after = [{ epic = 1, needs = "rekordy Action i SetInputRouting, schemat input.json, logger, wejście CLI dla --calibrate-input" }]
+after = [
+  { epic = 1, needs = "rekordy Action i SetInputRouting, schemat input.json, logger, wejście CLI dla --calibrate-input" },
+  { epic = 2, needs = "pętla i kolejka Orchestratora (2.1), Platform/ i composition root (2.2), porty i adapter tylko-log SetInputRouting (2.3)" },
+]
 
 [[epic]]
 id = 4
@@ -39,7 +42,7 @@ title = "Windows & audio focus"
 covers = ["CAP-4", "CAP-5"]
 after = [
   { epic = 2, needs = "AppWindowAttached i ForegroundChanged obsługiwane w Orchestratorze" },
-  { epic = 3, needs = "Action Home z InputHub" },
+  { epic = 3, needs = "Action Home z InputHub; znacznik dwExtraInfo i helper SendInput (3.7) dla odblokowania foreground symulowanym Alt" },
   { epic = 4, needs = "okno shella z ekranem głównym (wspólny kod Shell host)" },
   { epic = 6, needs = "story 1 BrowserHost: flaga trybu okna przeglądarki" },
 ]
@@ -72,7 +75,7 @@ slug = "epic-osk"
 title = "On-screen keyboard (OSK)"
 covers = ["CAP-9"]
 after = [
-  { epic = 3, needs = "tryb osk w routingu, pointer i ClipCursor, Action Keyboard z mapowaniem z input.json" },
+  { epic = 3, needs = "tryb osk w routingu (3.5), pointer i ClipCursor z clipHwnd w SetInputRouting (3.8), Action Keyboard z mapowaniem z input.json (3.3), znacznik dwExtraInfo i helper SendInput dla TextSink foreground (3.7)" },
   { epic = 5, needs = "WindowManager dla nakładki topmost WS_EX_NOACTIVATE" },
   { epic = 6, needs = "story 1: flaga trybu okna; Input.insertText" },
   { epic = 7, needs = "textFocus z drivera i obsługa komunikatu osk w PageRuntime" },
@@ -96,7 +99,7 @@ title = "Moonlight & native apps"
 covers = ["CAP-10", "CAP-5", "CAP-9"]
 after = [
   { epic = 2, needs = "cykl życia i adopcja przez ProbeExisting" },
-  { epic = 3, needs = "routing app + moonlight/native, polityka back, kombinacja Home z pada" },
+  { epic = 3, needs = "routing app + moonlight/native (3.5), SendKey ze znacznikiem dla polityki back: key:<VK> (3.7; gałąź Orchestratora tutaj), kombinacja Home z pada (3.6)" },
   { epic = 4, needs = "kafelki i AppMenu" },
   { epic = 5, needs = "WindowManager i AudioRouter" },
   { epic = 7, needs = "ścieżka pauzy Netflixa dla produktowego sprawdzenia audio" },
