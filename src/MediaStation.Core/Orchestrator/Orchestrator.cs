@@ -35,6 +35,7 @@ public sealed class Orchestrator
     private long _rev;
     private long _focusSeq;
     private long _cmdId;
+    private long _transitionId;
     private long _timerId;
     private long _epoch;
     private FocusRequest? _focus;
@@ -96,11 +97,13 @@ public sealed class Orchestrator
     }
 
     /// <summary>
-    /// Ekran główny z nowym <c>seq</c> fokusu. Story 7 (sondowanie istniejących hostów) dokłada osobną
-    /// gałąź <c>switch</c>, nie warunek tutaj.
+    /// Ekran główny z nowym <c>seq</c> fokusu i nowym <c>transitionId</c>: kolejna decyzja o pierwszym planie
+    /// zastępuje poprzednią, więc spóźniony <see cref="AppWindowAttached"/> po wybudzeniu nie wchodzi na wierzch.
+    /// Story 7 (sondowanie istniejących hostów) dokłada osobną gałąź <c>switch</c>, nie warunek tutaj.
     /// </summary>
     private OrchestratorResult OnDefaultFocus(IReadOnlyList<Command>? commands = null)
     {
+        NextTransitionId();
         _focusSeq++;
         _focus = new FocusRequest(FocusRequest.DefaultTarget, _focusSeq);
         return new OrchestratorResult(commands ?? Array.Empty<Command>(), Snapshot());
@@ -108,8 +111,10 @@ public sealed class Orchestrator
 
     /// <summary>
     /// Wybór kafelka uruchamia aplikację w <c>NotRunning</c> (<c>cmdId</c> zostaje w korelacji startu) i planuje
-    /// timeout <c>Starting</c> na <c>startingTimeout</c>, albo przywraca ją z <c>Background</c>. Przełączanie między
-    /// dwiema żywymi aplikacjami i adopcję (story 6/7) dokładają osobne gałęzie.
+    /// timeout <c>Starting</c> na <c>startingTimeout</c>, albo przywraca ją z <c>Background</c>. Start jest decyzją
+    /// o pierwszym planie, więc przed <c>Starting</c> aplikacja dostaje bieżący <c>transitionId</c>; jeśli w międzyczasie
+    /// zapadnie nowsza decyzja (Home, wybudzenie), spóźnione okno nie wejdzie na wierzch. Przełączanie między dwiema
+    /// żywymi aplikacjami i adopcję (story 6/7) dokładają osobne gałęzie.
     /// </summary>
     private OrchestratorResult OnLaunchApp(LaunchApp launch)
     {
@@ -129,6 +134,7 @@ public sealed class Orchestrator
         }
 
         var cmdId = NextCmdId();
+        app.ForegroundTransition = NextTransitionId();
         app.State = AppLifecycleState.Starting;
         _pendingStarts.Add(cmdId, app.AppId);
         return new OrchestratorResult([new StartApp(cmdId, app.AppId), ScheduleStartTimeout(app.AppId)], Snapshot());
@@ -137,7 +143,8 @@ public sealed class Orchestrator
     /// <summary>
     /// Powrót z tła: proces żyje, więc wystarczą <see cref="ActivateWindow"/> i routing wejścia aplikacji.
     /// Guard „inna aplikacja w <c>Foreground</c>/<c>Starting</c>” chroni niezmiennik jednej aplikacji
-    /// na pierwszym planie; politykę przełączania ustala story 6.
+    /// na pierwszym planie; politykę przełączania ustala story 6. Powrót jest nową decyzją o pierwszym planie,
+    /// więc podbija <c>transitionId</c> i zapisuje je w aplikacji.
     /// </summary>
     private OrchestratorResult OnResume(AppState app, long hwnd)
     {
@@ -146,6 +153,7 @@ public sealed class Orchestrator
             return OrchestratorResult.None;
         }
 
+        app.ForegroundTransition = NextTransitionId();
         app.State = AppLifecycleState.Foreground;
         var activate = new ActivateWindow(NextCmdId(), hwnd);
         var routing = new SetInputRouting(NextCmdId(), InputMode.App, app.Type, app.Pointer, NextEpoch());
@@ -156,7 +164,11 @@ public sealed class Orchestrator
     /// Home z pierwszego planu: aplikacja schodzi do <c>Background</c>, shell wraca na wierzch, a InputHub
     /// dostaje tryb <c>shell</c>. Kolejność komend jest istotna (AD-5/AD-15): najpierw minimalizacja,
     /// potem <see cref="ShowShell"/>, na końcu routing. Fokusu nie zmieniamy — UI sam wraca na ostatni kafelek.
-    /// Home bez aplikacji w <c>Foreground</c> (także w <c>Starting</c>/<c>Stopping</c>) jest ignorowany.
+    /// Home w trakcie <c>Starting</c> pokazuje od razu tylko shell: aplikacja zostaje <c>Starting</c> bez fokusu,
+    /// bez routingu i bez anulowania timeoutu, a okno, które pojawi się później, dostanie kompensację w
+    /// <see cref="OnAppWindowAttached"/>. Home jest decyzją o pierwszym planie także wtedy, gdy nie ma czego chować
+    /// (np. aplikacja w <c>Stopping</c>), więc zawsze podbija <c>transitionId</c>: restart podjęty wcześniej
+    /// nie wróci na wierzch po potwierdzonym stopie.
     /// </summary>
     private OrchestratorResult OnHome(ActionMessage action)
     {
@@ -165,23 +177,38 @@ public sealed class Orchestrator
             return OrchestratorResult.None;
         }
 
+        NextTransitionId();
+
         var app = _apps.Find(candidate => candidate.State == AppLifecycleState.Foreground);
-        if (app?.Hwnd is not { } hwnd)
+        if (app is not null)
+        {
+            if (app.Hwnd is not { } hwnd)
+            {
+                return OrchestratorResult.None;
+            }
+
+            app.State = AppLifecycleState.Background;
+            var minimize = new MinimizeWindow(NextCmdId(), hwnd);
+            var showShell = new ShowShell(NextCmdId());
+            var routing = new SetInputRouting(NextCmdId(), InputMode.Shell, null, PointerPolicy.Blocked, NextEpoch());
+            return new OrchestratorResult([minimize, showShell, routing], Snapshot());
+        }
+
+        if (!_apps.Exists(candidate => candidate.State == AppLifecycleState.Starting))
         {
             return OrchestratorResult.None;
         }
 
-        app.State = AppLifecycleState.Background;
-        var minimize = new MinimizeWindow(NextCmdId(), hwnd);
-        var showShell = new ShowShell(NextCmdId());
-        var routing = new SetInputRouting(NextCmdId(), InputMode.Shell, null, PointerPolicy.Blocked, NextEpoch());
-        return new OrchestratorResult([minimize, showShell, routing], Snapshot());
+        return new OrchestratorResult([new ShowShell(NextCmdId())], Snapshot());
     }
 
     /// <summary>
-    /// Okno po starcie daje <c>Foreground</c>: aktywacja okna i routing wejścia według tabeli AD-8.
-    /// <c>hwnd</c> zostaje w stanie aplikacji, bo Home minimalizuje po nim okno, a powrót z tła je aktywuje.
-    /// Poza <c>Starting</c> fakt jest ignorowany; adopcję (story 7) dokłada osobna gałąź.
+    /// Okno po starcie daje <c>Foreground</c>, gdy decyzja o starcie wciąż jest bieżąca: aktywacja okna i routing
+    /// wejścia według tabeli AD-8. Gdy w międzyczasie zapadła nowsza decyzja (Home, wybudzenie), okno dostaje
+    /// kompensację: <see cref="MinimizeWindow"/> i <c>Background</c> bez <see cref="ActivateWindow"/> i bez routingu,
+    /// bo shell ma zostać na wierzchu (AD-14). Timeout <c>Starting</c> jest wtedy zdejmowany, a zapisane <c>hwnd</c>
+    /// pozwala wrócić przez <c>LaunchApp</c>. Poza <c>Starting</c> fakt jest ignorowany; adopcję (story 7) dokłada
+    /// osobna gałąź.
     /// </summary>
     private OrchestratorResult OnAppWindowAttached(AppWindowAttached attached)
     {
@@ -190,8 +217,20 @@ public sealed class Orchestrator
             return OrchestratorResult.None;
         }
 
-        app.State = AppLifecycleState.Foreground;
         app.Hwnd = attached.Hwnd;
+        if (app.ForegroundTransition != _transitionId)
+        {
+            app.State = AppLifecycleState.Background;
+            var compensating = new List<Command> { new MinimizeWindow(NextCmdId(), attached.Hwnd) };
+            if (CancelStartTimeout(app.AppId) is { } staleTimer)
+            {
+                compensating.Add(staleTimer);
+            }
+
+            return new OrchestratorResult(compensating, Snapshot());
+        }
+
+        app.State = AppLifecycleState.Foreground;
         var activate = new ActivateWindow(NextCmdId(), attached.Hwnd);
         var routing = new SetInputRouting(NextCmdId(), InputMode.App, app.Type, app.Pointer, NextEpoch());
         var commands = new List<Command> { activate, routing };
@@ -208,6 +247,8 @@ public sealed class Orchestrator
     /// <summary>
     /// Zamknięcie albo restart aplikacji z <c>Background</c> albo <c>Failed</c>: Orchestrator przechodzi w <c>Stopping</c>
     /// i wysyła <c>StopApp</c> z <c>cmdId</c> w korelacji stopu, a na koniec batcha planuje timeout <c>Stopping</c>.
+    /// Restart jest decyzją o pierwszym planie podjętą już tutaj: nowe <c>transitionId</c> powstaje w chwili decyzji
+    /// i jedzie w <see cref="PendingStop"/>, więc Home albo wybudzenie w trakcie <c>Stopping</c> wygrywa z restartem.
     /// <c>Failed</c> wychodzi więc wyłącznie przez stop: potwierdzony stop kończy się <c>NotRunning</c> albo nowym
     /// <c>Starting</c>. Poza tymi stanami intencja jest ignorowana, podobnie gdy innemu zadaniu należy się pierwszy
     /// plan: restart skończyłby się w <c>Starting</c> → <c>Foreground</c>, czyli w dwóch aplikacjach naraz.
@@ -222,8 +263,9 @@ public sealed class Orchestrator
         }
 
         var cmdId = NextCmdId();
+        var transitionId = restart ? NextTransitionId() : 0;
         app.State = AppLifecycleState.Stopping;
-        _pendingStops.Add(cmdId, new PendingStop(app.AppId, restart));
+        _pendingStops.Add(cmdId, new PendingStop(app.AppId, restart, transitionId));
         return new OrchestratorResult(
             [new StopApp(cmdId, app.AppId), ScheduleTimeout(_stopTimers, app.AppId, _stoppingTimeout)],
             Snapshot());
@@ -349,8 +391,9 @@ public sealed class Orchestrator
     /// a korelacje startu i stopu przepadają — spóźniony wynik startu albo stopu nie może już zmienić stanu.
     /// Timeout <c>Starting</c> jest anulowany ostatnią komendą batcha, bo zegar nie ma już czego pilnować.
     /// Awaria na pierwszym planie pokazuje shell i oddaje mu wejście (AD-5/AD-15), a fokus z nowym <c>seq</c>
-    /// wskazuje kafelek, który padł (AD-16). Kolejność komend jest istotna: najpierw <see cref="ShowShell"/>,
-    /// potem routing, na końcu timer.
+    /// wskazuje kafelek, który padł (AD-16); to także decyzja o pierwszym planie, więc dostaje nowe
+    /// <c>transitionId</c>. Kolejność komend jest istotna: najpierw <see cref="ShowShell"/>, potem routing,
+    /// na końcu timer.
     /// </summary>
     private OrchestratorResult EnterFailed(AppState app, bool wasForeground)
     {
@@ -362,6 +405,7 @@ public sealed class Orchestrator
         var commands = new List<Command>();
         if (wasForeground)
         {
+            NextTransitionId();
             commands.Add(new ShowShell(NextCmdId()));
             commands.Add(new SetInputRouting(NextCmdId(), InputMode.Shell, null, PointerPolicy.Blocked, NextEpoch()));
             _focus = new FocusRequest(app.AppId, ++_focusSeq);
@@ -465,7 +509,9 @@ public sealed class Orchestrator
 
     /// <summary>
     /// Wspólny koniec stopu: restart startuje aplikację od nowa (i zdejmuje timeout <c>Stopping</c> na końcu batcha),
-    /// zamknięcie kończy się w <c>NotRunning</c> z samym anulowaniem timeoutu <c>Stopping</c>.
+    /// zamknięcie kończy się w <c>NotRunning</c> z samym anulowaniem timeoutu <c>Stopping</c>. Restart używa
+    /// <c>transitionId</c> z chwili decyzji w <see cref="OnStop"/>, nie z potwierdzenia stopu: inaczej stop
+    /// dokończony po Home albo wybudzeniu wyniósłby aplikację na wierzch nad shellem.
     /// </summary>
     private OrchestratorResult OnStopped(PendingStop stop)
     {
@@ -485,6 +531,7 @@ public sealed class Orchestrator
         }
 
         var cmdId = NextCmdId();
+        app.ForegroundTransition = stop.TransitionId;
         app.State = AppLifecycleState.Starting;
         _pendingStarts.Add(cmdId, app.AppId);
         var restartCommands = new List<Command> { new StartApp(cmdId, app.AppId), ScheduleStartTimeout(app.AppId) };
@@ -532,6 +579,12 @@ public sealed class Orchestrator
 
     private long NextCmdId() => ++_cmdId;
 
+    /// <summary>
+    /// Kolejny wewnętrzny <c>transitionId</c> decyzji o pierwszym planie. Id nie trafia do kontraktów: rozstrzyga
+    /// tylko, która decyzja jest bieżąca (AD-14), a „nowsza” znaczy „większa”.
+    /// </summary>
+    private long NextTransitionId() => ++_transitionId;
+
     private long NextEpoch() => ++_epoch;
 
     /// <summary>Typ i polityka wskaźnika z rekordu <c>apps.json</c>, z których żyje routing i mapa routera (AD-11).</summary>
@@ -557,8 +610,19 @@ public sealed class Orchestrator
 
         /// <summary>Uchwyt okna z <see cref="AppWindowAttached"/>; <c>null</c> po zamknięciu, restarcie albo wejściu w <c>Failed</c>.</summary>
         public long? Hwnd { get; set; }
+
+        /// <summary>
+        /// <c>transitionId</c> decyzji, która miała wprowadzić aplikację na pierwszy plan (start, powrót z tła,
+        /// restart); <c>0</c> tylko dopóki żadna taka decyzja nie zapadła, bo pole nie jest zerowane przy wyjściu
+        /// ze stanu. <see cref="OnAppWindowAttached"/> porównuje je z bieżącym licznikiem: każda różnica znaczy,
+        /// że w międzyczasie zapadła nowsza decyzja (Home, wybudzenie) i okno dostaje kompensację, a nie aktywację.
+        /// </summary>
+        public long ForegroundTransition { get; set; }
     }
 
-    /// <summary>Korelacja <c>cmdId → aplikacja</c> dla <see cref="StopApp"/>; <c>Restart</c> wybiera stan po stopie.</summary>
-    private sealed record PendingStop(string AppId, bool Restart);
+    /// <summary>
+    /// Korelacja <c>cmdId → aplikacja</c> dla <see cref="StopApp"/>; <c>Restart</c> wybiera stan po stopie,
+    /// a <see cref="TransitionId"/> niesie decyzję o pierwszym planie z chwili <see cref="OnStop"/> (<c>0</c> dla zamknięcia).
+    /// </summary>
+    private sealed record PendingStop(string AppId, bool Restart, long TransitionId);
 }

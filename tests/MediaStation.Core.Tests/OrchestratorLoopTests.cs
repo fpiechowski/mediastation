@@ -290,6 +290,74 @@ public class OrchestratorLoopTests
         Assert.Equal(snapshots[4].FocusRequest, snapshots[5].FocusRequest);
     }
 
+    /// <summary>
+    /// Home w trakcie <c>Starting</c> dochodzi do wykonawców jako <c>ShowShell</c>, a spóźnione
+    /// <c>AppWindowAttached</c> jako kompensujące <c>MinimizeWindow</c> z anulowaniem terminu startu:
+    /// snapshot pokazuje <c>Background</c>, a minięty deadline nie wprowadza <c>Failed</c>.
+    /// </summary>
+    [Fact]
+    public void Home_while_starting_minimizes_late_window_and_cancels_start_timeout()
+    {
+        var time = new FakeTimeProvider(T0);
+        var log = new RecordingLog();
+        var published = new ConcurrentQueue<ShellSnapshot>();
+        var dispatched = new ConcurrentQueue<Command>();
+        OrchestratorLoop? postsTo = null;
+        var hosts = new Dictionary<AppType, IAppHostPort>
+        {
+            [AppType.Web] = new SilentHost(),
+            [AppType.Moonlight] = new SilentHost(),
+            [AppType.Native] = new SilentHost(),
+        };
+        using var timers = new TimerScheduler(time, message => postsTo?.Post(message));
+        var router = new CommandRouter(
+            new Dictionary<string, AppType>(StringComparer.Ordinal) { ["netflix"] = AppType.Web },
+            hosts,
+            new LogWindowManagerPort(log),
+            new LogInputRoutingPort(log),
+            timers,
+            log);
+        using var loop = new OrchestratorLoop(
+            new CoreOrchestrator(TwoApps(), time),
+            batch =>
+            {
+                foreach (var command in batch)
+                {
+                    dispatched.Enqueue(command);
+                }
+
+                router.Dispatch(batch);
+            },
+            published.Enqueue,
+            log);
+        postsTo = loop;
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        loop.Post(new LaunchApp("netflix"));
+        WaitFor(() => published.Count >= 2);
+        loop.Post(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        WaitFor(() => published.Count >= 3);
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        WaitFor(() => published.Count >= 4);
+
+        var snapshots = published.ToArray();
+        Assert.Equal(AppLifecycleState.Starting, snapshots[2].Apps.Single(app => app.AppId == "netflix").State);
+        Assert.Equal(snapshots[2].FocusRequest, snapshots[3].FocusRequest);
+        Assert.Contains(dispatched, command => command is MinimizeWindow minimize && minimize.Hwnd == 0x1A2B);
+        Assert.Contains(dispatched, command => command is CancelTimer);
+        Assert.DoesNotContain(dispatched, command => command is ActivateWindow);
+
+        // Anulowany timeout nie odpala: po 30 s wybudzenie publikuje kolejny snapshot bez `Failed` pomiędzy.
+        time.Advance(TimeSpan.FromSeconds(30));
+        loop.Post(new SystemResumed("PBT_APMRESUMEAUTOMATIC"));
+        WaitFor(() => published.Count >= 5);
+
+        var afterDeadline = published.ToArray();
+        Assert.Equal(5, afterDeadline.Length);
+        Assert.Equal(AppLifecycleState.Background, afterDeadline[4].Apps.Single(app => app.AppId == "netflix").State);
+    }
+
     [Fact]
     public void Post_after_dispose_is_a_noop()
     {

@@ -19,3 +19,11 @@ source_spec: `epic-orchestrator-lifecycle/story-failed-wejscie-wyjscie-przez-app
 severity: medium
 reason: `ProcessExited` carries only `appId`. After `CommandCompleted{StopApp}` the stop correlation is consumed, the Orchestrator moves to `Starting` and sends `StartApp`, and a second exit fact from the host (exit watcher next to the command confirmation) is now treated as a failure of the new start. Settled by host story 2.9 guaranteeing that `ProcessExited` refers to the current process (pid in the Event, or dedupe by `rootPid`), plus a loop test with two facts for one stop.
 status: open
+
+### DW-4: Spóźniony AppWindowAttached po timeoucie Starting jest ignorowany, a Hwnd zdjęte w Failed, więc okno, które pojawi się po terminie, może zostać na wierzchu nad shellem bez kompensującego
+origin: spec-deferred 794dc1866536
+location: src/MediaStation.Core/Orchestrator/Orchestrator.cs:215
+source_spec: `epic-orchestrator-lifecycle/story-transitionid-i-home-w-trakcie-starting-plan.md`
+severity: medium
+reason: Guard `app.State != AppLifecycleState.Starting` w `OnAppWindowAttached` (Orchestrator.cs:215) i `app.Hwnd = null` w `EnterFailed` (Orchestrator.cs:400) pochodzą ze story 5 i nie zmieniły się w tej story; zmiana domyka kompensację tylko dla attachu w Starting. Skutek potwierdzony sondą: Home w Starting → TimerElapsed → AppWindowAttached daje brak komend i brak snapshotu, a kolejny Home nic nie robi. Rozwiązanie wymaga decyzji, czy Failed zachowuje Hwnd i minimalizuje spóźnione okno, czy zostawia to hostowi — to osobna story.
+status: open
