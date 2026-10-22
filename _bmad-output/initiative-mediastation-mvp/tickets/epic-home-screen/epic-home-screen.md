@@ -40,6 +40,7 @@ Pierwsze demo na TV: ekran główny obsługiwany pilotem, zgodny z `DESIGN.md`; 
 ## Notes
 
 - Decision: przed startem tej epiki ma być zrobiony bug `backlog/bug-launch-przy-aplikacji-na-pierwszym-planie-daje-dwa-foreground.md` (F6 z retro epiki 2); dopiero tu da się wybrać kafelek przy aplikacji na wierzchu (2026-10-22).
+- Update: warunek powyżej spełniony — bug zamknięty jako done, poprawka w `21633a2` (launch przy innej aplikacji na pierwszym planie jest odrzucany), 2026-10-22.
 - Decision: linię success CAP-6 „Nowa karta »Do oceny« nie kradnie fokusu” weryfikuje epic-do-oceny; ta epika dostarcza model fokusu kluczowany stabilnymi id (2026-10-18).
 - Decision: przekazanie Actions z Orchestratora do Shell w trybie `shell` (gałąź w Orchestratorze i komunikat przez most) dostarcza ta epika; epic-orchestrator-lifecycle obsługuje z Actions tylko Home (inception epiki 2, 2026-10-21).
 - Waits on epic-foundation-contracts, epic-orchestrator-lifecycle, epic-input because: host Shell, snapshot z `focusRequest`, Actions z `phase: long`.
