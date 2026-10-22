@@ -19,7 +19,7 @@ namespace MediaStation.Core.Tests;
 /// </summary>
 public class OrchestratorLoopTests
 {
-    /// <summary>Punkt startowy zegara; <c>startingTimeout</c> z domyślnych <see cref="Settings"/> to 30 s.</summary>
+    /// <summary>Punkt startowy zegara; <c>startingTimeout</c> z domyślnych <see cref="Settings"/> to 30 s, a <c>stoppingTimeout</c> — 45 s.</summary>
     private static readonly DateTimeOffset T0 = new(2026, 10, 22, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
@@ -240,6 +240,54 @@ public class OrchestratorLoopTests
         Assert.Equal(3, snapshots[2].Rev);
         Assert.Equal(AppLifecycleState.Failed, snapshots[2].Apps.Single(app => app.AppId == "netflix").State);
         Assert.Equal(snapshots[1].FocusRequest, snapshots[2].FocusRequest);
+    }
+
+    [Fact]
+    public void Stop_timeout_without_host_response_publishes_failed_snapshot_without_new_focus()
+    {
+        var time = new FakeTimeProvider(T0);
+        var log = new RecordingLog();
+        var published = new ConcurrentQueue<ShellSnapshot>();
+        OrchestratorLoop? postsTo = null;
+        var hosts = new Dictionary<AppType, IAppHostPort>
+        {
+            [AppType.Web] = new SilentHost(),
+            [AppType.Moonlight] = new SilentHost(),
+            [AppType.Native] = new SilentHost(),
+        };
+        using var timers = new TimerScheduler(time, message => postsTo?.Post(message));
+        var router = new CommandRouter(
+            new Dictionary<string, AppType>(StringComparer.Ordinal) { ["netflix"] = AppType.Web },
+            hosts,
+            new LogWindowManagerPort(log),
+            new LogInputRoutingPort(log),
+            timers,
+            log);
+        using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
+        postsTo = loop;
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        loop.Post(new LaunchApp("netflix"));
+        WaitFor(() => published.Count >= 2);
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        WaitFor(() => published.Count >= 3);
+        loop.Post(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        WaitFor(() => published.Count >= 4);
+        loop.Post(new CloseApp("netflix"));
+        WaitFor(() => published.Count >= 5);
+        Assert.Equal(
+            AppLifecycleState.Stopping,
+            published.ElementAt(4).Apps.Single(app => app.AppId == "netflix").State);
+
+        // Host przyjmuje StopApp bez odpowiedzi: tylko zegar może wyprowadzić aplikację ze stanu Stopping.
+        time.Advance(TimeSpan.FromSeconds(45));
+        WaitFor(() => published.Count >= 6);
+
+        var snapshots = published.ToArray();
+        Assert.Equal(6, snapshots[5].Rev);
+        Assert.Equal(AppLifecycleState.Failed, snapshots[5].Apps.Single(app => app.AppId == "netflix").State);
+        Assert.Equal(snapshots[4].FocusRequest, snapshots[5].FocusRequest);
     }
 
     [Fact]

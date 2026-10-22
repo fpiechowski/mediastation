@@ -37,7 +37,7 @@ public abstract record TimerCommand(long CmdId) : Command(CmdId);
 
 /// <summary>
 /// Jednorazowy timer na <see cref="Due"/>. <see cref="Owner"/> to aplikacja, do której należy termin
-/// (korelacja timeoutu <c>Starting</c> żyje w Orchestratorze); duplikat <see cref="TimerId"/> zastępuje poprzedni timer.
+/// (korelacja timeoutów <c>Starting</c> i <c>Stopping</c> żyje w Orchestratorze); duplikat <see cref="TimerId"/> zastępuje poprzedni timer.
 /// </summary>
 public sealed record ScheduleTimer(long CmdId, long TimerId, string Owner, DateTimeOffset Due) : TimerCommand(CmdId);
 

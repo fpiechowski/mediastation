@@ -108,6 +108,7 @@ public class ConfigValidationTests
         Assert.Equal(new Settings(), config.Settings);
         Assert.Equal(7, config.Settings.RatingPendingDays);
         Assert.Equal(30, config.Settings.StartingTimeout);
+        Assert.Equal(45, config.Settings.StoppingTimeout);
         Assert.Equal(15, config.Settings.CdpConnectTimeout);
         Assert.Equal(30, config.Settings.CdpReconnectTimeout);
         Assert.Equal("fpiechowski/mediastation", config.Settings.Update.Repo);
@@ -121,7 +122,7 @@ public class ConfigValidationTests
                 Web(extra: """, "pointer": "allowed" """),
                 """{ "type": "moonlight", "id": "pc", "category": "game", "title": "PC", "icon": "i", "host": "h", "app": "a", "back": "home", "pointer": "blocked" }""",
                 """{ "type": "native", "id": "plex", "category": "video", "title": "P", "icon": "i", "exe": "p.exe", "args": ["--tv", "-f"], "back": "key:Escape" }"""),
-            settings: """{ "ratingPendingDays": 3, "startingTimeout": 60, "cdpConnectTimeout": 20, "cdpReconnectTimeout": 45, "update": { "repo": "someone/fork" } }""");
+            settings: """{ "ratingPendingDays": 3, "startingTimeout": 60, "stoppingTimeout": 50, "cdpConnectTimeout": 20, "cdpReconnectTimeout": 45, "update": { "repo": "someone/fork" } }""");
 
         Assert.Equal(PointerPolicy.Allowed, Assert.IsType<WebApp>(config.Apps.Apps[0]).Pointer);
         var moonlight = Assert.IsType<MoonlightApp>(config.Apps.Apps[1]);
@@ -135,6 +136,7 @@ public class ConfigValidationTests
             {
                 RatingPendingDays = 3,
                 StartingTimeout = 60,
+                StoppingTimeout = 50,
                 CdpConnectTimeout = 20,
                 CdpReconnectTimeout = 45,
                 Update = new UpdateSettings { Repo = "someone/fork" },
@@ -630,6 +632,7 @@ public class ConfigValidationTests
     [Theory]
     [InlineData("ratingPendingDays", "0")]
     [InlineData("startingTimeout", "-5")]
+    [InlineData("stoppingTimeout", "0")]
     [InlineData("cdpConnectTimeout", "0")]
     [InlineData("cdpReconnectTimeout", "-1")]
     public void Settings_numbers_must_be_positive(string field, string value)
@@ -637,6 +640,36 @@ public class ConfigValidationTests
         var error = SingleError(settings: $$"""{ "{{field}}": {{value}} }""");
 
         Assert.Equal(new ConfigError(SettingsJson, $"$.{field}", "wartość musi być większa od 0"), error);
+    }
+
+    [Theory]
+    [InlineData("startingTimeout")]
+    [InlineData("stoppingTimeout")]
+    public void Timeout_of_600_seconds_is_accepted(string field)
+    {
+        var config = Loaded(settings: $$"""{ "{{field}}": 600 }""");
+
+        Assert.Equal(600, field == "startingTimeout" ? config.Settings.StartingTimeout : config.Settings.StoppingTimeout);
+    }
+
+    [Theory]
+    [InlineData("startingTimeout")]
+    [InlineData("stoppingTimeout")]
+    public void Timeout_above_600_seconds_is_rejected(string field)
+    {
+        var error = SingleError(settings: $$"""{ "{{field}}": 601 }""");
+
+        Assert.Equal(new ConfigError(SettingsJson, $"$.{field}", "wartość musi być nie większa niż 600"), error);
+    }
+
+    /// <summary>Brak dolnej relacji do 30 s limitu <c>quit</c> Moonlighta: limit żyje w hoście, nie w walidacji.</summary>
+    [Fact]
+    public void Stopping_timeout_needs_no_relation_to_moonlight_quit_limit()
+    {
+        var config = Loaded(settings: """{ "stoppingTimeout": 10 }""");
+
+        Assert.Equal(10, config.Settings.StoppingTimeout);
+        Assert.Equal(30, config.Settings.StartingTimeout);
     }
 
     [Theory]
@@ -840,9 +873,10 @@ public class ConfigValidationTests
         Assert.Null(schema["required"]);
         Assert.False(schema["additionalProperties"]!.GetValue<bool>());
         Assert.Equal(
-            ["ratingPendingDays", "startingTimeout", "cdpConnectTimeout", "cdpReconnectTimeout", "update"],
+            ["ratingPendingDays", "startingTimeout", "stoppingTimeout", "cdpConnectTimeout", "cdpReconnectTimeout", "update"],
             schema["properties"]!.AsObject().Select(p => p.Key));
         Assert.Equal("integer", schema["properties"]!["startingTimeout"]!["type"]!.GetValue<string>());
+        Assert.Equal("integer", schema["properties"]!["stoppingTimeout"]!["type"]!.GetValue<string>());
 
         var update = schema["properties"]!["update"]!;
         Assert.Equal("UpdateSettings", update["title"]!.GetValue<string>());

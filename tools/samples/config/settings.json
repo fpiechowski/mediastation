@@ -1,6 +1,7 @@
 {
   "ratingPendingDays": 7,
   "startingTimeout": 30,
+  "stoppingTimeout": 45,
   "cdpConnectTimeout": 15,
   "cdpReconnectTimeout": 30,
   "update": {

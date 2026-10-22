@@ -28,8 +28,10 @@ public sealed class Orchestrator
     private readonly Dictionary<long, string> _pendingStarts = [];
     private readonly Dictionary<long, PendingStop> _pendingStops = [];
     private readonly Dictionary<long, string> _startTimers = [];
+    private readonly Dictionary<long, string> _stopTimers = [];
     private readonly TimeProvider _time;
     private readonly TimeSpan _startingTimeout;
+    private readonly TimeSpan _stoppingTimeout;
     private long _rev;
     private long _focusSeq;
     private long _cmdId;
@@ -44,6 +46,7 @@ public sealed class Orchestrator
 
         _time = time;
         _startingTimeout = TimeSpan.FromSeconds(config.Settings.StartingTimeout);
+        _stoppingTimeout = TimeSpan.FromSeconds(config.Settings.StoppingTimeout);
         _apps = new List<AppState>(config.Apps.Apps.Count);
         _appsById = new Dictionary<string, AppState>(config.Apps.Apps.Count, StringComparer.Ordinal);
         foreach (var app in config.Apps.Apps)
@@ -204,10 +207,10 @@ public sealed class Orchestrator
 
     /// <summary>
     /// Zamknięcie albo restart aplikacji z <c>Background</c> albo <c>Failed</c>: Orchestrator przechodzi w <c>Stopping</c>
-    /// i wysyła <c>StopApp</c> z <c>cmdId</c> w korelacji stopu. <c>Failed</c> wychodzi więc wyłącznie przez stop:
-    /// potwierdzony stop kończy się <c>NotRunning</c> albo nowym <c>Starting</c>. Poza tymi stanami intencja jest
-    /// ignorowana, podobnie gdy innemu zadaniu należy się pierwszy plan: restart skończyłby się w <c>Starting</c>
-    /// → <c>Foreground</c>, czyli w dwóch aplikacjach naraz.
+    /// i wysyła <c>StopApp</c> z <c>cmdId</c> w korelacji stopu, a na koniec batcha planuje timeout <c>Stopping</c>.
+    /// <c>Failed</c> wychodzi więc wyłącznie przez stop: potwierdzony stop kończy się <c>NotRunning</c> albo nowym
+    /// <c>Starting</c>. Poza tymi stanami intencja jest ignorowana, podobnie gdy innemu zadaniu należy się pierwszy
+    /// plan: restart skończyłby się w <c>Starting</c> → <c>Foreground</c>, czyli w dwóch aplikacjach naraz.
     /// </summary>
     private OrchestratorResult OnStop(string appId, bool restart)
     {
@@ -221,7 +224,9 @@ public sealed class Orchestrator
         var cmdId = NextCmdId();
         app.State = AppLifecycleState.Stopping;
         _pendingStops.Add(cmdId, new PendingStop(app.AppId, restart));
-        return new OrchestratorResult([new StopApp(cmdId, app.AppId)], Snapshot());
+        return new OrchestratorResult(
+            [new StopApp(cmdId, app.AppId), ScheduleTimeout(_stopTimers, app.AppId, _stoppingTimeout)],
+            Snapshot());
     }
 
     /// <summary>
@@ -250,7 +255,7 @@ public sealed class Orchestrator
 
     /// <summary>
     /// Porażka stopu nie jest dowodem, że proces zniknął: stan zostaje <c>Stopping</c>, a korelacja czeka
-    /// na <see cref="ProcessExited"/> (timeout należy do story 11). Nieudany <c>StartApp</c> przenosi aplikację
+    /// na <see cref="ProcessExited"/> albo na timeout <c>Stopping</c>. Nieudany <c>StartApp</c> przenosi aplikację
     /// w <c>Failed</c> także wtedy, gdy okno zdążyło już dać <c>Foreground</c>/<c>Background</c>; porażka komendy
     /// spoza korelacji startu nie zmienia stanu.
     /// </summary>
@@ -314,35 +319,45 @@ public sealed class Orchestrator
     }
 
     /// <summary>
-    /// Timeout <c>Starting</c>: o żywotności terminu decyduje wyłącznie korelacja <c>timerId → appId</c>, więc
-    /// spóźniony <see cref="TimerElapsed"/> po <see cref="AppWindowAttached"/> albo po wejściu w <c>Failed</c>
-    /// nie daje komend ani snapshotu. Żywy termin kończy start w <c>Failed</c> bez shella i fokusu (nie ma okna
-    /// na pierwszym planie). Korelacja znika przed <see cref="EnterFailed"/>, więc timeout nie anuluje sam siebie.
+    /// Timeout <c>Starting</c> albo <c>Stopping</c>: o żywotności terminu decyduje wyłącznie korelacja
+    /// <c>timerId → appId</c>, więc spóźniony <see cref="TimerElapsed"/> po potwierdzonym starcie/stopie,
+    /// po <see cref="AppWindowAttached"/> albo po wejściu w <c>Failed</c> nie daje komend ani snapshotu.
+    /// Żywy termin kończy start albo stop w <c>Failed</c> bez shella i fokusu (nie ma okna na pierwszym planie).
+    /// Korelacja znika przed <see cref="EnterFailed"/>, więc timeout nie anuluje sam siebie.
     /// </summary>
     private OrchestratorResult OnTimerElapsed(TimerElapsed elapsed)
     {
-        if (!_startTimers.Remove(elapsed.TimerId, out var appId))
+        if (_startTimers.Remove(elapsed.TimerId, out var appId))
         {
-            return OrchestratorResult.None;
+            return _appsById.TryGetValue(appId, out var app) && app.State == AppLifecycleState.Starting
+                ? EnterFailed(app, wasForeground: false)
+                : OrchestratorResult.None;
         }
 
-        return _appsById.TryGetValue(appId, out var app) && app.State == AppLifecycleState.Starting
-            ? EnterFailed(app, wasForeground: false)
-            : OrchestratorResult.None;
+        if (_stopTimers.Remove(elapsed.TimerId, out var stoppingAppId))
+        {
+            return _appsById.TryGetValue(stoppingAppId, out var app) && app.State == AppLifecycleState.Stopping
+                ? EnterFailed(app, wasForeground: false)
+                : OrchestratorResult.None;
+        }
+
+        return OrchestratorResult.None;
     }
 
     /// <summary>
     /// Wspólne wejście w <c>Failed</c>: okno po awarii nie jest już pod kontrolą Orchestratora, więc <c>Hwnd</c> znika,
-    /// a korelacje startu przepadają — spóźniony wynik startu nie może już zmienić stanu. Timeout <c>Starting</c>
-    /// jest anulowany ostatnią komendą batcha, bo zegar nie ma już czego pilnować. Awaria na pierwszym planie
-    /// pokazuje shell i oddaje mu wejście (AD-5/AD-15), a fokus z nowym <c>seq</c> wskazuje kafelek, który padł (AD-16).
-    /// Kolejność komend jest istotna: najpierw <see cref="ShowShell"/>, potem routing, na końcu timer.
+    /// a korelacje startu i stopu przepadają — spóźniony wynik startu albo stopu nie może już zmienić stanu.
+    /// Timeout <c>Starting</c> jest anulowany ostatnią komendą batcha, bo zegar nie ma już czego pilnować.
+    /// Awaria na pierwszym planie pokazuje shell i oddaje mu wejście (AD-5/AD-15), a fokus z nowym <c>seq</c>
+    /// wskazuje kafelek, który padł (AD-16). Kolejność komend jest istotna: najpierw <see cref="ShowShell"/>,
+    /// potem routing, na końcu timer.
     /// </summary>
     private OrchestratorResult EnterFailed(AppState app, bool wasForeground)
     {
         app.Hwnd = null;
         app.State = AppLifecycleState.Failed;
         DropPendingStarts(app.AppId);
+        DropPendingStops(app.AppId);
 
         var commands = new List<Command>();
         if (wasForeground)
@@ -379,37 +394,59 @@ public sealed class Orchestrator
     }
 
     /// <summary>
-    /// Planuje timeout <c>Starting</c> na wstrzykniętym zegarze: <c>timerId</c> nadaje wyłącznie Orchestrator,
-    /// a korelacja <c>timerId → appId</c> żyje tutaj, więc spóźniony <see cref="TimerElapsed"/> odpada bez
-    /// zaglądania w stan schedulera. Komenda timera idzie na koniec batcha startu.
+    /// Korelacje stopu aplikacji tracą znaczenie po wejściu w <c>Failed</c>: spóźniony wynik <see cref="StopApp"/>
+    /// nie może zamknąć kafelka w <c>NotRunning</c> ani wystartować go od nowa.
     /// </summary>
-    private ScheduleTimer ScheduleStartTimeout(string appId)
+    private void DropPendingStops(string appId)
+    {
+        var stale = new List<long>();
+        foreach (var (cmdId, pending) in _pendingStops)
+        {
+            if (pending.AppId == appId)
+            {
+                stale.Add(cmdId);
+            }
+        }
+
+        foreach (var cmdId in stale)
+        {
+            _pendingStops.Remove(cmdId);
+        }
+    }
+
+    /// <summary>
+    /// Planuje timeout na wstrzykniętym zegarze: <c>timerId</c> nadaje wyłącznie Orchestrator, a korelacja
+    /// <c>timerId → appId</c> żyje w przekazanej mapie, więc spóźniony <see cref="TimerElapsed"/> odpada bez
+    /// zaglądania w stan schedulera. Komenda timera idzie na koniec batcha. Jeden licznik <c>timerId</c> dla obu
+    /// timeoutów daje globalnie unikalne identyfikatory.
+    /// </summary>
+    private ScheduleTimer ScheduleTimeout(Dictionary<long, string> timers, string appId, TimeSpan timeout)
     {
         var timerId = ++_timerId;
-        _startTimers.Add(timerId, appId);
-        return new ScheduleTimer(NextCmdId(), timerId, appId, _time.GetUtcNow() + _startingTimeout);
+        timers.Add(timerId, appId);
+        return new ScheduleTimer(NextCmdId(), timerId, appId, _time.GetUtcNow() + timeout);
     }
 
     /// <summary>
     /// Zdejmuje korelację timeoutu aplikacji i zwraca komendę anulowania; <c>null</c>, gdy termin już nie żyje
-    /// (np. po <see cref="AppWindowAttached"/> albo po samym timeoucie).
+    /// (np. po <see cref="AppWindowAttached"/>, potwierdzonym stopie albo po samym timeoucie).
     /// </summary>
-    private CancelTimer? CancelStartTimeout(string appId)
+    private CancelTimer? CancelTimeout(Dictionary<long, string> timers, string appId)
     {
-        var timerId = FindStartTimeout(appId);
+        var timerId = FindTimeout(timers, appId);
         if (timerId is not { } id)
         {
             return null;
         }
 
-        _startTimers.Remove(id);
+        timers.Remove(id);
         return new CancelTimer(NextCmdId(), id);
     }
 
-    /// <summary><c>timerId</c> timeoutu <c>Starting</c> dla aplikacji; <c>null</c>, gdy termin już nie żyje.</summary>
-    private long? FindStartTimeout(string appId)
+    /// <summary><c>timerId</c> timeoutu aplikacji w mapie; <c>null</c>, gdy termin już nie żyje.</summary>
+    private static long? FindTimeout(Dictionary<long, string> timers, string appId)
     {
-        foreach (var (timerId, owner) in _startTimers)
+        foreach (var (timerId, owner) in timers)
         {
             if (owner == appId)
             {
@@ -420,7 +457,16 @@ public sealed class Orchestrator
         return null;
     }
 
-    /// <summary>Wspólny koniec stopu: restart startuje aplikację od nowa, zamknięcie kończy się w <c>NotRunning</c>.</summary>
+    /// <summary>Timeout <c>Starting</c> aplikacji na <c>startingTimeout</c>.</summary>
+    private ScheduleTimer ScheduleStartTimeout(string appId) => ScheduleTimeout(_startTimers, appId, _startingTimeout);
+
+    /// <summary>Anulowanie timeoutu <c>Starting</c>; <c>null</c>, gdy termin już nie żyje.</summary>
+    private CancelTimer? CancelStartTimeout(string appId) => CancelTimeout(_startTimers, appId);
+
+    /// <summary>
+    /// Wspólny koniec stopu: restart startuje aplikację od nowa (i zdejmuje timeout <c>Stopping</c> na końcu batcha),
+    /// zamknięcie kończy się w <c>NotRunning</c> z samym anulowaniem timeoutu <c>Stopping</c>.
+    /// </summary>
     private OrchestratorResult OnStopped(PendingStop stop)
     {
         var app = _appsById[stop.AppId];
@@ -429,13 +475,25 @@ public sealed class Orchestrator
         if (!stop.Restart)
         {
             app.State = AppLifecycleState.NotRunning;
-            return new OrchestratorResult([], Snapshot());
+            var commands = new List<Command>();
+            if (CancelTimeout(_stopTimers, app.AppId) is { } cancel)
+            {
+                commands.Add(cancel);
+            }
+
+            return new OrchestratorResult(commands, Snapshot());
         }
 
         var cmdId = NextCmdId();
         app.State = AppLifecycleState.Starting;
         _pendingStarts.Add(cmdId, app.AppId);
-        return new OrchestratorResult([new StartApp(cmdId, app.AppId), ScheduleStartTimeout(app.AppId)], Snapshot());
+        var restartCommands = new List<Command> { new StartApp(cmdId, app.AppId), ScheduleStartTimeout(app.AppId) };
+        if (CancelTimeout(_stopTimers, app.AppId) is { } stopTimeout)
+        {
+            restartCommands.Add(stopTimeout);
+        }
+
+        return new OrchestratorResult(restartCommands, Snapshot());
     }
 
     /// <summary><c>cmdId</c> korelacji stopu dla aplikacji; <c>null</c>, gdy stop nie jest w toku.</summary>

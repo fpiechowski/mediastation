@@ -24,6 +24,12 @@ public static class ConfigValidation
     public const int CdpPortMin = 9220;
     public const int CdpPortMax = 9239;
 
+    /// <summary>
+    /// Polityczna górna granica <c>startingTimeout</c> i <c>stoppingTimeout</c> w sekundach (F18): trzyma oba terminy
+    /// daleko poniżej limitu terminu akceptowanego przez wstrzykiwany zegar, więc scheduler zawsze może je utworzyć.
+    /// </summary>
+    public const int MaxTimeoutSeconds = 600;
+
     public const string UnknownFieldReason = "nieznane pole";
     public const string DuplicateKeyReason = "zduplikowany klucz";
     public const string NullReason = "pole nie może być null";
@@ -346,8 +352,11 @@ public static class ConfigValidation
     {
         CheckPositive(settings.RatingPendingDays, "ratingPendingDays", errors);
         CheckPositive(settings.StartingTimeout, "startingTimeout", errors);
+        CheckPositive(settings.StoppingTimeout, "stoppingTimeout", errors);
         CheckPositive(settings.CdpConnectTimeout, "cdpConnectTimeout", errors);
         CheckPositive(settings.CdpReconnectTimeout, "cdpReconnectTimeout", errors);
+        CheckAtMost(settings.StartingTimeout, MaxTimeoutSeconds, "startingTimeout", errors);
+        CheckAtMost(settings.StoppingTimeout, MaxTimeoutSeconds, "stoppingTimeout", errors);
 
         if (settings.CdpConnectTimeout > 0
             && settings.StartingTimeout > 0
@@ -371,6 +380,14 @@ public static class ConfigValidation
         if (value <= 0)
         {
             errors.Add(JsonErrorPath.Property("$", name), "wartość musi być większa od 0");
+        }
+    }
+
+    private static void CheckAtMost(int value, int max, string name, FileErrors errors)
+    {
+        if (value > max)
+        {
+            errors.Add(JsonErrorPath.Property("$", name), $"wartość musi być nie większa niż {max}");
         }
     }
 }

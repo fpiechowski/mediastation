@@ -2,7 +2,8 @@ namespace MediaStation.Core.Config;
 
 /// <summary>
 /// <c>config/settings.json</c>: wartości polityk (AD-11). Plik jest wymagany, ale każde pole ma wartość domyślną,
-/// więc <c>{}</c> jest poprawne. Czasy w pełnych sekundach, wszystkie liczby &gt; 0.
+/// więc <c>{}</c> jest poprawne. Czasy w pełnych sekundach, wszystkie liczby &gt; 0; <see cref="StartingTimeout"/>
+/// i <see cref="StoppingTimeout"/> nie przekraczają 600 s.
 /// </summary>
 public sealed record Settings
 {
@@ -11,6 +12,9 @@ public sealed record Settings
 
     /// <summary>Timeout stanu <c>Starting</c> w Orchestratorze, w sekundach (AD-14).</summary>
     public int StartingTimeout { get; init; } = 30;
+
+    /// <summary>Timeout stanu <c>Stopping</c> w Orchestratorze, w sekundach (AD-14).</summary>
+    public int StoppingTimeout { get; init; } = 45;
 
     /// <summary>Czas oczekiwania BrowserHost na port CDP, w sekundach; krótszy niż <see cref="StartingTimeout"/> (AD-13).</summary>
     public int CdpConnectTimeout { get; init; } = 15;
