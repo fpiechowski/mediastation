@@ -1,14 +1,18 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Windows.Threading;
 using MediaStation.Core.Contracts;
 using MediaStation.Core.Logging;
+using MediaStation.Core.Orchestrator;
 using Microsoft.Web.WebView2.Core;
 
 namespace MediaStation.App.Shell;
 
 /// <summary>
 /// Most WebView2 postMessage z kopertą <c>{ v, type, payload }</c> (AD-16).
-/// Na <c>ready</c> z UI odsyła najnowszy snapshot; handshake usuwa wyścig nawigacji z pierwszym snapshotem.
+/// <see cref="Publish"/> tylko zapisuje najnowszy snapshot i planuje flush na wątku UI (latest-wins, AD-14);
+/// <c>ready</c> z UI odsyła najnowszy snapshot bez logu, więc handshake usuwa wyścig nawigacji z pierwszą publikacją.
 /// Odrzucone wiadomości trafiają do logu jako <c>bridgeMessageRejected</c>.
 /// </summary>
 public sealed class ShellBridge
@@ -16,13 +20,19 @@ public sealed class ShellBridge
     private const string Src = "shell";
 
     private readonly ILog _log;
+    private readonly Dispatcher _dispatcher;
+    private readonly LatestSnapshotSlot _slot;
     private CoreWebView2? _webView;
-    private ShellSnapshot _snapshot;
 
-    public ShellBridge(ShellSnapshot snapshot, ILog log)
+    public ShellBridge(ShellSnapshot snapshot, ILog log, Dispatcher dispatcher)
     {
-        _snapshot = snapshot;
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(log);
+        ArgumentNullException.ThrowIfNull(dispatcher);
+
+        _slot = new LatestSnapshotSlot(snapshot);
         _log = log;
+        _dispatcher = dispatcher;
     }
 
     public void Attach(CoreWebView2 webView)
@@ -31,11 +41,16 @@ public sealed class ShellBridge
         webView.WebMessageReceived += OnWebMessageReceived;
     }
 
-    /// <summary>Podmienia snapshot (latest-wins) i wysyła go, jeśli UI już działa.</summary>
+    /// <summary>
+    /// Zapisuje najnowszy snapshot i planuje jeden flush na wątku UI. Kolejne wywołania przed flushem
+    /// tylko podmieniają snapshot — wywołujący nigdy nie czeka na UI (AD-14).
+    /// </summary>
     public void Publish(ShellSnapshot snapshot)
     {
-        _snapshot = snapshot;
-        Send();
+        if (_slot.Publish(snapshot))
+        {
+            _dispatcher.BeginInvoke(new global::System.Action(Flush));
+        }
     }
 
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -69,7 +84,30 @@ public sealed class ShellBridge
             return;
         }
 
-        Send();
+        Send(_slot.Latest);
+    }
+
+    /// <summary>Wysyła najnowszy snapshot na wątek UI i loguje jedną publikację na flush.</summary>
+    private void Flush()
+    {
+        if (_slot.TakePending() is not { } pending)
+        {
+            return;
+        }
+
+        Send(pending);
+
+        _log.Info(Src, "snapshotPublished", new Dictionary<string, object?>
+        {
+            ["rev"] = pending.Rev,
+            ["focusRequest"] = pending.FocusRequest is { } focus
+                ? new Dictionary<string, object?>
+                {
+                    ["target"] = focus.Target,
+                    ["seq"] = focus.Seq,
+                }
+                : null,
+        });
     }
 
     private void Reject(int? v, string? type, string reason) =>
@@ -80,8 +118,6 @@ public sealed class ShellBridge
             ["reason"] = reason,
         });
 
-    private void Send()
-    {
-        _webView?.PostWebMessageAsJson(ContractJson.Serialize(Envelope.Snapshot(_snapshot)));
-    }
+    private void Send(ShellSnapshot snapshot) =>
+        _webView?.PostWebMessageAsJson(ContractJson.Serialize(Envelope.Snapshot(snapshot)));
 }

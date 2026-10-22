@@ -9,14 +9,6 @@ namespace MediaStation.Core.Config;
 /// </summary>
 public sealed record AppsConfig(IReadOnlyList<AppEntry> Apps);
 
-/// <summary>Zakładka ekranu głównego, w której stoi kafelek aplikacji (AD-11).</summary>
-public enum AppCategory
-{
-    Video,
-    Audio,
-    Game,
-}
-
 /// <summary>Przeglądarka aplikacji webowej; tabela „serwis → przeglądarka” żyje w <c>apps.json</c> (AD-11).</summary>
 public enum BrowserKind
 {

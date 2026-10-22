@@ -14,9 +14,28 @@ public static class MessageTypes
     public static IReadOnlyList<Type> All { get; } =
     [
         typeof(Action),
+        typeof(LaunchApp),
+        typeof(CloseApp),
+        typeof(RestartApp),
         typeof(SetInputRouting),
+        typeof(StartApp),
+        typeof(StopApp),
+        typeof(ProbeExisting),
+        typeof(RenewSession),
+        typeof(ActivateWindow),
+        typeof(MinimizeWindow),
+        typeof(ShowShell),
+        typeof(ScheduleTimer),
+        typeof(CancelTimer),
         typeof(CommandCompleted),
         typeof(CommandFailed),
+        typeof(OrchestratorStarted),
+        typeof(SystemResumed),
+        typeof(AppWindowAttached),
+        typeof(ProcessExited),
+        typeof(CdpLost),
+        typeof(TimerElapsed),
+        typeof(ForegroundChanged),
     ];
 
     private static readonly Dictionary<string, Type> ByName = BuildIndex(All);

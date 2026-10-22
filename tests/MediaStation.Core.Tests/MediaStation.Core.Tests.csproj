@@ -18,6 +18,25 @@
     <ProjectReference Include="..\..\src\MediaStation.Core\MediaStation.Core.csproj" />
   </ItemGroup>
 
+  <!--
+    Brak projektu testów App (granica epiki), więc typy adaptera bez Win32/WPF są linkowane do testów,
+    jak FileLogSink w MediaStation.LogAppendCheck. Shim Win32 (PowerNotifications) zostaje nietestowany.
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\src\MediaStation.App\Hosts\MissingHostPort.cs" Link="App\MissingHostPort.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Orchestrator\CommandRouter.cs" Link="App\CommandRouter.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Orchestrator\OrchestratorLoop.cs" Link="App\OrchestratorLoop.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Input\LogInputRoutingPort.cs" Link="App\LogInputRoutingPort.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\System\DisplayStateNotification.cs" Link="App\DisplayStateNotification.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSignalReporter.cs" Link="App\PowerSignalReporter.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\System\WakeSignalGate.cs" Link="App\WakeSignalGate.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Window\LogWindowManagerPort.cs" Link="App\LogWindowManagerPort.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\src\MediaStation.Core\BannedSymbols.txt" Link="BannedSymbols.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Include="Xunit" />
     <Using Include="MediaStation.Core.Contracts.Action" Alias="Action" />
