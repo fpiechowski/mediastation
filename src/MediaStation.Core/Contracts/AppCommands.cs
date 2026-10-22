@@ -15,6 +15,14 @@ public sealed record StartApp(long CmdId, string AppId) : Command(CmdId);
 public sealed record StopApp(long CmdId, string AppId) : Command(CmdId);
 
 /// <summary>
+/// Komenda sondowania hosta po restarcie (AD-4, AD-10): host podpina żywe okno aplikacji i raportuje
+/// <see cref="AppWindowAttached"/>, albo milczy. Cisza jest poprawną odpowiedzią — brak żywej aplikacji
+/// nie jest porażką komendy, więc sonda nie ma korelacji <see cref="CommandCompleted"/>/<see cref="CommandFailed"/>.
+/// Niesie wyłącznie <see cref="AppId"/>, bo host zna swoje aplikacje.
+/// </summary>
+public sealed record ProbeExisting(long CmdId, string AppId) : Command(CmdId);
+
+/// <summary>
 /// Baza komend WindowManagera, jedynego kodu zmieniającego widoczność, Z-order i foreground okien (AD-15).
 /// </summary>
 public abstract record WindowCommand(long CmdId) : Command(CmdId);

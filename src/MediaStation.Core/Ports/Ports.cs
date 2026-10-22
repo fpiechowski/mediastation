@@ -6,6 +6,8 @@ namespace MediaStation.Core.Ports;
 /// <summary>
 /// Port hosta aplikacji jednego <see cref="AppType"/> (AD-4). Orchestrator kieruje tu wyłącznie komendy,
 /// a wynik wraca do jego kolejki jako <see cref="CommandCompleted"/> albo <see cref="CommandFailed"/>.
+/// Wyjątkiem jest sonda <see cref="ProbeExisting"/>: host albo raportuje <see cref="AppWindowAttached"/>,
+/// albo milczy, bo cisza jest poprawną odpowiedzią i sonda nie ma korelacji wyniku.
 /// Wykonawca nie przepuszcza wyjątku przez granicę portu: każdy błąd raportuje jako Event.
 /// </summary>
 public interface IAppHostPort
@@ -15,6 +17,13 @@ public interface IAppHostPort
 
     /// <summary>Zamyka aplikację; host odpowiada <see cref="CommandCompleted"/> albo <see cref="CommandFailed"/>.</summary>
     void Stop(StopApp command);
+
+    /// <summary>
+    /// Sondowanie po restarcie (AD-10): host podpina żywe okno aplikacji i raportuje <see cref="AppWindowAttached"/>,
+    /// albo milczy. Cisza jest poprawną odpowiedzią — brak żywej aplikacji nie jest porażką komendy,
+    /// więc sonda nie odpowiada <see cref="CommandCompleted"/> ani <see cref="CommandFailed"/>.
+    /// </summary>
+    void Probe(ProbeExisting command);
 }
 
 /// <summary>

@@ -9,8 +9,9 @@ namespace MediaStation.App.Hosts;
 /// <summary>
 /// Adapter „brak hosta” do czasu epik hostów: <see cref="StartApp"/> i <see cref="StopApp"/> nie robią niczego,
 /// tylko logują <c>startWithoutHost</c>/<c>stopWithoutHost</c> i odpowiadają <see cref="CommandFailed"/> z tym samym
-/// <c>cmdId</c> (AD-4). Composition root stawia po jednym adapterze na <see cref="AppType"/>, żeby epiki hostów
-/// podmieniały osobno.
+/// <c>cmdId</c> (AD-4). <see cref="ProbeExisting"/> jest trzecim no-opem: brak hosta to brak czegokolwiek do
+/// adopcji, więc sonda milczy bez Eventu i bez wpisu logu (cisza jest poprawną odpowiedzią).
+/// Composition root stawia po jednym adapterze na <see cref="AppType"/>, żeby epiki hostów podmieniały osobno.
 /// </summary>
 public sealed class MissingHostPort : IAppHostPort
 {
@@ -55,5 +56,14 @@ public sealed class MissingHostPort : IAppHostPort
         });
 
         _post(new CommandFailed(command.CmdId, ErrorCode.Unexpected));
+    }
+
+    /// <summary>
+    /// Brak hosta to brak żywej aplikacji do adopcji, więc sonda milczy: bez Eventu i bez wpisu logu (cmdId nie ma
+    /// korelacji, a <c>warn</c> per aplikacja przy każdym starcie byłby stałym szumem).
+    /// </summary>
+    public void Probe(ProbeExisting command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
     }
 }

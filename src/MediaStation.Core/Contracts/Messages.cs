@@ -15,6 +15,7 @@ public abstract record Intent : IOrchestratorMessage;
 /// <summary>
 /// Baza komend z Orchestratora do wykonawców (AD-4). Każda komenda ma <see cref="CmdId"/>,
 /// a wykonawca odpowiada <see cref="CommandCompleted"/> albo <see cref="CommandFailed"/>.
+/// Wyjątkiem jest <see cref="ProbeExisting"/>: sonda jest fire-and-forget, a cisza hosta jest poprawną odpowiedzią.
 /// </summary>
 /// <param name="CmdId">Identyfikator komendy nadawany przez Orchestrator; zawsze pierwsze pole payloadu.</param>
 public abstract record Command([property: JsonPropertyOrder(-1)] long CmdId);
@@ -55,8 +56,11 @@ public sealed record RestartApp(string AppId) : Intent;
 public sealed record SystemResumed(string Source) : Event;
 
 /// <summary>
-/// Host podpiął okno aplikacji po starcie albo adopcji (AD-15). Orchestrator przechodzi wtedy
-/// w <c>Foreground</c> i wysyła <c>ActivateWindow</c> oraz routing wejścia dla typu aplikacji.
+/// Host podpiął okno aplikacji. Przy starcie (<c>Starting</c>) Orchestrator przechodzi w <c>Foreground</c>
+/// i wysyła <c>ActivateWindow</c> oraz routing wejścia dla typu aplikacji. Bez wcześniejszego <c>StartApp</c>
+/// (<c>NotRunning</c>) okno jest adoptowane: Orchestrator zapamiętuje <see cref="Hwnd"/>, przechodzi w
+/// <c>Background</c> i wysyła <c>MinimizeWindow</c>, a <c>ShowShell</c> — tylko gdy żadna inna aplikacja nie jest
+/// aktywna — trzyma shell na wierzchu (AD-10, AD-15).
 /// </summary>
 /// <param name="Hwnd">Uchwyt okna; <c>long</c>, bo <c>IntPtr</c> nie jest kontraktem JSON, a HWND nie mieści się w <c>int</c>.</param>
 /// <param name="RootPid">PID korzenia drzewa procesów aplikacji; WindowManager i AudioRouter dostają go w dalszych komendach.</param>

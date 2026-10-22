@@ -6,8 +6,9 @@ using MediaStation.Core.Ports;
 namespace MediaStation.Core.Tests;
 
 /// <summary>
-/// Jedno wyjście Orchestratora: komenda trafia do portu po typie, a <c>StartApp</c> do hosta po
-/// <see cref="AppType"/> z mapy <c>appId → AppType</c>. Brak portu i nieznana aplikacja to <c>warn</c>, nie wyjątek.
+/// Jedno wyjście Orchestratora: komenda trafia do portu po typie, a <c>StartApp</c>, <c>StopApp</c> i
+/// <c>ProbeExisting</c> do hosta po <see cref="AppType"/> z mapy <c>appId → AppType</c>. Brak portu i nieznana
+/// aplikacja to <c>warn</c>, nie wyjątek.
 /// </summary>
 public class CommandRouterTests
 {
@@ -33,6 +34,38 @@ public class CommandRouterTests
         Assert.Equal([new StopApp(1, "netflix")], hosts[AppType.Web].Stopped);
         Assert.Equal([new StopApp(2, "plex")], hosts[AppType.Native].Stopped);
         Assert.Equal([new StopApp(3, "moonlight-pc")], hosts[AppType.Moonlight].Stopped);
+    }
+
+    [Fact]
+    public void Probe_existing_goes_to_host_of_its_app_type()
+    {
+        var (router, hosts, _, _, _, _) = CreateRouter();
+
+        router.Dispatch([
+            new ProbeExisting(1, "netflix"),
+            new ProbeExisting(2, "plex"),
+            new ProbeExisting(3, "moonlight-pc"),
+        ]);
+
+        Assert.Equal([new ProbeExisting(1, "netflix")], hosts[AppType.Web].Probed);
+        Assert.Equal([new ProbeExisting(2, "plex")], hosts[AppType.Native].Probed);
+        Assert.Equal([new ProbeExisting(3, "moonlight-pc")], hosts[AppType.Moonlight].Probed);
+    }
+
+    [Fact]
+    public void Probe_existing_for_unknown_app_logs_warn_without_throwing()
+    {
+        var (router, hosts, _, _, _, log) = CreateRouter();
+
+        var exception = Record.Exception(() => router.Dispatch([new ProbeExisting(13, "nope")]));
+
+        Assert.Null(exception);
+        Assert.All(hosts.Values, host => Assert.Empty(host.Probed));
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Warn, entry.Level);
+        Assert.Equal("commandForUnknownApp", entry.Msg);
+        Assert.Equal(13L, entry.Data!["cmdId"]);
+        Assert.Equal("nope", entry.Data["appId"]);
     }
 
     [Fact]
@@ -201,9 +234,13 @@ public class CommandRouterTests
 
         public List<StopApp> Stopped { get; } = [];
 
+        public List<ProbeExisting> Probed { get; } = [];
+
         public void Start(StartApp command) => Started.Add(command);
 
         public void Stop(StopApp command) => Stopped.Add(command);
+
+        public void Probe(ProbeExisting command) => Probed.Add(command);
     }
 
     private sealed class FakeWindowManager : IWindowManagerPort

@@ -7,7 +7,7 @@ namespace MediaStation.Core.Tests;
 /// <summary>
 /// Adapter „brak hosta”: <c>StartApp</c> i <c>StopApp</c> nie robią niczego, zostawiają
 /// <c>startWithoutHost</c>/<c>stopWithoutHost</c> w logu i wkładają <c>CommandFailed{same cmdId, Unexpected}</c>
-/// do kolejki bez wyjątku przez granicę portu.
+/// do kolejki bez wyjątku przez granicę portu. <c>ProbeExisting</c> milczy: brak hosta to brak aplikacji do adopcji.
 /// </summary>
 public class MissingHostPortTests
 {
@@ -49,5 +49,19 @@ public class MissingHostPortTests
         Assert.Equal("stopWithoutHost", entry.Msg);
         Assert.Equal(9L, entry.Data!["cmdId"]);
         Assert.Equal("netflix", entry.Data["appId"]);
+    }
+
+    [Fact]
+    public void Probe_publishes_nothing_and_logs_nothing()
+    {
+        var log = new RecordingLog();
+        var posted = new List<IOrchestratorMessage>();
+        var port = new MissingHostPort(log, posted.Add);
+
+        var exception = Record.Exception(() => port.Probe(new ProbeExisting(3, "netflix")));
+
+        Assert.Null(exception);
+        Assert.Empty(posted);
+        Assert.Empty(log.Entries);
     }
 }

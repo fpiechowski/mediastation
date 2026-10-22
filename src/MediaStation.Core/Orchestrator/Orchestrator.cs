@@ -87,19 +87,29 @@ public sealed class Orchestrator
     }
 
     /// <summary>
-    /// Start pętli: snapshot jak przy wybudzeniu plus <see cref="SetInputRouting"/> z trybem <c>shell</c>.
-    /// Drugi start też wysyła routing z nowym <c>epoch</c>, bo to jedyny przypadek powtórzenia trybu.
+    /// Start pętli: snapshot jak przy wybudzeniu plus <see cref="SetInputRouting"/> z trybem <c>shell</c> i po jednej
+    /// sondzie <see cref="ProbeExisting"/> dla każdej pozycji <c>apps.json</c>, w kolejności pliku. Sondy są
+    /// fire-and-forget (AD-14): host albo podpina żywe okno przez <see cref="AppWindowAttached"/>, albo milczy,
+    /// a spóźniona odpowiedź ląduje w adopcji w <see cref="OnAppWindowAttached"/>. Drugi start też wysyła routing
+    /// z nowym <c>epoch</c>, bo to jedyny przypadek powtórzenia trybu.
     /// </summary>
     private OrchestratorResult OnOrchestratorStarted()
     {
-        var routing = new SetInputRouting(NextCmdId(), InputMode.Shell, null, PointerPolicy.Blocked, NextEpoch());
-        return OnDefaultFocus([routing]);
+        var commands = new List<Command>(_apps.Count + 1)
+        {
+            new SetInputRouting(NextCmdId(), InputMode.Shell, null, PointerPolicy.Blocked, NextEpoch()),
+        };
+        foreach (var app in _apps)
+        {
+            commands.Add(new ProbeExisting(NextCmdId(), app.AppId));
+        }
+
+        return OnDefaultFocus(commands);
     }
 
     /// <summary>
     /// Ekran główny z nowym <c>seq</c> fokusu i nowym <c>transitionId</c>: kolejna decyzja o pierwszym planie
     /// zastępuje poprzednią, więc spóźniony <see cref="AppWindowAttached"/> po wybudzeniu nie wchodzi na wierzch.
-    /// Story 7 (sondowanie istniejących hostów) dokłada osobną gałąź <c>switch</c>, nie warunek tutaj.
     /// </summary>
     private OrchestratorResult OnDefaultFocus(IReadOnlyList<Command>? commands = null)
     {
@@ -114,7 +124,7 @@ public sealed class Orchestrator
     /// timeout <c>Starting</c> na <c>startingTimeout</c>, albo przywraca ją z <c>Background</c>. Start jest decyzją
     /// o pierwszym planie, więc przed <c>Starting</c> aplikacja dostaje bieżący <c>transitionId</c>; jeśli w międzyczasie
     /// zapadnie nowsza decyzja (Home, wybudzenie), spóźnione okno nie wejdzie na wierzch. Przełączanie między dwiema
-    /// żywymi aplikacjami i adopcję (story 6/7) dokładają osobne gałęzie.
+    /// żywymi aplikacjami dokłada osobna gałąź.
     /// </summary>
     private OrchestratorResult OnLaunchApp(LaunchApp launch)
     {
@@ -203,16 +213,30 @@ public sealed class Orchestrator
     }
 
     /// <summary>
-    /// Okno po starcie daje <c>Foreground</c>, gdy decyzja o starcie wciąż jest bieżąca: aktywacja okna i routing
-    /// wejścia według tabeli AD-8. Gdy w międzyczasie zapadła nowsza decyzja (Home, wybudzenie), okno dostaje
-    /// kompensację: <see cref="MinimizeWindow"/> i <c>Background</c> bez <see cref="ActivateWindow"/> i bez routingu,
-    /// bo shell ma zostać na wierzchu (AD-14). Timeout <c>Starting</c> jest wtedy zdejmowany, a zapisane <c>hwnd</c>
-    /// pozwala wrócić przez <c>LaunchApp</c>. Poza <c>Starting</c> fakt jest ignorowany; adopcję (story 7) dokłada
-    /// osobna gałąź.
+    /// Okno bez wcześniejszego <c>StartApp</c> (<c>NotRunning</c>) jest adopcją: zapis <c>hwnd</c>, przejście
+    /// w <c>Background</c> i <see cref="MinimizeWindow"/>, a shell zostaje na wierzchu. Okno po starcie daje
+    /// <c>Foreground</c>, gdy decyzja o starcie wciąż jest bieżąca: aktywacja okna i routing wejścia według tabeli
+    /// AD-8. Gdy w międzyczasie zapadła nowsza decyzja (Home, wybudzenie), okno dostaje kompensację:
+    /// <see cref="MinimizeWindow"/> i <c>Background</c> bez <see cref="ActivateWindow"/> i bez routingu, bo shell
+    /// ma zostać na wierzchu (AD-14). Timeout <c>Starting</c> jest wtedy zdejmowany, a zapisane <c>hwnd</c> pozwala
+    /// wrócić przez <c>LaunchApp</c>. Poza <c>NotRunning</c> i <c>Starting</c> fakt jest ignorowany: spóźniony attach
+    /// po <c>Failed</c> zostaje w DW-4.
     /// </summary>
     private OrchestratorResult OnAppWindowAttached(AppWindowAttached attached)
     {
-        if (!_appsById.TryGetValue(attached.AppId, out var app) || app.State != AppLifecycleState.Starting)
+        if (!_appsById.TryGetValue(attached.AppId, out var app))
+        {
+            return OrchestratorResult.None;
+        }
+
+        // Adopcję rozpoznaje sam stan: `StartApp` ustawia `Starting` synchronicznie w tym samym handlerze,
+        // więc `NotRunning` znaczy brak startu w locie i brak terminu `Starting` do skorelowania.
+        if (app.State == AppLifecycleState.NotRunning)
+        {
+            return OnAdopt(app, attached.Hwnd);
+        }
+
+        if (app.State != AppLifecycleState.Starting)
         {
             return OrchestratorResult.None;
         }
@@ -239,6 +263,27 @@ public sealed class Orchestrator
         if (CancelStartTimeout(app.AppId) is { } cancel)
         {
             commands.Add(cancel);
+        }
+
+        return new OrchestratorResult(commands, Snapshot());
+    }
+
+    /// <summary>
+    /// Adopcja żywej aplikacji po restarcie (AD-10): <c>hwnd</c> trafia do stanu, aplikacja ląduje w <c>Background</c>,
+    /// a shell zostaje na ekranie głównym. Adopcja nie jest decyzją o pierwszym planie: nie podbija
+    /// <c>transitionId</c> ani <c>_focusSeq</c>, nie wysyła routingu wejścia i nie rusza timerów. Kolejność jest ta
+    /// sama co w Home (AD-5/AD-15): najpierw <see cref="MinimizeWindow"/>, potem <see cref="ShowShell"/> — i tylko
+    /// wtedy, gdy inna aplikacja nie jest aktywna, bo sondy są fire-and-forget i odpowiedź hosta może dotrzeć po
+    /// wyborze kafelka.
+    /// </summary>
+    private OrchestratorResult OnAdopt(AppState app, long hwnd)
+    {
+        app.Hwnd = hwnd;
+        app.State = AppLifecycleState.Background;
+        var commands = new List<Command> { new MinimizeWindow(NextCmdId(), hwnd) };
+        if (!AnotherAppIsActive(app))
+        {
+            commands.Add(new ShowShell(NextCmdId()));
         }
 
         return new OrchestratorResult(commands, Snapshot());

@@ -20,6 +20,7 @@ public static class MessageTypes
         typeof(SetInputRouting),
         typeof(StartApp),
         typeof(StopApp),
+        typeof(ProbeExisting),
         typeof(ActivateWindow),
         typeof(MinimizeWindow),
         typeof(ShowShell),
