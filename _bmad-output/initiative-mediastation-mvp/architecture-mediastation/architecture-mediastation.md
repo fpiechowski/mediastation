@@ -7,7 +7,7 @@ paradigm: 'hexagonal (ports & adapters) z jednowątkowym actor core (Orchestrato
 scope: 'MediaStation MVP: pełnoekranowy shell TV na Windows 11 (UM760), sterowanie Netflixem w Edge przez CDP, wejście z pilota/klawiatury/gamepada, audio focus, Moonlight, aplikacje natywne, „Do oceny”'
 status: final
 created: '2026-10-16'
-updated: '2026-10-18'
+updated: '2026-10-22'
 binds: [brief-mediastation, forge-filmweb-rating-prompt, ux-mediastation]
 sources:
   - ../brief-mediastation/brief-mediastation.md
@@ -186,12 +186,13 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 - **Prevents:** dwie ścieżki D-pada w webie; hook czekający na Orchestrator (Windows usuwa hook po `LowLevelHooksTimeout`); zawieszone klawisze; podwójne Actions; pętla własnych `SendInput`; UI czytający surowe klawisze
 - **Rule:**
   - InputHub zamienia źródła na **Actions** `{ kind: Up|Down|Left|Right|Ok|Back|Home|AppMenu|Keyboard, phase: press|repeat|long, source, tsMono }`. `Keyboard` daje przycisk pilota z `input.json` (wybrany w `--calibrate-input`) i klawisz konfigurowalny dla klawiatury i pada.
-  - **Jedno naciśnięcie daje jedną Action.** Wyzwalaczem jest VK z hooka LL, a Raw Input służy tylko do identyfikacji urządzenia.
+  - **Jedno naciśnięcie daje jedną Action.** Wyzwalaczem jest VK z hooka LL, a Raw Input służy tylko do identyfikacji urządzenia. Autorepeat systemu nie daje kolejnej Action.
   - Własne `SendInput` (OSK, `back: key:<VK>`, odblokowanie foreground) mają znacznik w `dwExtraInfo` i hook je ignoruje. Flagi `LLKHF_INJECTED` samej w sobie nie ignorujemy, bo Home z pilota ją ma.
   - InputHub jest właścicielem timingu (repeat, long-press).
   - Klawisz, który w bieżącym trybie ma przypisane `long` (OK w `shell` i w `osk`), dostaje `press` dopiero na key-up przed progiem long-press. Po osiągnięciu progu InputHub emituje `long` i nie emituje już `press`. Pozostałe klawisze dostają `press` na key-down.
+  - **Trzymana strzałka** daje `press` na key-down, a potem `repeat` po `timing.repeatDelayMs` i co `timing.repeatIntervalMs`, aż do key-up. `repeat` dostają wyłącznie strzałki; OK, Back, Home i Keyboard nigdy.
   - Mapowanie jest w `config/input.json`, kluczowane sygnaturą urządzenia i kodem.
-  - Orchestrator wysyła `SetInputRouting{ mode, appType, pointer, epoch }`. Hook decyduje na podstawie lokalnej kopii, bez blokowania. Key-up idzie za decyzją podjętą dla swojego key-down.
+  - Orchestrator wysyła `SetInputRouting{ mode, appType, pointer, epoch, clipHwnd? }`. `clipHwnd` jest opcjonalne (`null` = brak ograniczenia): w trybie `osk` niepuste `clipHwnd` ogranicza kursor do prostokąta tego okna (`ClipCursor`) i połyka kliknięcia poza nim, a ograniczenie jest zwalniane przy każdej zmianie trybu. Hook decyduje na podstawie lokalnej kopii, bez blokowania. Key-up idzie za decyzją podjętą dla swojego key-down.
   - Tabela routingu:
 
     | Tryb / typ aktywnej aplikacji | D-pad, OK | Back | Home | Keyboard | Mysz/żyroskop |
@@ -199,13 +200,14 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
     | `shell` (ekran główny) | połykane → Action do Shell | połykane → Action | połykane | połykane → OSK, gdy Shell zgłosił `textFocus{active:true}`; inaczej nic | wg `pointer` (domyślnie blokowana, kursor ukryty) |
     | `osk` | połykane → OSK | połykane → OSK (zamyka rząd wariantów, a gdy go nie ma, OSK) | połykane → zamyka OSK i pokazuje ekran główny | połykane → zamyka OSK | dozwolona, kursor ograniczony do okna OSK (`ClipCursor`); kliknięcie poza OSK połykane |
     | `app` + `web` | połykane → `action` do strony | połykane → `back` do strony | połykane | połykane → OSK, gdy strona zgłosiła `textFocus{active:true}`; inaczej nic | wg `pointer` (domyślnie blokowana) |
-    | `app` + `moonlight` / `native` | przechodzą do aplikacji | połykane → polityka `back` (`home` \| `key:<VK>`) | połykane | połykane → OSK | wg `pointer` (domyślnie dozwolona) |
+    | `app` + `moonlight` / `native` | przechodzą do aplikacji (bez Actions) | połykane → polityka `back` (`home` \| `key:<VK>`) | połykane | połykane → OSK | wg `pointer` (domyślnie dozwolona) |
 
   - `AppMenu` istnieje tylko w trybie `shell`. Wyzwalacze:
     - long-press OK (`phase: long`) na kafelku aplikacji w stanie `Background` albo `Failed`;
     - OK (`press`) na kafelku w stanie `Failed`. AppMenu otwiera się wtedy z fokusem na „Uruchom ponownie”.
   - Long-press OK na kafelku `NotRunning` nic nie robi. OK na kafelku `Starting` jest ignorowane.
-  - Gamepad w Moonlight jest przepuszczany w całości. Home z pada to konfigurowalna kombinacja.
+  - Gamepad w Moonlight jest przepuszczany w całości: D-pad i OK nie dają Actions, a kombinacja Home z pada daje `home` w każdym trybie. Home z pada to konfigurowalna kombinacja.
+  - InputHub emituje `Keyboard` w każdym wierszu tabeli i sam go nie bramkuje; bramkowanie `textFocus` należy do Orchestratora (AD-9) i dokłada je epic-osk razem z OSK. Dziś Orchestrator ignoruje Actions inne niż `Home`, więc zachowanie odpowiada tabeli.
   - Shell UI i OSK konsumują **wyłącznie** Actions z core.
 
 ### AD-9: Jedna klawiatura ekranowa w MediaStation

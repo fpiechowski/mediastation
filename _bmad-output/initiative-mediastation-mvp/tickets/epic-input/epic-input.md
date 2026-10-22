@@ -20,7 +20,7 @@ Każde wejście dociera do Core jako jedna Action, a Home nie zależy od wątku 
 
 ## Done when
 
-1. Jedno naciśnięcie pilota, klawiatury albo gamepada daje jedną Action (AD-8).
+1. Jedno naciśnięcie pilota, klawiatury albo gamepada daje jedną Action (AD-8); wyjątki są celowe: trzymana strzałka daje `press` i `repeat`, a D-pad i OK w `app` + `moonlight`/`native` nie dają Actions.
 2. Klawisz z przypisanym `long` (OK w `shell` i `osk`) daje `press` dopiero na key-up przed progiem albo samo `long`, od Story 1 (AD-8).
 3. Na UM760 Home jest połykany i dostarczany jako Action nad Edge, Moonlightem, pulpitem i przy zawieszonym wątku UI shella; powtórzenie S10 z pilotem na dongle USB 2.4G daje 16/16 (AD-2, AD-8).
 4. Logi zawierają tylko Actions; surowe kody pojawiają się wyłącznie w `--calibrate-input` (AD-13).
@@ -66,8 +66,9 @@ Każde wejście dociera do Core jako jedna Action, a Home nie zależy od wątku 
 - Decision: kolizje z epiką 2 bez kolejności są akceptowane i scalane przy merge: `ConfigValidation.cs` (stories 1, 4, 6 vs 2.11), rejestr `MessageTypes.All` i eksport schematów (7, 8 vs 2.3+) (2026-10-22).
 - Assumption: błędy rejestracji hooka i Raw Input są logowane jako `inputHubError` bez kodów klawiszy; Done when 4 dotyczy zdarzeń wejścia (2026-10-21).
 - Decision: breakdown zaakceptowany (10 entries, jeden lane); epika idzie w pełni automatycznie w pętli (`bmad-build-auto`) bez checkpointów (2026-10-22).
+- Decision: pass dokumentacyjny 2026-10-22 (retro A2) dopisał do AD-8 `clipHwnd` w `SetInputRouting`, regułę `repeat` trzymanej strzałki, jawne „bez Actions” dla D-pada i OK w `app` + `moonlight`/`native` oraz własność bramki `textFocus` dla `Keyboard` w epic-osk; zamyka DW-7, DW-9 i DW-12, a bramkę `textFocus` śledzi DW-17 (2026-10-22).
 - Odbiór na UM760 (wynik w notatce odbioru epiku z datą, HEAD i maszyną; pilot na donglu USB 2.4G):
-  1. Po story 2: każde naciśnięcie Home, Back, OK i strzałek daje w logu dokładnie jeden wpis `action` (Home i Back z `source: remote`), długie OK daje samo `long`, Home nad pulpitem nie otwiera przeglądarki, a log nie zawiera surowych kodów (Done when 1, 2, 4).
+  1. Po story 2: każde naciśnięcie Home, Back, OK i strzałek daje w logu dokładnie jeden wpis `action` (Home i Back z `source: remote`), długie OK daje samo `long`, Home nad pulpitem nie otwiera przeglądarki, a log nie zawiera surowych kodów (Done when 1, 2, 4). Trzymana strzałka daje `press` i kolejne `repeat`; D-pad i OK w `app` + `moonlight`/`native` są celowo przepuszczane bez wpisu `action`.
   2. Po story 3: `MediaStation.exe --calibrate-input` loguje `rawInput` z `hasVk` dla każdego przycisku pilota i nie loguje zwykłej klawiatury; wybrany przycisk z VK, wpisany do `input.json` jako `keyboard`, daje w trybie głównym `action {kind: keyboard}`; mapowanie trafia też do `tools/samples/config/input.json` (Done when 5).
   3. Po story 8: kursor żyroskopu pilota stoi w `shell`.
   4. Po story 9: `tools/check-home-s10.ps1` daje 16/16, a przebieg „shell na wierzchu” daje `action home` (Done when 3).

@@ -46,13 +46,14 @@ severity: low
 reason: Story 1 odroczyła reset `_held`/`_pendingLong` do story, która rejestruje hook; InputHub nie ma ścieżki re-rejestracji ani watchdoga, więc reset nie ma wołającego. Skutek: utracony key-up (np. blokada sesji w trakcie trzymania klawisza) zamraża VK do końca procesu. Domknięcie wymaga watchdoga hooka.
 status: open
 
-### DW-7: AD-8 („Jedno naciśnięcie daje jedną Action”, „InputHub jest właścicielem timingu”) i checklista odbioru epiku („dokładnie jeden wpis `action`” dla strzałek) nie opisują, że trzymana strzałka daje
+### DW-7: AD-8 („Jedno naciśnięcie daje jedną Action”, „InputHub jest właścicielem timingu”) i checklista odbioru epiku („dokładnie jeden wpis `action`” dla strzałek) nie opisują, że trzymana strzałka daje `press` + N×`repeat`
 origin: spec-deferred d26d50d7da39
 location: _bmad-output/initiative-mediastation-mvp/architecture-mediastation/architecture-mediastation.md:189,191
 source_spec: `tickets/epic-input/tickets/story-dowolna-klawiatura-i-repeat-strzaek-plan.md`
 severity: low
 reason: Zweryfikowane w review (2 przebiegi): `architecture-mediastation.md:189,191` i `epic-input.md:70` nie mają reguły repeat, a kod emituje `press` + N×`repeat` z `InputPolicy.CollectRepeats`. AD-8 już wymienia `phase: repeat` w kontrakcie Actions (`:188`), a dopisanie reguły to pass dokumentacyjny epiki — wzorzec `clipHwnd` w `epic-input.md:61`. Wymaga wpisu w notatce odbioru epiku, żeby operator nie odczytał checklisty jako porażki przy trzymanej strzałce.
-status: open
+status: resolved
+evidence: AD-8 ma regułę `repeat`: trzymana strzałka daje `press` na key-down, a potem `repeat` po `timing.repeatDelayMs` i co `timing.repeatIntervalMs` aż do key-up, wyłącznie dla strzałek, a autorepeat systemu nie daje kolejnej Action. Checklista odbioru epiki (`epic-input.md`, Done when 1 i pozycja 1 odbioru po story 2) mówi o `press` + `repeat` przy trzymanej strzałce, więc operator nie odczyta tego jako porażki. Zmiana wyłącznie dokumentacyjna, bez zmian kodu (2026-10-22).
 
 ### DW-8: Sygnatura zawierająca `*`, ale niebędąca dokładnie `*` (np. `VID_1915*`), przechodzi walidację i nigdy nie dopasowuje ścieżki Raw Input, więc urządzenie wpada w fallback `*` albo `keyboard`.
 origin: spec-deferred 3a100f145c60
@@ -63,13 +64,14 @@ reason: `DeviceSignature.Matches` specjalnie traktuje wyłącznie `InputDevice.W
 status: resolved
 evidence: `DeviceSignature.HasEmbeddedWildcard` obok `Matches` plus jedna gałąź `else if` w `ConfigValidation.CheckInput` dają jeden `configError` na `$.devices[i].signature` dla `*` w środku sygnatury (`VID_1915*`, `*VID*`, `**`), a dokładnie `*` zostaje wildcardem wymagającym `source: keyboard`. Schematu nie ruszano (reguły semantyczne tylko w runtime), sample `tools/samples/config` bez zmian i dalej zielony w `Sample_config_files_are_valid`; `dotnet test MediaStation.slnx -c Release` 862/862, a publish z podmienionym `input.json` dał log `start → configError → stop {exitCode: 0}` na tej samej ścieżce.
 
-### DW-9: Checklista odbioru epiku („Jedno naciśnięcie daje jedną Action”, „każde naciśnięcie … daje w logu dokładnie jeden wpis `action`”) nie mówi, że D-pad i OK w `app` + `moonlight`/`native` są celowo
+### DW-9: Checklista odbioru epiku („Jedno naciśnięcie daje jedną Action”, „każde naciśnięcie … daje w logu dokładnie jeden wpis `action`”) nie mówi, że D-pad i OK w `app` + `moonlight`/`native` są celowo przepuszczane bez Actions
 origin: spec-deferred f2c6f5214410
 location: _bmad-output/initiative-mediastation-mvp/tickets/epic-input/epic-input.md:23,70
 source_spec: `tickets/epic-input/tickets/story-routing-z-lokalnej-kopii-setinputrouting-i-actions-do-orches-plan.md`
 severity: low
 reason: Zweryfikowane: `architecture-mediastation.md:202` (wiersz tabeli AD-8) każe przepuszczać D-pad i OK w `app` + `moonlight`/`native`, a `epic-input.md:23` (Done when 1) i `:70` (checklista po story 2) nadal obiecują jedną Action i dokładnie jeden wpis `action` na naciśnięcie. Nowy test `App_with_moonlight_or_native_passes_dpad_and_ok_without_actions_or_grid` pinuje zero Actions. Ten sam typ luki (checklista nie opisuje `repeat`) jest już zapisany jako DW-7 z uzasadnieniem „żeby operator nie odczytał checklisty jako porażki”; poprawka edytuje dokumentację architektury i notatkę odbioru epiki, więc należy do passa dokumentacyjnego epiki, nie do tej story.
-status: open
+status: resolved
+evidence: Wiersz tabeli AD-8 dla `app` + `moonlight`/`native` mówi teraz „przechodzą do aplikacji (bez Actions)”, a checklista `epic-input.md` (Done when 1 i pozycja 1 odbioru po story 2) jawnie opisuje celowe przepuszczenie D-pada i OK bez wpisu `action`. Zmiana wyłącznie dokumentacyjna, bez zmian kodu (2026-10-22).
 
 ### DW-10: Realne wywołanie SendInput w KeyInjector nigdy nie zostaje wykonane przez testy ani przez przebiegi aplikacji, więc przyjęcie dwóch rekordów INPUT przez system pozostaje niepotwierdzone automatem.
 origin: spec-deferred 487e5d5979fa
@@ -92,7 +94,8 @@ location: _bmad-output/initiative-mediastation-mvp/architecture-mediastation/arc
 source_spec: `tickets/epic-input/tickets/story-pointer-hook-myszy-i-clipcursor-w-osk-plan.md`
 severity: low
 reason: `architecture-mediastation.md:194` nie wymienia `clipHwnd`, a `set-input-routing.schema.json` i testy kontraktu pinują klucz `clipHwnd` w każdej kopercie. Epika już to przewidziała: `epic-input.md:61` każe dopisać `clipHwnd` do AD-8 (`bmad-architecture`) przed epic-osk, więc luka jest śledzona, ale nie ma wykonawcy w tym przebiegu.
-status: open
+status: resolved
+evidence: AD-8 opisuje `SetInputRouting{ mode, appType, pointer, epoch, clipHwnd? }` z opcjonalnym `clipHwnd` (`null` = brak ograniczenia), `ClipCursor` do prostokąta okna w trybie `osk`, połykanie kliknięć poza nim i zwalnianie przy zmianie trybu. Frontmatter architektury ma `updated: 2026-10-22`. Zmiana wyłącznie dokumentacyjna, bez zmian kodu (2026-10-22).
 
 ### DW-13: Wykrywanie nowego okna przeglądarki po `pid:handle` jednego `MainWindowHandle` na proces może przeoczyć drugie okno w istniejącym procesie Edge.
 origin: spec-deferred 68662efb5eca
@@ -121,4 +124,12 @@ origin: spec-deferred 176036279b85
 location: tools/check-home-s10.ps1 Get-BrowserWindowIds / Find-WindowProcess
 source_spec: `tickets/epic-input/tickets/story-refactor-sweep-plan.md`
 reason: Review pass 2: zmiana zastąpiła `Process.MainWindowHandle` (pierwsze widoczne okno najwyższego poziomu bez właściciela) enumeracją bez informacji o właścicielu, a filtr klasy jest prefiksem `Chrome_WidgetWin_*`. Osiągalności nie wykazano: na ALDER jedyne widoczne okno przeglądarki to `Chrome_WidgetWin_1` bez właściciela, a `Find-WindowProcess` dla MediaStation zwrócił ten sam uchwyt co `MainWindowHandle` (także w stanie zawieszonym). Rozstrzyga przebieg S10 na UM760 z Edge i Moonlightem (porównanie zbioru `pid:handle` i uchwytu celu z `MainWindowHandle`, brak fałszywych `browser window`); wpis w ledgerze jako DW-15. Naprawa: pole `Owner` (`GetWindow(hwnd, GW_OWNER)`) w `Get-TopLevelWindows` i pomijanie okien z właścicielem w obu miejscach.
+status: open
+
+### DW-17: `Keyboard` jest emitowane jako Action w `app` + `web` także bez `textFocus`; epic-osk musi zbramkować je w Orchestratorze, zanim podłączy OSK
+origin: retro epiki 3, 2026-10-22 (F7a/A2)
+location: src/MediaStation.Core/Input/InputPolicy.cs (emituje `Keyboard` w każdym wierszu AD-8); src/MediaStation.Core/Orchestrator/Orchestrator.cs:220-225 (ignoruje Actions inne niż `Home`)
+source_spec: `tickets/epic-input/epic-input-retrospective.md`, A2
+severity: medium
+reason: AD-8/AD-9 każą otwierać OSK z `Keyboard` w `app` + `web` tylko przy `textFocus{active:true}`, a InputHub sam nie bramkuje i dziś Orchestrator ignoruje każdą Action poza `Home`, więc zachowanie odpowiada tabeli tylko przypadkiem. Pierwsza story epic-osk, która podłączy `Keyboard` do OSK, musi dodać bramkę `textFocus` w Orchestratorze i test: `Keyboard` w `app` + `web` bez `textFocus` nie otwiera OSK, a z `textFocus` otwiera. Bez tego przycisk Klawiatura otworzy OSK w przeglądarce bez pola tekstowego.
 status: open
