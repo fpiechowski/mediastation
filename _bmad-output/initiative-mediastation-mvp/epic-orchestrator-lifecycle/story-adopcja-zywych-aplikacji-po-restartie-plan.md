@@ -3,7 +3,7 @@ title: 'Adopcja żywych aplikacji po restarcie'
 type: 'feature'
 ticket: '7'
 created: '2026-10-22'
-status: 'built'
+status: done
 baseline_revision: 'a3afae8736dcf2779700f29284ac860a081e0cbe'
 route: 'full'
 route_source: 'auto'
@@ -165,6 +165,10 @@ Adopcję rozpoznaje sam stan `NotRunning`, bez mapy korelacji sond: `StartApp` u
 **Follow-up review recommendation:** `false`.
 
 **Verification:** `dotnet test MediaStation.slnx -c Release` 493/493 (0 failed, 0 skipped; `OrchestratorLoopTests` 12/12); `dotnet build MediaStation.slnx -c Release` i `dotnet build src/MediaStation.App -c Debug` z 0 ostrzeżeń i 0 błędów, `probe-existing.schema.json`/`probe-existing.ts` wyeksportowane przez `BuildWeb`; publish self-contained + uruchomienie z configiem (pid 38640): proces żył po 10 s, `snapshotPublished {rev: 1, focusRequest {default, 1}}`, `inputRouting {cmdId: 1, shell, blocked, epoch: 1}`, `stop {exitCode: 0}`, zero `warn`/`error` (sondy w `MissingHostPort`).
+
+## Recovery
+
+Recovered manually on 2026-10-22 after `bmad-loop resolve --reverify` refused a finished tickets-mode run: fast-forwarded `master` to the kept branch `bmad-loop/20261021-235612-3018/epic-orchestrator-lifecycle/2.7` (commit `6add563`), re-ran `dotnet test MediaStation.slnx -c Debug` (493/493), and marked the ticket done with `tickets.py mark 2.7 done`. The original run had deferred the ticket after a dev-session timeout even though the plan was already `built`.
 
 **Residual risks:** ścieżka adopcji nie jest osiągalna w opublikowanej aplikacji bez prawdziwego hosta, który na `ProbeExisting` odpowie `AppWindowAttached`, więc jej dowodem są testy Core i pętli na fake hostach; kolejność „odpowiedź sondy po wyborze kafelka” nie ma testu, bo aktywacja znalezionego okna jest zamierzonym skutkiem nowszej decyzji użytkownika; spóźniony attach po `Failed` nadal jest ignorowany (DW-4 zostaje `open`, adres wskazuje symbol w `OnAppWindowAttached`); całościowy test UM760 całego epiku wykonuje użytkownik przy `epic-boundary`.
 
