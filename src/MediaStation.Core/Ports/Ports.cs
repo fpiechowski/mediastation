@@ -1,5 +1,7 @@
 using System;
 using MediaStation.Core.Contracts;
+using MediaStation.Core.Input;
+using ActionMessage = MediaStation.Core.Contracts.Action;
 
 namespace MediaStation.Core.Ports;
 
@@ -63,4 +65,26 @@ public interface ITimerPort
 {
     /// <summary>Planuje albo anuluje timer; duplikat <c>timerId</c> zastępuje poprzedni termin.</summary>
     void Execute(TimerCommand command);
+}
+
+/// <summary>
+/// Port konsumenta Actions z wątku Input (AD-8): <see cref="Deliver"/> jest wołany z wątku opróżniającego
+/// kolejkę, więc wykonawca nie blokuje się długo, nie czeka na Orchestrator ani UI i nie rzuca wyjątku
+/// przez granicę portu (AD-4). Kolejność wywołań odpowiada kolejności kolejki.
+/// </summary>
+public interface IActionSink
+{
+    /// <summary>Dostarcza jedną Action; wywołanie nie blokuje się długo i nie rzuca.</summary>
+    void Deliver(ActionMessage action);
+}
+
+/// <summary>
+/// Port raportu porażek InputHubu (AD-13): błędy rejestracji hooka, Raw Input i okna message-only trafiają
+/// do logu jako <c>inputHubError</c> bez kodów klawiszy. Osobny od <see cref="IActionSink"/>, bo story 5
+/// podmienia tylko sink Actions, a błędy huba zawsze idą do logu. Wołany z wątku Input: nie blokuje i nie rzuca.
+/// </summary>
+public interface IInputHubErrorSink
+{
+    /// <summary>Raportuje jedną porażkę operacji huba; wywołanie nie blokuje i nie rzuca.</summary>
+    void Report(InputHubError error);
 }

@@ -13,6 +13,7 @@ using MediaStation.App.Shell;
 using MediaStation.Core.Cli;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
+using MediaStation.Core.Input;
 using MediaStation.Core.Logging;
 using MediaStation.Core.Orchestrator;
 using MediaStation.Core.Ports;
@@ -70,11 +71,13 @@ public static class CompositionRoot
         if (decision is StartDecision.Exit exit)
         {
             log.Write(exit.Level, Src, exit.Msg, exit.Data);
+            AttachStopLogging(app, log);
             app.Shutdown((int)exit.Code);
             return;
         }
 
         StartRun(app, log, time);
+        AttachStopLogging(app, log);
     }
 
     /// <summary>Tryb główny: config (I/O tylko w App), walidacja w Core, snapshot i okno shella.</summary>
@@ -141,30 +144,47 @@ public static class CompositionRoot
 
         PowerSignalReporter? reporter = null;
         PowerNotifications? notifications = null;
+        InputHub? inputHub = null;
+        ActionPump? actionPump = null;
 
-        // Handler przed startem adaptera: wyjątek w konstrukcji nie może zostawić pętli bez zwolnienia.
-        // Kolejność zwolnienia: najpierw adapter (żadnych nowych Eventów), potem scheduler timerów, na końcu pętla.
+        // Handler przed startem adapterów: wyjątek w konstrukcji nie może zostawić pętli bez zwolnienia.
+        // Kolejność zwolnienia: najpierw hub wejścia (żadnych nowych Actions), potem pompa (domyka kolejkę),
+        // dalej adapter power, scheduler timerów i na końcu pętla.
         app.Exit += (_, _) =>
         {
             try
             {
-                notifications?.Dispose();
+                inputHub?.Dispose();
             }
             finally
             {
                 try
                 {
-                    reporter?.Dispose();
+                    actionPump?.Dispose();
                 }
                 finally
                 {
                     try
                     {
-                        timers.Dispose();
+                        notifications?.Dispose();
                     }
                     finally
                     {
-                        loop.Dispose();
+                        try
+                        {
+                            reporter?.Dispose();
+                        }
+                        finally
+                        {
+                            try
+                            {
+                                timers.Dispose();
+                            }
+                            finally
+                            {
+                                loop.Dispose();
+                            }
+                        }
                     }
                 }
             }
@@ -183,12 +203,28 @@ public static class CompositionRoot
             // Padnięty adapter power nie może zabić startu: aplikacja żyje bez sygnałów wybudzenia.
             log.Error(SystemSrc, "powerNotificationsStartFailed", ex);
         }
+
+        try
+        {
+            // InputHub po pętli i oknie: callback hooka wkłada Actions do kolejki Core, a pompa opróżnia ją
+            // poza wątkiem Input (AD-2, AD-8). Do story 5 Actions trafiają tylko do logu (LogActionSink).
+            var actionSink = new LogActionSink(log);
+            actionPump = new ActionPump(actionSink, actionSink);
+            actionPump.Start();
+
+            var inputPolicy = new InputPolicy(config.Input, time, InputMode.Shell);
+            inputHub = new InputHub(inputPolicy, actionPump.Queue, actionSink, time);
+            inputHub.Start();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Padnięty InputHub nie może zabić startu: aplikacja żyje bez pilota i klawiatury.
+            log.Error(LogActionSink.Src, "inputHubStartFailed", ex);
+        }
     }
 
     private static void AttachLifecycleLogging(Application app, ILog log, DispatcherExceptionLog dispatcherExceptions)
     {
-        app.Exit += (_, e) => log.Info(Src, "stop", new Dictionary<string, object?> { ["exitCode"] = e.ApplicationExitCode });
-
         AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
         {
             // Wyjątek z Dispatchera jest już zalogowany: AppDomain nie dopisuje drugiego wpisu dla tego samego obiektu.
@@ -214,6 +250,16 @@ public static class CompositionRoot
         };
 
         TaskScheduler.UnobservedTaskException += (_, e) => log.Error(Src, "unobservedTaskException", e.Exception);
+    }
+
+    /// <summary>
+    /// Wpis <c>stop</c> rejestrujemy po <see cref="StartRun"/> (i po handlerze teardownu wejścia), bo .NET woła
+    /// <c>Application.Exit</c> w kolejności subskrypcji: pompa domyka wtedy kolejkę Actions przed <c>stop</c>.
+    /// Ścieżka wczesnego wyjścia nie ma łańcucha wejścia, więc rejestruje go tuż przed <c>Shutdown</c>.
+    /// </summary>
+    private static void AttachStopLogging(Application app, ILog log)
+    {
+        app.Exit += (_, e) => log.Info(Src, "stop", new Dictionary<string, object?> { ["exitCode"] = e.ApplicationExitCode });
     }
 
     private static string? AppVersion()

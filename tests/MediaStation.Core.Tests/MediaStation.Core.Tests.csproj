@@ -27,7 +27,11 @@
     <Compile Include="..\..\src\MediaStation.App\Hosts\MissingHostPort.cs" Link="App\MissingHostPort.cs" />
     <Compile Include="..\..\src\MediaStation.App\Orchestrator\CommandRouter.cs" Link="App\CommandRouter.cs" />
     <Compile Include="..\..\src\MediaStation.App\Orchestrator\OrchestratorLoop.cs" Link="App\OrchestratorLoop.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Input\ActionPump.cs" Link="App\ActionPump.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Input\InputClock.cs" Link="App\InputClock.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Input\InputTimerDelay.cs" Link="App\InputTimerDelay.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Input\LogInputRoutingPort.cs" Link="App\LogInputRoutingPort.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Input\RawInputReport.cs" Link="App\RawInputReport.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\DisplayStateNotification.cs" Link="App\DisplayStateNotification.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSignalReporter.cs" Link="App\PowerSignalReporter.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSignalRouter.cs" Link="App\PowerSignalRouter.cs" />

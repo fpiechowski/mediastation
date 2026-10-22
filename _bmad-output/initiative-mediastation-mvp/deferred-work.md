@@ -28,3 +28,19 @@ source_spec: `epic-orchestrator-lifecycle/story-transitionid-i-home-w-trakcie-st
 severity: medium
 reason: Guard `app.State != AppLifecycleState.Starting` w `OnAppWindowAttached` i `app.Hwnd = null` w `EnterFailed` pochodzą ze story 5 i nie zmieniły się w tej story; zmiana domyka kompensację tylko dla attachu w Starting. Skutek potwierdzony sondą: Home w Starting → TimerElapsed → AppWindowAttached daje brak komend i brak snapshotu, a kolejny Home nic nie robi. Rozwiązanie wymaga decyzji, czy Failed zachowuje Hwnd i minimalizuje spóźnione okno, czy zostawia to hostowi — to osobna story.
 status: open
+
+### DW-5: Kolejność zwalniania adapterów w composition root (hub → pompa → power → timer → pętla) nie ma testu.
+origin: spec-deferred e995e2719403
+location: src/MediaStation.App/CompositionRoot.cs:151
+source_spec: `tickets/epic-input/tickets/story-tracer-bullet-pilot-na-donglu-daje-actions-z-watku-input-plan.md`
+severity: low
+reason: Brak projektu testów App i seamu w `CompositionRoot`, więc zamiana kolejności `inputHub?.Dispose()` i `actionPump?.Dispose()` nie zapali żadnego testu; skutek to Action w locie bez wpisu w logu przy wyjściu. Ten sam dług jest już zapisany w retrospektywie epiki (composition root bez testów).
+status: open
+
+### DW-6: `InputPolicy` nie resetuje stanu przy (re)rejestracji hooka, bo ten adapter rejestruje hook tylko raz.
+origin: spec-deferred 0e8c677d9198
+location: src/MediaStation.Core/Input/InputPolicy.cs:111
+source_spec: `tickets/epic-input/tickets/story-tracer-bullet-pilot-na-donglu-daje-actions-z-watku-input-plan.md`
+severity: low
+reason: Story 1 odroczyła reset `_held`/`_pendingLong` do story, która rejestruje hook; InputHub nie ma ścieżki re-rejestracji ani watchdoga, więc reset nie ma wołającego. Skutek: utracony key-up (np. blokada sesji w trakcie trzymania klawisza) zamraża VK do końca procesu. Domknięcie wymaga watchdoga hooka.
+status: open
