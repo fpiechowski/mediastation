@@ -240,54 +240,17 @@ public static class CompositionRoot
         ActionPump? actionPump = null;
 
         // Handler przed startem adapterów: wyjątek w konstrukcji nie może zostawić pętli bez zwolnienia.
-        // Kolejność zwolnienia: najpierw hub wejścia (żadnych nowych Actions), potem pompa Actions (domyka kolejkę),
+        // Sekwencję buduje się w chwili wyjścia, bo część slotów jest `null` przy rejestracji; kolejność zna
+        // TeardownSequence: najpierw hub wejścia (żadnych nowych Actions), potem pompa Actions (domyka kolejkę),
         // pompa wstrzyknięć (porzuca niewstrzyknięte komendy), dalej adapter power, scheduler timerów i na końcu pętla.
-        app.Exit += (_, _) =>
-        {
-            try
-            {
-                inputHub?.Dispose();
-            }
-            finally
-            {
-                try
-                {
-                    actionPump?.Dispose();
-                }
-                finally
-                {
-                    try
-                    {
-                        keyInjection.Dispose();
-                    }
-                    finally
-                    {
-                        try
-                        {
-                            notifications?.Dispose();
-                        }
-                        finally
-                        {
-                            try
-                            {
-                                reporter?.Dispose();
-                            }
-                            finally
-                            {
-                                try
-                                {
-                                    timers.Dispose();
-                                }
-                                finally
-                                {
-                                    loop.Dispose();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        };
+        app.Exit += (_, _) => new TeardownSequence(
+            inputHub,
+            actionPump,
+            keyInjection,
+            notifications,
+            reporter,
+            timers,
+            loop).Dispose();
 
         try
         {

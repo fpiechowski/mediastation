@@ -31,11 +31,12 @@ status: open
 
 ### DW-5: Kolejność zwalniania adapterów w composition root (hub → pompa → power → timer → pętla) nie ma testu.
 origin: spec-deferred e995e2719403
-location: src/MediaStation.App/CompositionRoot.cs:151
+location: src/MediaStation.App/TeardownSequence.cs (handler app.Exit w src/MediaStation.App/CompositionRoot.cs:246-253)
 source_spec: `tickets/epic-input/tickets/story-tracer-bullet-pilot-na-donglu-daje-actions-z-watku-input-plan.md`
 severity: low
 reason: Brak projektu testów App i seamu w `CompositionRoot`, więc zamiana kolejności `inputHub?.Dispose()` i `actionPump?.Dispose()` nie zapali żadnego testu; skutek to Action w locie bez wpisu w logu przy wyjściu. Ten sam dług jest już zapisany w retrospektywie epiki (composition root bez testów).
-status: open
+status: resolved
+evidence: Kolejność i semantyka wyjątków wyszły do `TeardownSequence` (App, bez WPF/Win32), linkowanego do `MediaStation.Core.Tests` jak `UiHang.cs`; handler `app.Exit` buduje sekwencję w chwili wyjścia, bo część slotów jest wtedy `null`. `TeardownSequenceTests` pinują kolejność siedmiu adapterów (hub → pompa Actions → wstrzyknięcia → power → timer → pętla), zwalnianie reszty po awarii i pierwszy wyjątek na zewnątrz; `stop` zostaje ostatnim wpisem, bo `AttachStopLogging` rejestruje się później. `dotnet test MediaStation.slnx -c Release` 862/862 plus publish/start/`CloseMainWindow` z `stop {exitCode: 0}`.
 
 ### DW-6: `InputPolicy` nie resetuje stanu przy (re)rejestracji hooka, bo ten adapter rejestruje hook tylko raz.
 origin: spec-deferred 0e8c677d9198
@@ -59,7 +60,8 @@ location: src/MediaStation.Core/Input/InputTarget.cs:42
 source_spec: `tickets/epic-input/tickets/story-dowolna-klawiatura-i-repeat-strzaek-plan.md`
 severity: low
 reason: `DeviceSignature.Matches` specjalnie traktuje wyłącznie `InputDevice.WildcardSignature` i poza tym używa `Contains`, a ścieżka Raw Input nigdy nie zawiera `*`; walidacja wymaga tylko niepustej sygnatury. Zachowanie samo w sobie jest sprzed tej story (nowe jest tylko znaczenie `*`), a naprawa to reguła walidacji odrzucająca `*` w sygnaturze innej niż dokładnie `*` — decyzja planistyczna, nie poprawka tej zmiany.
-status: open
+status: resolved
+evidence: `DeviceSignature.HasEmbeddedWildcard` obok `Matches` plus jedna gałąź `else if` w `ConfigValidation.CheckInput` dają jeden `configError` na `$.devices[i].signature` dla `*` w środku sygnatury (`VID_1915*`, `*VID*`, `**`), a dokładnie `*` zostaje wildcardem wymagającym `source: keyboard`. Schematu nie ruszano (reguły semantyczne tylko w runtime), sample `tools/samples/config` bez zmian i dalej zielony w `Sample_config_files_are_valid`; `dotnet test MediaStation.slnx -c Release` 862/862, a publish z podmienionym `input.json` dał log `start → configError → stop {exitCode: 0}` na tej samej ścieżce.
 
 ### DW-9: Checklista odbioru epiku („Jedno naciśnięcie daje jedną Action”, „każde naciśnięcie … daje w logu dokładnie jeden wpis `action`”) nie mówi, że D-pad i OK w `app` + `moonlight`/`native` są celowo
 origin: spec-deferred f2c6f5214410
@@ -96,12 +98,27 @@ status: open
 origin: spec-deferred 68662efb5eca
 location: tools/check-home-s10.ps1 Get-BrowserWindows
 source_spec: `tickets/epic-input/tickets/story-home-zawsze-zawieszony-ui-i-skrypt-s10-plan.md`
-reason: Niesprawdzone bez prawdziwego Edge i pilota; rozstrzygnie to przebieg na UM760 (porównanie z `EnumWindows` po klasie `Chrome_WidgetWin_1`).
+reason: Niesprawdzone bez prawdziwego Edge i pilota; rozstrzygnie to przebieg na UM760 (porównanie z `EnumWindows` po klasie `Chrome_WidgetWin_1`). Nota 3.10: ticket zamienił `MainWindowHandle` na `EnumWindows` i liczy każde widoczne okno najwyższego poziomu klasy `Chrome_WidgetWin_*` jako osobne `pid:handle`, więc drugie okno w istniejącym procesie jest widoczne; rozstrzygnięcie na UM760 to nadal porównanie z żywym `msedge` po klasie i brak fałszywych `browser window` z tooltipów.
 status: open
 
 ### DW-14: Kontrola `target not foreground` po PID może odrzucić poprawny press Edge przy wielu procesach `msedge` lub innym profilu.
 origin: spec-deferred 94e635089e98
 location: tools/check-home-s10.ps1 Measure-Press
 source_spec: `tickets/epic-input/tickets/story-home-zawsze-zawieszony-ui-i-skrypt-s10-plan.md`
-reason: Niesprawdzone na ALDER; potwierdzić na UM760 przy odbiorze epiku.
+reason: Niesprawdzone na ALDER; potwierdzić na UM760 przy odbiorze epiku. Nota 3.10: ticket porównuje foreground z dokładnym uchwytem okna celu (nie z PID), a reguła żyje w czystym `Test-TargetForeground` pokrytym `-SelfTest`; dwa nazwane wyjątki powłoki to ghost `dwm` tylko dla `shell-hung` i okno desktopu `Progman`/`WorkerW` należące do procesu `explorer` tylko dla `desktop`. UM760 ma potwierdzić, że press na Edge przy wielu procesach/profilach przechodzi, a inne okno tego samego procesu nie.
+status: open
+
+### DW-15: `Get-BrowserWindows` i `Find-WindowProcess` nie odróżniają okien najwyższego poziomu z właścicielem (`GW_OWNER`) od okien bez właściciela.
+origin: review 3.10, 2026-10-22
+location: tools/check-home-s10.ps1 — `Get-BrowserWindowIds` / `Find-WindowProcess`
+source_spec: `tickets/epic-input/tickets/story-refactor-sweep-plan.md`
+severity: medium (unverified)
+reason: Diff 3.10 zastąpił `Process.MainWindowHandle` (pierwsze widoczne okno najwyższego poziomu **bez właściciela**) enumeracją `EnumWindows`, która nie niesie informacji o właścicielu, a filtr klasy `Chrome_WidgetWin_*` przepuszcza także `Chrome_WidgetWin_0`, używane przez Chromium dla okien niebędących oknami przeglądarki. Gdyby w oknie pomiaru pojawiło się widoczne okno z właścicielem (tooltip/popup) albo widoczne `Chrome_WidgetWin_0`, S10 zaliczyłoby poprawny press jako `browser window` lub `target not foreground` (fałszywy FAIL) albo wybrało zły uchwyt celu. Osiągalności nie wykazano: na ALDER jedyne widoczne okno przeglądarki to `Chrome_WidgetWin_1` bez właściciela, a `Find-WindowProcess` dla MediaStation zwrócił ten sam uchwyt co `MainWindowHandle` w stanie normalnym i zawieszonym. Rozstrzyga przebieg S10 na UM760 z Edge i Moonlightem: porównanie zbioru `pid:handle` i uchwytu celu z `MainWindowHandle` oraz brak fałszywych `browser window`. Naprawa: pole `Owner` (`GetWindow(hwnd, GW_OWNER)`) w `Get-TopLevelWindows` i pomijanie okien z właścicielem w obu miejscach.
+status: open
+
+### DW-16: S10 nie odróżnia okien najwyższego poziomu z właścicielem (`GW_OWNER`) od okien bez właściciela: `EnumWindows` w `Get-BrowserWindowIds` i `Find-WindowProcess` przepuszcza widoczne okna z właścicielem
+origin: spec-deferred 176036279b85
+location: tools/check-home-s10.ps1 Get-BrowserWindowIds / Find-WindowProcess
+source_spec: `tickets/epic-input/tickets/story-refactor-sweep-plan.md`
+reason: Review pass 2: zmiana zastąpiła `Process.MainWindowHandle` (pierwsze widoczne okno najwyższego poziomu bez właściciela) enumeracją bez informacji o właścicielu, a filtr klasy jest prefiksem `Chrome_WidgetWin_*`. Osiągalności nie wykazano: na ALDER jedyne widoczne okno przeglądarki to `Chrome_WidgetWin_1` bez właściciela, a `Find-WindowProcess` dla MediaStation zwrócił ten sam uchwyt co `MainWindowHandle` (także w stanie zawieszonym). Rozstrzyga przebieg S10 na UM760 z Edge i Moonlightem (porównanie zbioru `pid:handle` i uchwytu celu z `MainWindowHandle`, brak fałszywych `browser window`); wpis w ledgerze jako DW-15. Naprawa: pole `Owner` (`GetWindow(hwnd, GW_OWNER)`) w `Get-TopLevelWindows` i pomijanie okien z właścicielem w obu miejscach.
 status: open

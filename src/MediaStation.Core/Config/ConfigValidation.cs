@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using MediaStation.Core.Contracts;
+using MediaStation.Core.Input;
 
 namespace MediaStation.Core.Config;
 
@@ -311,6 +312,13 @@ public static class ConfigValidation
                 errors.Add(
                     JsonErrorPath.Property(devicePath, "source"),
                     $"sygnatura {Quote(InputDevice.WildcardSignature)} wymaga source {Quote("keyboard")}");
+            }
+            else if (DeviceSignature.HasEmbeddedWildcard(device.Signature))
+            {
+                // Ścieżka Raw Input nigdy nie zawiera `*`, więc taki wpis nie dopasuje niczego (DW-8).
+                errors.Add(
+                    signaturePath,
+                    $"sygnatura {Quote(device.Signature)} może zawierać „*” tylko jako całą sygnaturę");
             }
 
             var keysPath = JsonErrorPath.Property(devicePath, "keys");

@@ -59,4 +59,14 @@ internal static class DeviceSignature
         && !string.IsNullOrEmpty(signature)
         && (signature == InputDevice.WildcardSignature
             || devicePath.Contains(signature, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Czy <paramref name="signature"/> zawiera <c>*</c>, ale nie jest dokładnie <see cref="InputDevice.WildcardSignature"/>
+    /// ani pusta? Taka sygnatura nigdy nie dopasuje ścieżki Raw Input, bo <see cref="Matches"/> traktuje <c>*</c>
+    /// specjalnie tylko jako całą sygnaturę; walidacja zamienia ten martwy wpis w błąd configu (DW-8).
+    /// </summary>
+    internal static bool HasEmbeddedWildcard(string? signature) =>
+        !string.IsNullOrEmpty(signature)
+        && signature != InputDevice.WildcardSignature
+        && signature.Contains('*');
 }

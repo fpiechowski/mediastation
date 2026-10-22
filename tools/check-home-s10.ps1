@@ -9,9 +9,14 @@
     through FileShare.ReadWrite, and counts only entries of the current process (boundary: the last
     `start {pid}`). For each press the script records `From` (UTC) just before the beep, waits up to
     -PressTimeoutSeconds for a new `action home`, settles for -SettleSeconds and then scores the window
-    [From, To): exactly one `action home`, no new `msedge`/`chrome` window (`pid:handle`) and a foreground
-    window of the target process are a pass; zero actions is "no action", more than one is "double action",
-    a new window is "browser window" and another foreground process is "target not foreground".
+    [From, To): exactly one `action home`, no new browser window and the target window in the foreground are
+    a pass; zero actions is "no action", more than one is "double action", a new window is "browser window"
+    and another foreground window is "target not foreground". A browser window is every visible top-level
+    `msedge`/`chrome` window of class `Chrome_WidgetWin_*`, identified as `pid:handle`, so a second window in
+    an existing process is a new window too. The foreground check compares the target handle with the
+    foreground handle, not the process, so another window of the same process is not a pass; two shell
+    exceptions are named: the DWM ghost window of a hung shell (`shell-hung`) and the desktop window
+    (`Progman`/`WorkerW` owned by `explorer`, target `desktop`).
 
     The person only presses Home after each beep and touches nothing else.
 
@@ -27,6 +32,8 @@
 
     -SelfTest scores the recorded fixture without any hardware: four windows must give counts
     0/1/2/1 and verdicts fail/pass/fail/pass, and a correct count plus a new browser window must fail.
+    It also exercises the clean decision cases (window ids, new ids, foreground) with fake windows, so
+    the rules that used to need a live desktop (DW-13, DW-14) are covered before Add-Type.
 
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-home-s10.ps1 -SelfTest
@@ -190,17 +197,71 @@ function Get-PressCount {
     return @($Homes | Where-Object { $_.Ts -ge $From -and $_.Ts -lt $To }).Count
 }
 
-function Get-BrowserWindows {
-    # Unswallowed Home opens a new browser window (not a tab), so `pid:handle` identifies it.
-    $windows = @()
-    foreach ($process in @(Get-Process -Name 'msedge', 'chrome' -ErrorAction SilentlyContinue)) {
-        $handle = Get-MainWindowHandle -Process $process
-        if ($handle -ne [IntPtr]::Zero) {
-            $windows += '{0}:{1}' -f $process.Id, $handle.ToInt64()
+function Get-BrowserWindowIds {
+    param([object[]]$Windows)
+
+    # Unswallowed Home opens a new browser window, so one `pid:handle` per window (not per process) makes a second
+    # window in an existing Edge/Chrome process visible (DW-13). EnumWindows also returns tooltips and popups of
+    # the same process; they appear and vanish by themselves between `before` and `after`, so only real browser
+    # windows (`Chrome_WidgetWin_*`, the Chromium window class) count.
+    $ids = @()
+    foreach ($window in $Windows) {
+        if ($window.ProcessName -notin @('msedge', 'chrome')) {
+            continue
         }
+
+        if (-not ([string]$window.Class).StartsWith('Chrome_WidgetWin_', [System.StringComparison]::Ordinal)) {
+            continue
+        }
+
+        $ids += '{0}:{1}' -f $window.ProcessId, ([IntPtr]$window.Handle).ToInt64()
     }
 
-    return $windows
+    return $ids
+}
+
+function Get-NewWindowIds {
+    param(
+        [string[]]$Before = @(),
+        [string[]]$After = @()
+    )
+
+    return @($After | Where-Object { $Before -notcontains $_ })
+}
+
+function Test-TargetForeground {
+    param(
+        [string]$Target,
+        [IntPtr]$ForegroundHandle,
+        [IntPtr]$TargetHandle,
+        [string]$ForegroundProcessName = '',
+        [string]$ForegroundClass = ''
+    )
+
+    if ($ForegroundHandle -eq [IntPtr]::Zero -or $TargetHandle -eq [IntPtr]::Zero) {
+        return $false
+    }
+
+    # The strict rule: the target window itself is in the foreground, so another window of the same process fails.
+    if ($ForegroundHandle -eq $TargetHandle) {
+        return $true
+    }
+
+    # A shell hung for more than ~5 s is replaced on screen by a DWM ghost window owned by dwm.exe; that ghost is the
+    # hung shell on top.
+    if ($Target -eq 'shell-hung' -and $ForegroundProcessName -eq 'dwm') {
+        return $true
+    }
+
+    # After MinimizeAll the desktop window is `Progman` (FindWindow) or `WorkerW` (GetForegroundWindow); both belong
+    # to explorer. The class name is not reserved, so the process gate keeps a `WorkerW` window of another app
+    # (e.g. a wallpaper app) from passing.
+    if ($Target -eq 'desktop' -and $ForegroundProcessName -eq 'explorer' -and
+        ($ForegroundClass -eq 'Progman' -or $ForegroundClass -eq 'WorkerW')) {
+        return $true
+    }
+
+    return $false
 }
 
 function Test-Press {
@@ -305,6 +366,36 @@ function Invoke-SelfTest {
         $problems.Add("SelfTest 'browser window': expected failure reason 'browser window', got '$($browser.Reason)'")
     }
 
+    # Clean decision cases without Add-Type: window ids, new ids and the foreground rule (DW-13, DW-14).
+    $expect = {
+        param([string]$Name, $Actual, $Expected)
+        Write-Host ("SelfTest '{0}': {1} - expected {2}" -f $Name, $Actual, $Expected)
+        if ($Actual -ne $Expected) {
+            $problems.Add(("SelfTest '{0}': got '{1}' instead of '{2}'" -f $Name, $Actual, $Expected))
+        }
+    }
+
+    $decisionWindows = @(
+        [pscustomobject]@{ Handle = [IntPtr]273; ProcessId = 4242; ProcessName = 'msedge'; Class = 'Chrome_WidgetWin_1'; Title = 'Netflix' }
+        [pscustomobject]@{ Handle = [IntPtr]546; ProcessId = 4242; ProcessName = 'msedge'; Class = 'Chrome_WidgetWin_1'; Title = 'Second window' }
+        [pscustomobject]@{ Handle = [IntPtr]777; ProcessId = 4242; ProcessName = 'msedge'; Class = 'Chrome_Tooltip_Window'; Title = '' }
+        [pscustomobject]@{ Handle = [IntPtr]888; ProcessId = 5353; ProcessName = 'notepad'; Class = 'Chrome_WidgetWin_1'; Title = 'Other app' }
+        [pscustomobject]@{ Handle = [IntPtr]1365; ProcessId = 4343; ProcessName = 'chrome'; Class = 'Chrome_WidgetWin_0'; Title = 'Chrome' }
+    )
+
+    & $expect 'two windows of one pid give two ids' ((Get-BrowserWindowIds -Windows $decisionWindows) -join ',') '4242:273,4242:546,4343:1365'
+    & $expect 'tooltip window gives no id' ((Get-BrowserWindowIds -Windows @($decisionWindows[2])) -join ',') ''
+    & $expect 'new window in the same process is new' ((Get-NewWindowIds -Before @('4242:273') -After @('4242:273', '4242:546')) -join ',') '4242:546'
+    & $expect 'same handle is foreground' (Test-TargetForeground -Target 'edge' -ForegroundHandle ([IntPtr]273) -TargetHandle ([IntPtr]273) -ForegroundProcessName 'msedge' -ForegroundClass 'Chrome_WidgetWin_1') $true
+    & $expect 'other window of the same process is not foreground' (Test-TargetForeground -Target 'edge' -ForegroundHandle ([IntPtr]546) -TargetHandle ([IntPtr]273) -ForegroundProcessName 'msedge' -ForegroundClass 'Chrome_WidgetWin_1') $false
+    & $expect 'dwm ghost passes for a hung shell' (Test-TargetForeground -Target 'shell-hung' -ForegroundHandle ([IntPtr]900) -TargetHandle ([IntPtr]273) -ForegroundProcessName 'dwm' -ForegroundClass 'Ghost') $true
+    & $expect 'dwm ghost does not pass for edge' (Test-TargetForeground -Target 'edge' -ForegroundHandle ([IntPtr]900) -TargetHandle ([IntPtr]273) -ForegroundProcessName 'dwm' -ForegroundClass 'Ghost') $false
+    & $expect 'explorer WorkerW passes for desktop' (Test-TargetForeground -Target 'desktop' -ForegroundHandle ([IntPtr]901) -TargetHandle ([IntPtr]902) -ForegroundProcessName 'explorer' -ForegroundClass 'WorkerW') $true
+    & $expect 'explorer Progman passes for desktop' (Test-TargetForeground -Target 'desktop' -ForegroundHandle ([IntPtr]901) -TargetHandle ([IntPtr]902) -ForegroundProcessName 'explorer' -ForegroundClass 'Progman') $true
+    & $expect 'explorer window of another class does not pass for desktop' (Test-TargetForeground -Target 'desktop' -ForegroundHandle ([IntPtr]901) -TargetHandle ([IntPtr]902) -ForegroundProcessName 'explorer' -ForegroundClass 'CabinetWClass') $false
+    & $expect 'foreign WorkerW does not pass for desktop' (Test-TargetForeground -Target 'desktop' -ForegroundHandle ([IntPtr]901) -TargetHandle ([IntPtr]902) -ForegroundProcessName 'wallpaperapp' -ForegroundClass 'WorkerW') $false
+    & $expect 'explorer WorkerW does not pass for edge' (Test-TargetForeground -Target 'edge' -ForegroundHandle ([IntPtr]901) -TargetHandle ([IntPtr]902) -ForegroundProcessName 'explorer' -ForegroundClass 'WorkerW') $false
+
     if ($problems.Count -gt 0) {
         $problems | ForEach-Object { Write-Host "FAIL: $_" }
         Write-Host 'Self-test FAILED.'
@@ -364,17 +455,86 @@ function Set-FrontWindow {
     return [MediaStationHomeS10.Native]::SetForegroundWindow($Handle)
 }
 
-function Get-MainWindowHandle {
-    param([System.Diagnostics.Process]$Process)
+function Get-WindowTitle {
+    param([IntPtr]$Handle)
 
-    try {
-        $Process.Refresh()
-        return [IntPtr]$Process.MainWindowHandle
+    if ($Handle -eq [IntPtr]::Zero) {
+        return ''
     }
-    catch {
-        # The process ended between enumeration and the window read: it has no window.
-        return [IntPtr]::Zero
+
+    $buffer = New-Object System.Text.StringBuilder 512
+    [void][MediaStationHomeS10.Native]::GetWindowTextW($Handle, $buffer, $buffer.Capacity)
+    return $buffer.ToString()
+}
+
+function Get-WindowClass {
+    param([IntPtr]$Handle)
+
+    if ($Handle -eq [IntPtr]::Zero) {
+        return ''
     }
+
+    $buffer = New-Object System.Text.StringBuilder 256
+    [void][MediaStationHomeS10.Native]::GetClassNameW($Handle, $buffer, $buffer.Capacity)
+    return $buffer.ToString()
+}
+
+function Get-ProcessName {
+    param([int]$ProcessId)
+
+    if ($ProcessId -eq 0) {
+        return ''
+    }
+
+    $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if ($null -ne $process) {
+        return $process.ProcessName
+    }
+
+    return ''
+}
+
+function Get-TopLevelWindows {
+    # EnumWindows gives every visible top-level window (including tooltips and popups), not one per process, so a
+    # second browser window in an existing process is visible (DW-13). Process names are cached per PID.
+    $handles = New-Object 'System.Collections.Generic.List[IntPtr]'
+    [void][MediaStationHomeS10.Native]::EnumWindows({
+            param([IntPtr]$handle, [IntPtr]$state)
+
+            if ([MediaStationHomeS10.Native]::IsWindowVisible($handle)) {
+                $handles.Add($handle)
+            }
+
+            return $true
+        }, [IntPtr]::Zero)
+
+    $names = @{}
+    $windows = @()
+    foreach ($handle in $handles) {
+        $processId = Get-WindowProcessId -Handle $handle
+        if ($processId -eq 0) {
+            continue
+        }
+
+        if (-not $names.ContainsKey($processId)) {
+            $names[$processId] = Get-ProcessName -ProcessId $processId
+        }
+
+        $windows += [pscustomobject]@{
+            Handle      = $handle
+            ProcessId   = $processId
+            ProcessName = $names[$processId]
+            Class       = Get-WindowClass -Handle $handle
+            Title       = Get-WindowTitle -Handle $handle
+        }
+    }
+
+    return $windows
+}
+
+function Get-BrowserWindows {
+    # The live wrapper over the clean decision: one `pid:handle` per real browser window.
+    return @(Get-BrowserWindowIds -Windows @(Get-TopLevelWindows))
 }
 
 function Get-WindowProcessId {
@@ -396,35 +556,28 @@ function Find-WindowProcess {
         [string]$TitlePattern = ''
     )
 
-    if ($ProcessId -ne 0) {
-        $candidates = @(Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)
-    }
-    elseif ($Name.Length -gt 0) {
-        $candidates = @(Get-Process -Name $Name -ErrorAction SilentlyContinue)
-    }
-    else {
-        $candidates = @()
-    }
-
-    foreach ($process in $candidates) {
-        $handle = Get-MainWindowHandle -Process $process
-        if ($handle -eq [IntPtr]::Zero) {
-            continue
-        }
-
-        if ($TitlePattern.Length -gt 0) {
-            try {
-                if ($process.MainWindowTitle -notmatch $TitlePattern) {
-                    continue
-                }
-            }
-            catch {
-                # The process ended between the window and title read: it has no window.
+    # The same top-level enumeration as the browser-window set: the result is a real top-level handle, so the
+    # foreground check can compare handles instead of processes (DW-14).
+    foreach ($window in @(Get-TopLevelWindows)) {
+        if ($ProcessId -ne 0) {
+            if ($window.ProcessId -ne $ProcessId) {
                 continue
             }
         }
+        elseif ($Name.Length -gt 0) {
+            if ($window.ProcessName -ne $Name) {
+                continue
+            }
+        }
+        else {
+            continue
+        }
 
-        return $handle
+        if ($TitlePattern.Length -gt 0 -and $window.Title -notmatch $TitlePattern) {
+            continue
+        }
+
+        return [IntPtr]$window.Handle
     }
 
     return [IntPtr]::Zero
@@ -493,16 +646,17 @@ function Measure-Press {
     $foreground = [MediaStationHomeS10.Native]::GetForegroundWindow()
     $targetProcessId = Get-WindowProcessId -Handle $Handle
     $foregroundProcessId = Get-WindowProcessId -Handle $foreground
-    $targetIsForeground = $foreground -ne [IntPtr]::Zero -and $targetProcessId -ne 0 -and $foregroundProcessId -eq $targetProcessId
+    $foregroundProcess = if ($foregroundProcessId -ne 0) { Get-Process -Id $foregroundProcessId -ErrorAction SilentlyContinue } else { $null }
+    $foregroundProcessName = if ($null -ne $foregroundProcess) { $foregroundProcess.ProcessName } else { '' }
+    $foregroundClass = Get-WindowClass -Handle $foreground
 
-    # A shell hung for more than ~5 s is replaced on screen by a DWM ghost window owned by dwm.exe; that ghost is the hung shell on top.
-    if (-not $targetIsForeground -and $Target -eq 'shell-hung' -and $foregroundProcessId -ne 0) {
-        $foregroundProcess = Get-Process -Id $foregroundProcessId -ErrorAction SilentlyContinue
-        $targetIsForeground = $null -ne $foregroundProcess -and $foregroundProcess.ProcessName -eq 'dwm'
-    }
+    # Exact handle, not the process: another window of the same process must not pass (DW-14). The shell exceptions
+    # (DWM ghost of a hung shell, explorer's desktop window) live in Test-TargetForeground.
+    $targetIsForeground = Test-TargetForeground -Target $Target -ForegroundHandle $foreground -TargetHandle $Handle `
+        -ForegroundProcessName $foregroundProcessName -ForegroundClass $foregroundClass
 
-    Note ('  {0} #{1}: foreground 0x{2:X} pid={3} (target 0x{4:X} pid={5}, SetForegroundWindow={6})' -f
-        $Target, $Index, $foreground.ToInt64(), $foregroundProcessId, $Handle.ToInt64(), $targetProcessId, $front)
+    Note ('  {0} #{1}: foreground 0x{2:X} pid={3} class={4} (target 0x{5:X} pid={6}, SetForegroundWindow={7})' -f
+        $Target, $Index, $foreground.ToInt64(), $foregroundProcessId, $foregroundClass, $Handle.ToInt64(), $targetProcessId, $front)
 
     # Focus is advisory: a press delivered to another window must not count as a pass for the target.
     if (-not $targetIsForeground) {
@@ -532,7 +686,7 @@ function Measure-Press {
     $to = [DateTimeOffset]::UtcNow
 
     $after = @(Get-BrowserWindows)
-    $newBrowserWindows = @($after | Where-Object { $before -notcontains $_ })
+    $newBrowserWindows = @(Get-NewWindowIds -Before $before -After $after)
     $homes = @(Get-HomeActions -Entries @(Get-RunEntries -ProcessId $script:AppProcessId))
     $result = Test-Press -Homes $homes -From $from -To $to -NewBrowserWindow $newBrowserWindows
 
@@ -565,6 +719,7 @@ if ($SelfTest) {
 
 if (-not ('MediaStationHomeS10.Native' -as [type])) {
     Add-Type -Namespace MediaStationHomeS10 -Name Native -MemberDefinition @'
+public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
 [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
@@ -572,6 +727,10 @@ if (-not ('MediaStationHomeS10.Native' -as [type])) {
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+[DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+[DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr hWnd, System.Text.StringBuilder text, int maxCount);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassNameW(IntPtr hWnd, System.Text.StringBuilder text, int maxCount);
 '@
 }
 

@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
+using MediaStation.Core.Input;
 
 namespace MediaStation.Core.Tests;
 
@@ -625,6 +626,33 @@ public class ConfigValidationTests
 
         Assert.Equal("$.devices[1].signature", error.Path);
         Assert.Contains("$.devices[0]", error.Reason);
+    }
+
+    [Theory]
+    [InlineData("VID_1915*")]
+    [InlineData("*VID*")]
+    [InlineData("**")]
+    public void Wildcard_inside_signature_is_rejected(string signature)
+    {
+        // Taki wpis nigdy nie dopasuje ścieżki Raw Input (zawiera `*`), więc urządzenie wpadało w fallback (DW-8).
+        var error = SingleError(input: InputJson(signature: signature));
+
+        Assert.Equal(Input, error.File);
+        Assert.Equal("$.devices[0].signature", error.Path);
+        Assert.Contains("tylko jako całą sygnaturę", error.Reason);
+    }
+
+    [Theory]
+    [InlineData("*", false)]
+    [InlineData("", false)]
+    [InlineData("VID_1915&PID_1025", false)]
+    [InlineData("VID_1915*", true)]
+    [InlineData("*VID", true)]
+    [InlineData("*VID*", true)]
+    [InlineData("**", true)]
+    public void HasEmbeddedWildcard_only_flags_a_wildcard_inside_a_signature(string signature, bool expected)
+    {
+        Assert.Equal(expected, DeviceSignature.HasEmbeddedWildcard(signature));
     }
 
     [Theory]
