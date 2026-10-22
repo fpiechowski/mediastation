@@ -33,7 +33,7 @@ public class PowerSignalReporterTests
     {
         var (reporter, log, posted, _) = Create();
 
-        reporter.Report("PowerModeChanged");
+        reporter.Report(PowerSignalRouter.PowerModeChangedSource);
 
         Assert.Equal(["powerSignal"], log.Messages());
         Assert.Empty(posted);

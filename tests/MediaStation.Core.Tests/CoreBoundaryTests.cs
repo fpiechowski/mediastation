@@ -153,6 +153,7 @@ public class CoreBoundaryTests
         Assert.Contains("SystemResumed", typeNames);
         Assert.DoesNotContain("WakeSignalGate", typeNames);
         Assert.DoesNotContain(typeNames, name => name.Contains("WakeSignal", StringComparison.Ordinal));
+        Assert.DoesNotContain("PowerSignalRouter", typeNames);
     }
 
     private static bool IsForbiddenType(string fullName) =>

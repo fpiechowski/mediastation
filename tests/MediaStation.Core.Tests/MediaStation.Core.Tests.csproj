@@ -20,7 +20,8 @@
 
   <!--
     Brak projektu testów App (granica epiki), więc typy adaptera bez Win32/WPF są linkowane do testów,
-    jak FileLogSink w MediaStation.LogAppendCheck. Shim Win32 (PowerNotifications) zostaje nietestowany.
+    jak FileLogSink w MediaStation.LogAppendCheck. Poza testami zostaje sam plumbing Win32/WPF shimu
+    PowerNotifications (hook, RegisterPowerSettingNotification, SystemEvents, Marshal payloadu).
   -->
   <ItemGroup>
     <Compile Include="..\..\src\MediaStation.App\Hosts\MissingHostPort.cs" Link="App\MissingHostPort.cs" />
@@ -29,6 +30,8 @@
     <Compile Include="..\..\src\MediaStation.App\Platform\Input\LogInputRoutingPort.cs" Link="App\LogInputRoutingPort.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\DisplayStateNotification.cs" Link="App\DisplayStateNotification.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSignalReporter.cs" Link="App\PowerSignalReporter.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSignalRouter.cs" Link="App\PowerSignalRouter.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSourcesAttachment.cs" Link="App\PowerSourcesAttachment.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\WakeSignalGate.cs" Link="App\WakeSignalGate.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Window\LogWindowManagerPort.cs" Link="App\LogWindowManagerPort.cs" />
   </ItemGroup>

@@ -1,7 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
-using MediaStation.Core.Logging;
 using Microsoft.Win32;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -12,24 +11,21 @@ namespace MediaStation.App.Platform.System;
 /// <summary>
 /// Cienki shim Win32 dla trzech źródeł sygnału wybudzenia: hook <c>WM_POWERBROADCAST</c> na top-level HWND
 /// shella (broadcast nie dociera do okien message-only), <c>RegisterPowerSettingNotification</c> dla
-/// <c>GUID_CONSOLE_DISPLAY_STATE</c> i <c>SystemEvents.PowerModeChanged</c>. Decyzję i księgowość trzyma
-/// <see cref="PowerSignalReporter"/>, a klasyfikację payloadu <see cref="DisplayStateNotification"/>.
+/// <c>GUID_CONSOLE_DISPLAY_STATE</c> i <c>SystemEvents.PowerModeChanged</c>. Decyzję (okno echa i mapowanie
+/// źródeł) trzyma <see cref="PowerSignalRouter"/>, księgowość <see cref="PowerSignalReporter"/>, a klasyfikację
+/// payloadu <see cref="DisplayStateNotification"/>.
 /// </summary>
 internal sealed class PowerNotifications : IDisposable
 {
-    private const string PowerModeChangedSource = "PowerModeChanged";
-
-    private readonly PowerSignalReporter _reporter;
-    private readonly HwndSource? _source;
+    private readonly PowerSignalRouter _router;
+    private readonly PowerSourcesAttachment _power = new();
     private readonly HwndSourceHook _hook;
     private UnregisterPowerSettingNotificationSafeHandle? _displayStateRegistration;
-    private bool _registering;
     private bool _disposed;
 
     /// <summary>
     /// Podłącza trzy źródła do <paramref name="hwnd"/>. Echo rejestracji <c>GUID_CONSOLE_DISPLAY_STATE</c>
-    /// (bieżący stan wysyłany od razu po rejestracji) nie jest kandydatem: cały start jest w oknie
-    /// <see cref="_registering"/>.
+    /// tłumi okno w <see cref="PowerSignalRouter"/>; shim tylko przekazuje zdarzenia systemowe.
     /// </summary>
     public static PowerNotifications Start(IntPtr hwnd, PowerSignalReporter reporter)
     {
@@ -40,29 +36,40 @@ internal sealed class PowerNotifications : IDisposable
 
     private PowerNotifications(IntPtr hwnd, PowerSignalReporter reporter)
     {
-        _reporter = reporter;
+        _router = new PowerSignalRouter(reporter);
         _hook = OnWindowMessage;
-        _registering = true;
+        _router.BeginRegistration();
 
         var windowHook = false;
+        var displayState = false;
+
         try
         {
-            _source = HwndSource.FromHwnd(hwnd);
-            if (_source is not null)
+            var source = HwndSource.FromHwnd(hwnd);
+            if (source is not null)
             {
-                _source.AddHook(_hook);
+                _power.Attach(() => source.AddHook(_hook), () => source.RemoveHook(_hook));
                 windowHook = true;
             }
 
-            _displayStateRegistration = RegisterDisplayState(hwnd);
+            _power.Attach(
+                () => displayState = (_displayStateRegistration = RegisterDisplayState(hwnd)) is { IsInvalid: false },
+                () =>
+                {
+                    _displayStateRegistration?.Dispose();
+                    _displayStateRegistration = null;
+                });
 
-            SystemEvents.PowerModeChanged += OnPowerModeChanged;
+            _power.Attach(
+                () => SystemEvents.PowerModeChanged += OnPowerModeChanged,
+                () => SystemEvents.PowerModeChanged -= OnPowerModeChanged);
         }
         finally
         {
-            _registering = false;
-            _reporter.ReportRegistration(
-                displayState: _displayStateRegistration is { IsInvalid: false },
+            // Raport opisuje stan podłączeń z chwili startu także wtedy, gdy konstrukcja padła: nieudane
+            // podłączenie zdejmuje już podłączone źródła (DW-2), a linia zostaje ta sama co dawniej.
+            _router.CompleteRegistration(
+                displayState: displayState,
                 windowHook: windowHook,
                 powerModeChanged: true);
         }
@@ -116,14 +123,13 @@ internal sealed class PowerNotifications : IDisposable
             var powerEvent = (uint)wParam.ToInt64();
             if (powerEvent == PInvoke.PBT_APMRESUMEAUTOMATIC)
             {
-                _reporter.Report(WakeSignalGate.ResumeAutomaticSource);
+                _router.OnResumeAutomatic();
             }
             else if (powerEvent == PInvoke.PBT_POWERSETTINGCHANGE && lParam != IntPtr.Zero)
             {
-                if (TryCopyDisplayStateSetting(lParam, out var payload)
-                    && DisplayStateNotification.IsWake(payload, PInvoke.GUID_CONSOLE_DISPLAY_STATE, _registering))
+                if (TryCopyDisplayStateSetting(lParam, out var payload))
                 {
-                    _reporter.Report(WakeSignalGate.DisplayStateSource);
+                    _router.OnDisplayStateChanged(payload, PInvoke.GUID_CONSOLE_DISPLAY_STATE);
                 }
             }
         }
@@ -136,7 +142,7 @@ internal sealed class PowerNotifications : IDisposable
         // Reguła epiki nie dopuszcza PowerModeChanged jako zwycięzcy; to kandydat tylko do logu.
         if (e.Mode == PowerModes.Resume)
         {
-            _reporter.Report(PowerModeChangedSource);
+            _router.OnPowerModeResumed();
         }
     }
 
@@ -148,13 +154,6 @@ internal sealed class PowerNotifications : IDisposable
         }
 
         _disposed = true;
-
-        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
-        if (_source is not null)
-        {
-            _source.RemoveHook(_hook);
-        }
-
-        _displayStateRegistration?.Dispose();
+        _power.Dispose();
     }
 }
