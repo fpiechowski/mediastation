@@ -5,6 +5,7 @@ parent: initiative-mediastation-mvp
 covers: [CAP-2]
 after: []
 assignee: ""
+status: done
 risk: medium
 ---
 
@@ -71,3 +72,6 @@ Core: Orchestrator, stan sesji, polityka wyboru przy Home; App: SystemEvents. Ni
 - Decision: bez closing end-to-end suite — spec nie ma test planu dla CAP-2, a scenariusze pokrywają testy stories (2026-10-21).
 - Decision (bmad-loop, 2026-10-21): epika 2 jest puszczona w pełni automatycznie do `epic-boundary`; 2.1, 2.2 i 2.9 nie są `hitl` i nie mają `plan_checkpoint`/`done_checkpoint`. Checki sprzętowe są best-effort na aktualnej maszynie; UM760 per ticket nie jest wymagany, a całościowy test UM760 wykonuje użytkownik przy `epic-boundary`; wyniki idą do notatki odbioru lub bugów.
 - Decision (2026-10-21): UM760 nie jest wymagany per ticket. Agent testuje każdy ticket automatycznie na aktualnej maszynie (ALDER, B760 Pro RS/D4, Windows 11 Home), akceptuje najmocniejszy dostępny dowód i nie parkuje ticketu dla checków sprzętowych. Po dostarczeniu epiku użytkownik wykonuje całościowy test UM760 całego epiku przy `epic-boundary` i tam akceptuje pracę; agent nie zamyka epiku.
+- Decision (2026-10-22): epika zamknięta po odbiorze użytkownika na UM760 (build `3517448`, Modern Standby S0 Low Power Idle): P0, S1, S2, S3, S4, S5, S7 pass, S6 obserwacja; sygnałem wybudzenia na UM760 jest `GUID_CONSOLE_DISPLAY_STATE`, reguła z Notes bez zmian. Dowód: `epic-orchestrator-lifecycle-um760-acceptance.md`. Werdykt retro: accepted-with-open-items.
+- Decision (2026-10-22): F6 (dwie aplikacje w `Foreground` po `LaunchApp`) jest osobnym bugiem w `backlog/`, wymaganym przed `epic-home-screen`.
+- Deferred (retro epiki 2, 2026-10-22): A2 (full lenses dla `risk` medium|high w szablonie planu pętli), A3 (Orchestrator ma zachować `rootPid` z `AppWindowAttached` dla `epic-windows-audio`, AD-15), A4 (podział `OrchestratorTests` i switcha przed `epic-home-screen`/`epic-input`), A5 (wiring i kolejność zamykania `CompositionRoot` tylko smoke), A6 (zapis HEAD zamknięcia ticketu, uzgodnienie Notes z `deferred-work.md`), A7 (rekoncyliacja `built` po timeoucie sesji w pętli). Źródło: `epic-orchestrator-lifecycle-retrospective.md`.
