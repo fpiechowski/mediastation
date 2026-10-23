@@ -194,9 +194,10 @@ public sealed class InputPolicy : IInputTarget
             var id = HeldId.ForKeyboard(key.VirtualKey);
             if (_held.TryGetValue(id, out var autorepeat))
             {
-                // Zgubiony key-up przepuszczonego klawisza nie może uwięzić VK na zawsze: wpis starszy niż
-                // MaxRepeatHoldMs jest nieświeży, więc ten key-down zaczyna nowe trzymanie.
-                if (!autorepeat.Swallow && key.TimeMs - autorepeat.DownTimeMs > MaxRepeatHoldMs)
+                // Zgubiony key-up nie może uwięzić VK na zawsze: wpis przepuszczonego klawisza albo połkniętego bez siatki
+                // repeat (Home, Back, OK, Keyboard) starszy niż MaxRepeatHoldMs jest nieświeży, więc ten key-down zaczyna
+                // nowe naciśnięcie (naprawdę trzymany klawisz daje jedną Action na MaxRepeatHoldMs). Strzałka zostaje połknięta do key-up.
+                if ((!autorepeat.Swallow || !IsRepeatable(kind)) && key.TimeMs - autorepeat.DownTimeMs > MaxRepeatHoldMs)
                 {
                     _held.Remove(id);
                 }

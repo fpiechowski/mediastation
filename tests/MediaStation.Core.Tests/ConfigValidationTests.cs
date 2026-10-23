@@ -711,6 +711,17 @@ public class ConfigValidationTests
         Assert.Equal(new ConfigError(Input, "$.timing.longPressMs", "wartość musi być większa od 0"), error);
     }
 
+    [Theory]
+    [InlineData(60000, 120, "$.timing.repeatDelayMs", "wartość musi być mniejsza niż 60000")]
+    [InlineData(400, 59600, "$.timing.repeatIntervalMs", "repeatDelayMs + repeatIntervalMs musi być mniejsze niż 60000")]
+    public void Repeat_timing_must_fit_in_max_hold(int delay, int interval, string path, string reason)
+    {
+        var error = SingleError(
+            input: InputJson(extra: $$""", "timing": { "repeatDelayMs": {{delay}}, "repeatIntervalMs": {{interval}} }"""));
+
+        Assert.Equal(new ConfigError(Input, path, reason), error);
+    }
+
     [Fact]
     public void Long_press_threshold_must_be_an_integer()
     {

@@ -375,6 +375,7 @@ public static class ConfigValidation
         CheckPositive(config.Timing.LongPressMs, JsonErrorPath.Property(timingPath, "longPressMs"), errors);
         CheckPositive(config.Timing.RepeatDelayMs, JsonErrorPath.Property(timingPath, "repeatDelayMs"), errors);
         CheckPositive(config.Timing.RepeatIntervalMs, JsonErrorPath.Property(timingPath, "repeatIntervalMs"), errors);
+        CheckRepeatFitsHold(config.Timing, timingPath, errors);
 
         var homePath = JsonErrorPath.Property("$", "gamepadHome");
         var buttons = new Dictionary<GamepadButton, string>();
@@ -461,6 +462,25 @@ public static class ConfigValidation
 
     /// <summary>Nazwa <c>kind</c> w komunikatach: camelCase, jak w <c>input.json</c>.</summary>
     private static string KindName(ActionKind kind) => JsonNamingPolicy.CamelCase.ConvertName(kind.ToString());
+
+    /// <summary>
+    /// Siatka <c>repeat</c> kończy się po <see cref="InputPolicy.MaxRepeatHoldMs"/>: opóźnienie początkowe i pierwszy
+    /// interwał muszą się w nim zmieścić, inaczej config po cichu wyłącza repeat.
+    /// </summary>
+    private static void CheckRepeatFitsHold(InputTiming timing, string timingPath, FileErrors errors)
+    {
+        const int max = InputPolicy.MaxRepeatHoldMs;
+        if (timing.RepeatDelayMs >= max)
+        {
+            errors.Add(JsonErrorPath.Property(timingPath, "repeatDelayMs"), $"wartość musi być mniejsza niż {max}");
+        }
+        else if (timing.RepeatIntervalMs > 0 && (long)timing.RepeatDelayMs + timing.RepeatIntervalMs >= max)
+        {
+            errors.Add(
+                JsonErrorPath.Property(timingPath, "repeatIntervalMs"),
+                $"repeatDelayMs + repeatIntervalMs musi być mniejsze niż {max}");
+        }
+    }
 
     private static void CheckAtMost(int value, int max, string name, FileErrors errors)
     {

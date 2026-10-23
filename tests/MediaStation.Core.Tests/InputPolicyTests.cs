@@ -410,6 +410,29 @@ public class InputPolicyTests
     }
 
     [Fact]
+    public void Swallowed_home_with_missing_key_up_is_stale_after_max_hold_and_acts_again()
+    {
+        var (policy, _, _) = Create(InputMode.Shell);
+
+        // Key-up połkniętego Home ginie (secure desktop, zablokowana stacja): bez wygaszania Home byłby martwy.
+        var first = policy.OnKey(Down(0xAC, 1000));
+        Assert.True(first.Swallow);
+        Assert.Single(first.Actions);
+
+        // Do granicy MaxRepeatHoldMs wpis jest świeży: to autorepeat, połykany bez Actions.
+        var beforeBound = policy.OnKey(Down(0xAC, 1000 + InputPolicy.MaxRepeatHoldMs));
+        Assert.True(beforeBound.Swallow);
+        Assert.Empty(beforeBound.Actions);
+
+        // Po granicy key-down zaczyna nowe naciśnięcie i daje Action.
+        var afterBound = policy.OnKey(Down(0xAC, 1000 + InputPolicy.MaxRepeatHoldMs + 1));
+        Assert.True(afterBound.Swallow);
+        Assert.Equal(
+            Press(ActionKind.Home, ActionSource.Keyboard, 1000 + InputPolicy.MaxRepeatHoldMs + 1),
+            Assert.Single(afterBound.Actions));
+    }
+
+    [Fact]
     public void Key_up_without_key_down_follows_the_current_row()
     {
         var (policy, _, routing) = Create(InputMode.App, AppType.Moonlight);
