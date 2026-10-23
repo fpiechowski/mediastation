@@ -54,6 +54,9 @@ public interface IInputRoutingPort
 {
     /// <summary>Przekazuje InputHubowi nowy tryb routingu wraz z <c>epoch</c>.</summary>
     void Execute(SetInputRouting command);
+
+    /// <summary>Przekazuje InputHubowi zbiór okien MediaStation dla bramki foreground (AD-8) wraz z <c>epoch</c>.</summary>
+    void Execute(SetManagedWindows command);
 }
 
 /// <summary>

@@ -74,6 +74,22 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Set_managed_windows_command_envelope_serializes_with_cmd_id_first_and_round_trips()
+    {
+        var managed = new SetManagedWindows(12, null, [new ManagedWindow(6699, 4321)], 7);
+
+        var json = ContractJson.SerializeEnvelope<Command>(managed);
+
+        Assert.Equal(
+            """{"v":1,"type":"setManagedWindows","payload":{"cmdId":12,"oskHwnd":null,"apps":[{"hwnd":6699,"rootPid":4321}],"epoch":7}}""",
+            json);
+        var back = Assert.IsType<SetManagedWindows>(ContractJson.DeserializeEnvelope<Command>(json));
+        Assert.Equal(managed.CmdId, back.CmdId);
+        Assert.Equal(managed.Epoch, back.Epoch);
+        Assert.Equal(managed.Apps, back.Apps);
+    }
+
+    [Fact]
     public void Send_key_as_command_serializes_with_cmd_id_first_and_round_trips()
     {
         Command command = new SendKey(11, 172);
@@ -495,7 +511,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "sendKey", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
+        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "setManagedWindows", "sendKey", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -537,6 +553,7 @@ public class CoreMessageContractTests
                 "schedule-timer.schema.json",
                 "send-key.schema.json",
                 "set-input-routing.schema.json",
+                "set-managed-windows.schema.json",
                 "settings.schema.json",
                 "shell-snapshot.schema.json",
                 "show-shell.schema.json",
@@ -588,6 +605,22 @@ public class CoreMessageContractTests
         // clipHwnd: opcjonalny (poza `required`) i jawnie nullowalny, bo stary nadawca go nie wysyła.
         Assert.Equal(["integer", "null"], Strings(properties["clipHwnd"]!["type"]));
         Assert.Null(properties["clipHwnd"]!["default"]);
+    }
+
+    [Fact]
+    public void Set_managed_windows_schema_has_title_required_and_app_items()
+    {
+        var schema = Schema("set-managed-windows.schema.json");
+
+        Assert.Equal("SetManagedWindows", schema["title"]!.GetValue<string>());
+        Assert.Equal(["cmdId", "oskHwnd", "apps", "epoch"], Strings(schema["required"]));
+        Assert.False(schema["additionalProperties"]!.GetValue<bool>());
+
+        var properties = schema["properties"]!;
+        Assert.Equal(["integer", "null"], Strings(properties["oskHwnd"]!["type"]));
+        var item = properties["apps"]!["items"]!;
+        Assert.Equal("ManagedWindow", item["title"]!.GetValue<string>());
+        Assert.Equal(["hwnd", "rootPid"], Strings(item["required"]));
     }
 
     [Fact]

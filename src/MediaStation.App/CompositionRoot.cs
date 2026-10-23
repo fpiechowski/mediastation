@@ -215,6 +215,11 @@ public static class CompositionRoot
         // czekania na Orchestrator (AD-8), a port odrzuca `epoch` równy i starszy.
         var routing = new InputRoutingState();
 
+        // Zbiór okien MediaStation dla bramki foreground (AD-8): shell wpisuje się tu sam (Core nie zna jego uchwytu),
+        // resztę publikuje Orchestrator komendą `SetManagedWindows`.
+        var managedWindows = new ManagedWindows();
+        managedWindows.SetShell(new WindowInteropHelper(window).Handle.ToInt64());
+
         // Wstrzyknięcia klawiszy idą na własny wątek pompy (AD-14): router tylko kolejkuje, więc pętla Orchestratora
         // nie woła Win32 i Home nie czeka na SendInput. Pompa powstaje przed routerem, a startuje przed pętlą.
         var keyInjection = new KeyInjectionPump(KeyInjector.TrySendKey, log);
@@ -223,7 +228,7 @@ public static class CompositionRoot
             appTypes,
             hosts,
             new LogWindowManagerPort(log),
-            new InputHubRoutingPort(routing, log),
+            new InputHubRoutingPort(routing, log, managedWindows),
             keyInjection,
             timers,
             log);
@@ -274,7 +279,7 @@ public static class CompositionRoot
             actionPump = new ActionPump(actionSink, actionSink);
             actionPump.Start();
 
-            var inputPolicy = new InputPolicy(config.Input, time, routing);
+            var inputPolicy = new InputPolicy(config.Input, time, routing, new ManagedForegroundProbe(new Win32ForegroundWindow(), managedWindows));
             inputHub = new InputHub(inputPolicy, actionPump.Queue, actionSink, time, routing);
             inputHub.Start();
         }

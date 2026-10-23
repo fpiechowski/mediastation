@@ -98,6 +98,9 @@ public sealed class CommandRouter
                 case SetInputRouting routing:
                     _inputRouting.Execute(routing);
                     break;
+                case SetManagedWindows managed:
+                    _inputRouting.Execute(managed);
+                    break;
                 case SendKey key:
                     _keyInjection.Execute(key);
                     break;

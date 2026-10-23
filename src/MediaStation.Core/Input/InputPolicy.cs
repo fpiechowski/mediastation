@@ -65,6 +65,9 @@ public sealed record InputDecision(bool Swallow, IReadOnlyList<ActionMessage> Ac
 /// <c>home</c> na pełne złożenie. Czas płynie wyłącznie przez wstrzyknięty <see cref="TimeProvider"/> (AD-14).
 /// Zdarzenie ze <see cref="InjectionMarker.MediaStation"/> w <c>dwExtraInfo</c> nie daje Actions i nie jest połknięte,
 /// bo to własne wstrzyknięcie MediaStation wracające z hooka, a nie naciśnięcie użytkownika.
+/// Bramka foreground (AD-8): gdy wstrzyknięta <see cref="IForegroundProbe"/> mówi, że na pierwszym planie jest obce okno,
+/// klawisz przechodzi bez Actions i pad nie daje Actions (także <c>gamepadHome</c>); wyjątkiem jest Home z urządzenia
+/// <c>remote</c>. Decyzja zapada na key-down i rządzi key-upem. Bez sondy polityka zakłada okno MediaStation.
 /// Wskaźnik nie jest połykany w żadnym trybie (AD-8), by fizyczna mysz zawsze działała; wyjątkiem jest klik poza
 /// prostokątem <c>ClipCursor</c> w <c>osk</c>. Mysz nigdy nie daje Actions.
 /// Typ nie jest wątkowo bezpieczny: App woła go z jednego wątku Input (callback hooka i timer na tym samym
@@ -86,6 +89,7 @@ public sealed class InputPolicy : IInputTarget
 
     private readonly TimeProvider _time;
     private readonly InputRoutingState _routing;
+    private readonly IForegroundProbe? _foreground;
     private readonly int _longPressMs;
     private readonly int _repeatDelayMs;
     private readonly int _repeatIntervalMs;
@@ -105,7 +109,15 @@ public sealed class InputPolicy : IInputTarget
     /// <param name="config">Config wejścia; mapowanie jest scalane ze wszystkich urządzeń, pierwsze wygrywa.</param>
     /// <param name="time">Zegar terminów long-press i repeat (AD-14).</param>
     /// <param name="routing">Współdzielona kopia routingu (Orchestrator pisze, wątek Input czyta).</param>
-    public InputPolicy(InputConfig config, TimeProvider time, InputRoutingState routing)
+    /// <param name="foreground">
+    /// Bramka foreground (AD-8): klawiatura i pad działają tylko nad oknem MediaStation. Bez sondy polityka
+    /// zachowuje się, jakby okno MediaStation było zawsze na wierzchu.
+    /// </param>
+    public InputPolicy(
+        InputConfig config,
+        TimeProvider time,
+        InputRoutingState routing,
+        IForegroundProbe? foreground = null)
     {
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(time);
@@ -113,6 +125,7 @@ public sealed class InputPolicy : IInputTarget
 
         _time = time;
         _routing = routing;
+        _foreground = foreground;
         _longPressMs = config.Timing.LongPressMs;
         _repeatDelayMs = config.Timing.RepeatDelayMs;
         _repeatIntervalMs = config.Timing.RepeatIntervalMs;
@@ -209,8 +222,12 @@ public sealed class InputPolicy : IInputTarget
 
             // Jedno odczytanie kopii na zdarzenie: cała decyzja key-down pochodzi z tego samego wiersza (AD-8).
             var routing = _routing.Current;
-            var swallow = ShouldSwallow(kind, routing);
             var source = ResolveSource(key);
+
+            // Bramka foreground (AD-8): nad obcym oknem klawisz przechodzi bez Actions, a wpis w `_held` pamięta
+            // decyzję do key-upu i autorepeatu. Jedyny wyjątek to Home z urządzenia `remote`.
+            var swallow = (!IsForeign() || (kind == ActionKind.Home && source == ActionSource.Remote))
+                && ShouldSwallow(kind, routing);
             _held.Add(id, NewHeldKey(kind, source, key.TimeMs, swallow));
 
             if (!swallow)
@@ -252,8 +269,8 @@ public sealed class InputPolicy : IInputTarget
             return new InputDecision(held.Swallow, NoActions);
         }
 
-        // Key-up bez key-down (np. hook startował w trakcie trzymania) rozstrzyga bieżący wiersz kopii.
-        return new InputDecision(ShouldSwallow(kind, _routing.Current), NoActions);
+        // Key-up bez key-down (np. hook startował w trakcie trzymania) rozstrzyga bieżący wiersz kopii i bramka foreground.
+        return new InputDecision(!IsForeign() && ShouldSwallow(kind, _routing.Current), NoActions);
     }
 
     /// <summary>
@@ -276,6 +293,14 @@ public sealed class InputPolicy : IInputTarget
         // Brak odczytu to nie „wszystkie przyciski zwolnione”: trzymania pada znikają bez Actions, a pierwsza
         // dostępna migawka po przerwie jest nowym stanem początkowym (bez krawędzi press i bez Home).
         if (!snapshot.Available)
+        {
+            DropGamepadState();
+            return PassDecision;
+        }
+
+        // Nad obcym oknem pad nie daje Actions (także `gamepadHome`); pierwsza migawka po powrocie jest nowym stanem
+        // początkowym, więc przycisk wciśnięty podczas nieobecności nie daje krawędzi.
+        if (IsForeign())
         {
             DropGamepadState();
             return PassDecision;
@@ -535,6 +560,9 @@ public sealed class InputPolicy : IInputTarget
 
         return actions.Count == 0 ? PassDecision : new InputDecision(false, actions);
     }
+
+    /// <summary>Okno pierwszego planu nie należy do MediaStation (bramka AD-8); bez sondy nigdy nie jest obce.</summary>
+    private bool IsForeign() => _foreground is not null && !_foreground.IsManaged();
 
     /// <summary>
     /// <c>long</c> dotyczy wyłącznie OK w <see cref="InputMode.Shell"/> i <see cref="InputMode.Osk"/>; wiersz

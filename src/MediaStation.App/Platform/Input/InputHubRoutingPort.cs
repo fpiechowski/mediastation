@@ -21,16 +21,51 @@ public sealed class InputHubRoutingPort : IInputRoutingPort
 
     private readonly InputRoutingState _routing;
     private readonly ILog _log;
+    private readonly ManagedWindows _managed;
 
     /// <param name="routing">Współdzielona kopia, z której czyta <see cref="InputPolicy"/> na wątku Input.</param>
     /// <param name="log">Log aplikacji.</param>
-    public InputHubRoutingPort(InputRoutingState routing, ILog log)
+    /// <param name="managed">Kopia zbioru okien MediaStation dla bramki foreground (AD-8); bez niej port ma własną.</param>
+    public InputHubRoutingPort(InputRoutingState routing, ILog log, ManagedWindows? managed = null)
     {
         ArgumentNullException.ThrowIfNull(routing);
         ArgumentNullException.ThrowIfNull(log);
 
         _routing = routing;
         _log = log;
+        _managed = managed ?? new ManagedWindows();
+    }
+
+    /// <summary>Loguje zbiór okien MediaStation i zapisuje go w kopii, jeśli <c>epoch</c> jest nowszy.</summary>
+    public void Execute(SetManagedWindows command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var data = new Dictionary<string, object?> { ["cmdId"] = command.CmdId };
+        if (command.OskHwnd is { } oskHwnd)
+        {
+            data["oskHwnd"] = oskHwnd;
+        }
+
+        var apps = new List<Dictionary<string, object?>>(command.Apps.Length);
+        foreach (var app in command.Apps)
+        {
+            apps.Add(new Dictionary<string, object?> { ["hwnd"] = app.Hwnd, ["rootPid"] = app.RootPid });
+        }
+
+        data["apps"] = apps;
+        data["epoch"] = command.Epoch;
+
+        _log.Info(Src, "managedWindows", data);
+
+        if (!_managed.Apply(command))
+        {
+            _log.Warn(Src, "managedWindowsStale", new Dictionary<string, object?>
+            {
+                ["cmdId"] = command.CmdId,
+                ["epoch"] = command.Epoch,
+            });
+        }
     }
 
     /// <summary>Loguje nowy tryb routingu i zapisuje go w lokalnej kopii, jeśli <c>epoch</c> jest nowszy.</summary>

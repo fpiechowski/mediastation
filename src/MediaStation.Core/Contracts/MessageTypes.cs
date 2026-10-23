@@ -18,6 +18,7 @@ public static class MessageTypes
         typeof(CloseApp),
         typeof(RestartApp),
         typeof(SetInputRouting),
+        typeof(SetManagedWindows),
         typeof(SendKey),
         typeof(StartApp),
         typeof(StopApp),

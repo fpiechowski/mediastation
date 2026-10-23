@@ -124,6 +124,19 @@ public class CommandRouterTests
     }
 
     [Fact]
+    public void Managed_windows_go_to_input_port()
+    {
+        var (router, _, window, input, _, _, _) = CreateRouter();
+        var managed = new SetManagedWindows(8, null, [new ManagedWindow(6699, 4321)], 3);
+
+        router.Dispatch([managed]);
+
+        Assert.Equal([managed], input.Managed);
+        Assert.Empty(input.Executed);
+        Assert.Empty(window.Executed);
+    }
+
+    [Fact]
     public void Send_key_goes_to_key_injection_port()
     {
         var (router, _, window, input, keyInjection, timers, log) = CreateRouter();
@@ -309,7 +322,11 @@ public class CommandRouterTests
     {
         public List<SetInputRouting> Executed { get; } = [];
 
+        public List<SetManagedWindows> Managed { get; } = [];
+
         public void Execute(SetInputRouting command) => Executed.Add(command);
+
+        public void Execute(SetManagedWindows command) => Managed.Add(command);
     }
 
     private sealed class FakeKeyInjection : IKeyInjectionPort

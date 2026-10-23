@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
 using ActionMessage = MediaStation.Core.Contracts.Action;
@@ -39,6 +40,8 @@ public sealed class Orchestrator
     private long _timerId;
     private long _epoch;
     private FocusRequest? _focus;
+    private List<ManagedWindow> _publishedWindows = [];
+    private long _managedEpoch;
 
     public Orchestrator(LoadedConfig config, TimeProvider time)
     {
@@ -68,7 +71,7 @@ public sealed class Orchestrator
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        return message switch
+        return WithManagedWindows(message switch
         {
             OrchestratorStarted => OnOrchestratorStarted(),
             SystemResumed => OnSystemResumed(),
@@ -83,7 +86,37 @@ public sealed class Orchestrator
             CommandCompleted completed => OnCommandCompleted(completed),
             CommandFailed failed => OnCommandFailed(failed),
             _ => OrchestratorResult.None,
+        });
+    }
+
+    /// <summary>
+    /// Bramka foreground (AD-8): gdy zbiór okien z <c>Hwnd</c> różni się od ostatnio opublikowanego (attach, adopcja,
+    /// zamknięcie, awaria), wynik dostaje na końcu <see cref="SetManagedWindows"/> z nowym <c>epoch</c> własnego licznika (niezależnego od routingu). Komenda idzie
+    /// po routingu i aktywacji: okno bez wpisu w zbiorze jest dla hooka obce, więc klawisze przechodzą do aplikacji,
+    /// nie giną. Jedno miejsce publikacji obejmuje każdą ścieżkę zmieniającą <c>Hwnd</c>.
+    /// </summary>
+    private OrchestratorResult WithManagedWindows(OrchestratorResult result)
+    {
+        var current = new List<ManagedWindow>();
+        foreach (var app in _apps)
+        {
+            if (app.Hwnd is { } hwnd)
+            {
+                current.Add(new ManagedWindow(hwnd, app.RootPid));
+            }
+        }
+
+        if (current.SequenceEqual(_publishedWindows))
+        {
+            return result;
+        }
+
+        _publishedWindows = current;
+        var commands = new List<Command>(result.Commands)
+        {
+            new SetManagedWindows(NextCmdId(), null, [.. current], ++_managedEpoch),
         };
+        return result with { Commands = commands };
     }
 
     /// <summary>
@@ -270,7 +303,7 @@ public sealed class Orchestrator
         // więc `NotRunning` znaczy brak startu w locie i brak terminu `Starting` do skorelowania.
         if (app.State == AppLifecycleState.NotRunning)
         {
-            return OnAdopt(app, attached.Hwnd);
+            return OnAdopt(app, attached.Hwnd, attached.RootPid);
         }
 
         if (app.State != AppLifecycleState.Starting)
@@ -279,6 +312,7 @@ public sealed class Orchestrator
         }
 
         app.Hwnd = attached.Hwnd;
+        app.RootPid = attached.RootPid;
         if (app.ForegroundTransition != _transitionId)
         {
             app.State = AppLifecycleState.Background;
@@ -313,9 +347,10 @@ public sealed class Orchestrator
     /// wtedy, gdy inna aplikacja nie jest aktywna, bo sondy są fire-and-forget i odpowiedź hosta może dotrzeć po
     /// wyborze kafelka.
     /// </summary>
-    private OrchestratorResult OnAdopt(AppState app, long hwnd)
+    private OrchestratorResult OnAdopt(AppState app, long hwnd, int rootPid)
     {
         app.Hwnd = hwnd;
+        app.RootPid = rootPid;
         app.State = AppLifecycleState.Background;
         var commands = new List<Command> { new MinimizeWindow(NextCmdId(), hwnd) };
         if (!AnotherAppIsActive(app))
@@ -694,6 +729,9 @@ public sealed class Orchestrator
 
         /// <summary>Uchwyt okna z <see cref="AppWindowAttached"/>; <c>null</c> po zamknięciu, restarcie albo wejściu w <c>Failed</c>.</summary>
         public long? Hwnd { get; set; }
+
+        /// <summary>PID korzenia z <see cref="AppWindowAttached.RootPid"/>; ważny tylko, gdy <see cref="Hwnd"/> jest ustawiony.</summary>
+        public int RootPid { get; set; }
 
         /// <summary>
         /// <c>transitionId</c> decyzji, która miała wprowadzić aplikację na pierwszy plan (start, powrót z tła,

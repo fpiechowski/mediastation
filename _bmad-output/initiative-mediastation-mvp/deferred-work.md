@@ -226,3 +226,12 @@ severity: low
 reason: Decyzja 2026-10-23: na teraz wystarcza ręczne odkrycie sygnatury (G20S Pro znany ze spike S10). Ulepszenie: kalibracja loguje nieznane urządzenia HID, gdy nic nie pasuje. Dotyczy kroku odbioru „wybór przycisku Klawiatura".
 owner: author, kiedy zmieni się pilot
 status: open
+
+### DW-28: Generator schematów (`MediaStation.SchemaExport`) i zwykły `dotnet publish` nie działają na maszynach z Application Control.
+origin: plan AD-8 foreground gate, 2026-10-23
+location: `tools/MediaStation.SchemaExport`; `web/contracts/schema`, `web/contracts/generated`; build `src/MediaStation.App`
+source_spec: `_bmad-output/plan-ad8-foreground-gate.md`
+severity: medium
+reason: Application Control blokuje świeży niepodpisany `MediaStation.SchemaExport.dll` (0x800711C7, CodeIntegrity 3077/3033), więc `dotnet build` nie odświeża `web/contracts` i publish wymaga `-p:SkipWebBuild=true`, ręcznego `npm run build` w `web/` i ręcznego skopiowania `web/shell/dist` do `publish/shell`. Schemat `set-managed-windows.schema.json` i `generated/set-managed-windows.ts` zostały napisane ręcznie w formacie istniejących plików (pliki nie są w gicie, więc nic nie rozjeżdża się w repo; test `CoreMessageContractTests` sprawdza kształt schematu z kodu). Dotyczy też UM760, jeśli ma tę samą politykę. Rozwiązanie: podpisać narzędzie albo dodać je do reguł Application Control; alternatywnie generować schematy z testów.
+owner: author
+status: open

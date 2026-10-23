@@ -119,6 +119,46 @@ public class InputHubRoutingPortTests
         Assert.Equal(["cmdId", "mode", "pointer", "epoch"], data.EnumerateObject().Select(property => property.Name).ToArray());
     }
 
+    [Fact]
+    public void Managed_windows_log_apps_and_apply_to_the_local_copy()
+    {
+        var log = new RecordingLog();
+        var managed = new ManagedWindows();
+        var port = new InputHubRoutingPort(new InputRoutingState(), log, managed);
+
+        port.Execute(new SetManagedWindows(5, null, [new ManagedWindow(6699, 4321)], 2));
+
+        Assert.True(managed.Contains(6699, 0));
+        Assert.True(managed.Contains(0, 4321));
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Info, entry.Level);
+        Assert.Equal(InputHubRoutingPort.Src, entry.Src);
+        Assert.Equal("managedWindows", entry.Msg);
+        var data = FormatData(entry);
+        Assert.Equal(["cmdId", "apps", "epoch"], data.EnumerateObject().Select(property => property.Name).ToArray());
+        var app = data.GetProperty("apps")[0];
+        Assert.Equal(6699, app.GetProperty("hwnd").GetInt64());
+        Assert.Equal(4321, app.GetProperty("rootPid").GetInt32());
+    }
+
+    [Fact]
+    public void Stale_managed_windows_keep_the_copy_and_log_a_warn()
+    {
+        var log = new RecordingLog();
+        var managed = new ManagedWindows();
+        var port = new InputHubRoutingPort(new InputRoutingState(), log, managed);
+        port.Execute(new SetManagedWindows(1, null, [new ManagedWindow(6699, 4321)], 3));
+
+        port.Execute(new SetManagedWindows(2, null, [], 3));
+
+        Assert.True(managed.Contains(6699, 4321));
+        Assert.Equal("managedWindows", log.Entries[1].Msg);
+        var stale = log.Entries[2];
+        Assert.Equal(LogLevel.Warn, stale.Level);
+        Assert.Equal("managedWindowsStale", stale.Msg);
+        Assert.Equal(2L, Assert.IsType<long>(stale.Data!["cmdId"]));
+    }
+
     private static JsonElement FormatData(LogEntry entry)
     {
         var line = JsonLinesLog.Format(T0, entry.Level, entry.Src, entry.Msg, entry.Data, null);
