@@ -42,7 +42,13 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  /* Bez kursora: shell steruje się wyłącznie pilotem (DESIGN.md → Do's and Don'ts). */
+}
+
+/* Kursor ukryty w bezruchu: shell steruje się pilotem (DESIGN.md → Do's and Don'ts), ale fizyczna mysz
+   musi zawsze działać, więc ruch pokazuje kursor (klasa ustawiana w main.tsx, AD-8). */
+:root:not(.pointer-active) *,
+:root:not(.pointer-active) *::before,
+:root:not(.pointer-active) *::after {
   cursor: none !important;
 }
 

@@ -289,7 +289,7 @@ internal sealed unsafe class InputHub : IDisposable
             return false;
         }
 
-        // Porażka hooka myszy tylko degraduje: polityka `pointer` nie ma wtedy połknięć ani clipu, ale klawiatura,
+        // Porażka hooka myszy tylko degraduje: kliknięcia poza OSK nie są wtedy połykane, ale klawiatura,
         // pad i timer działają dalej (AD-8), a wątek Input nie może stanąć z powodu brakującego hooka.
         _mouseHook = PInvoke.SetWindowsHookEx(WINDOWS_HOOK_ID.WH_MOUSE_LL, _mouseHookProc, module, dwThreadId: 0);
         if (_mouseHook.IsNull)

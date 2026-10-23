@@ -20,6 +20,18 @@ function fitStage() {
 fitStage();
 window.addEventListener('resize', fitStage);
 
+// Kursor jest ukryty w bezruchu i widoczny po ruchu myszy (AD-8: mysz nigdy nie jest blokowana).
+const CURSOR_IDLE_MS = 2000;
+let cursorIdleTimer: number | undefined;
+window.addEventListener('mousemove', () => {
+  document.documentElement.classList.add('pointer-active');
+  window.clearTimeout(cursorIdleTimer);
+  cursorIdleTimer = window.setTimeout(
+    () => document.documentElement.classList.remove('pointer-active'),
+    CURSOR_IDLE_MS,
+  );
+});
+
 const root = document.getElementById('root');
 if (!root) throw new Error('Brak #root w index.html');
 

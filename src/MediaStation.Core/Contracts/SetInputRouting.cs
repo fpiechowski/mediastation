@@ -16,7 +16,10 @@ public enum AppType
     Native,
 }
 
-/// <summary>Polityka myszy i żyroskopu w bieżącym trybie (AD-8).</summary>
+/// <summary>
+/// Podpowiedź widoczności kursora w bieżącym trybie (AD-8): <see cref="Blocked"/> to kursor ukryty w bezruchu,
+/// <see cref="Allowed"/> to kursor widoczny. Nie połyka żadnych zdarzeń wskaźnika.
+/// </summary>
 public enum PointerPolicy
 {
     Blocked,

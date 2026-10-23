@@ -6,8 +6,8 @@ using Microsoft.Extensions.Time.Testing;
 namespace MediaStation.Core.Tests;
 
 /// <summary>
-/// Polityka wskaźnika (AD-8) na lokalnej kopii routingu: <c>pointer: blocked</c> połyka ruch, kliknięcia i kółko
-/// (bez Actions), <c>pointer: allowed</c> przepuszcza wszystko, a w <c>osk</c> z prostokątem clipu połykane jest
+/// Polityka wskaźnika (AD-8) na lokalnej kopii routingu: wskaźnik nie jest połykany w żadnym wierszu (także przy
+/// <c>pointer: blocked</c>, bo fizyczna mysz musi zawsze działać), a w <c>osk</c> z prostokątem clipu połykane jest
 /// tylko kliknięcie poza nim. Własne wstrzyknięcie (<see cref="InjectionMarker"/>) i zmiana wiersza routingu
 /// (zwolnienie clipu) mają osobne przypadki.
 /// </summary>
@@ -60,25 +60,35 @@ public class PointerPolicyTests
     [InlineData(PointerMessage.ButtonDown, PointerButton.Left)]
     [InlineData(PointerMessage.ButtonUp, PointerButton.Left)]
     [InlineData(PointerMessage.Wheel, PointerButton.None)]
-    public void Blocked_row_swallows_movement_clicks_and_wheel_without_actions(PointerMessage message, PointerButton button)
+    public void Blocked_row_passes_movement_clicks_and_wheel_so_a_physical_mouse_always_works(PointerMessage message, PointerButton button)
     {
         var (policy, _) = Create(InputMode.Shell, null, PointerPolicy.Blocked);
 
-        AssertSwallowed(policy.OnPointer(Stroke(message, button: button), clip: null));
+        AssertPassed(policy.OnPointer(Stroke(message, button: button), clip: null));
     }
 
     [Fact]
-    public void Blocked_row_in_app_web_swallows_the_whole_pointer_matrix()
+    public void Blocked_row_in_app_web_passes_the_whole_pointer_matrix()
     {
         var (policy, _) = Create(InputMode.App, AppType.Web, PointerPolicy.Blocked);
 
-        AssertSwallowed(policy.OnPointer(Stroke(PointerMessage.Move), clip: null));
-        AssertSwallowed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, button: PointerButton.Left), clip: null));
-        AssertSwallowed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, button: PointerButton.Right), clip: null));
-        AssertSwallowed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, button: PointerButton.Middle), clip: null));
-        AssertSwallowed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, button: PointerButton.XButton1), clip: null));
-        AssertSwallowed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, button: PointerButton.XButton2), clip: null));
-        AssertSwallowed(policy.OnPointer(Stroke(PointerMessage.Wheel, wheelDelta: -120), clip: null));
+        AssertPassed(policy.OnPointer(Stroke(PointerMessage.Move), clip: null));
+        AssertPassed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, button: PointerButton.Left), clip: null));
+        AssertPassed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, button: PointerButton.Right), clip: null));
+        AssertPassed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, button: PointerButton.Middle), clip: null));
+        AssertPassed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, button: PointerButton.XButton1), clip: null));
+        AssertPassed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, button: PointerButton.XButton2), clip: null));
+        AssertPassed(policy.OnPointer(Stroke(PointerMessage.Wheel, wheelDelta: -120), clip: null));
+    }
+
+    [Fact]
+    public void Blocked_row_in_osk_still_swallows_only_a_click_outside_the_clip()
+    {
+        var (policy, _) = Create(InputMode.Osk, null, PointerPolicy.Blocked, clipHwnd: 0x1234);
+
+        AssertPassed(policy.OnPointer(Stroke(PointerMessage.Move, x: 5000, y: 5000), Clip));
+        AssertPassed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, x: 50, y: 50, button: PointerButton.Left), Clip));
+        AssertSwallowed(policy.OnPointer(Stroke(PointerMessage.ButtonDown, x: 5000, y: 5000, button: PointerButton.Left), Clip));
     }
 
     [Theory]
@@ -158,12 +168,12 @@ public class PointerPolicyTests
     }
 
     [Fact]
-    public void Foreign_injection_without_the_marker_is_still_swallowed_in_a_blocked_row()
+    public void Foreign_injection_without_the_marker_is_passed_in_a_blocked_row()
     {
         var (policy, _) = Create(InputMode.Shell, null, PointerPolicy.Blocked);
 
-        // Sama flaga `injected` nie wystarcza: obce wstrzyknięcie nie jest naszym klawiszem i nie uchyla polityki.
-        AssertSwallowed(policy.OnPointer(
+        // Wskaźnik nie jest połykany, więc znacznik nie ma tu znaczenia; test pilnuje, że flaga `injected` nic nie zmienia.
+        AssertPassed(policy.OnPointer(
             Stroke(PointerMessage.ButtonDown, button: PointerButton.Left, injected: true, extraInfo: 0),
             clip: null));
     }
@@ -171,16 +181,16 @@ public class PointerPolicyTests
     // ── Zmiana wiersza routingu ───────────────────────────────────────────────
 
     [Fact]
-    public void Blocked_row_swallows_and_osk_allowed_row_passes_the_same_events()
+    public void Pointer_events_pass_before_and_after_a_routing_row_change()
     {
         var (policy, routing) = Create(InputMode.Shell, null, PointerPolicy.Blocked);
         var move = Stroke(PointerMessage.Move);
         var click = Stroke(PointerMessage.ButtonDown, button: PointerButton.Left);
         var wheel = Stroke(PointerMessage.Wheel, wheelDelta: 120);
 
-        AssertSwallowed(policy.OnPointer(move, clip: null));
-        AssertSwallowed(policy.OnPointer(click, clip: null));
-        AssertSwallowed(policy.OnPointer(wheel, clip: null));
+        AssertPassed(policy.OnPointer(move, clip: null));
+        AssertPassed(policy.OnPointer(click, clip: null));
+        AssertPassed(policy.OnPointer(wheel, clip: null));
 
         routing.Apply(new SetInputRouting(2, InputMode.Osk, null, PointerPolicy.Allowed, 2));
 
