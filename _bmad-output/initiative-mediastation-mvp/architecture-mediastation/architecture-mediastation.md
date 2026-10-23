@@ -194,7 +194,13 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
   - Mapowanie jest w `config/input.json`, kluczowane sygnaturą urządzenia i kodem.
   - Orchestrator wysyła `SetInputRouting{ mode, appType, pointer, epoch, clipHwnd? }`. `clipHwnd` jest opcjonalne (`null` = brak ograniczenia): w trybie `osk` niepuste `clipHwnd` ogranicza kursor do prostokąta tego okna (`ClipCursor`) i połyka kliknięcia poza nim, a ograniczenie jest zwalniane przy każdej zmianie trybu. Hook decyduje na podstawie lokalnej kopii, bez blokowania. Key-up idzie za decyzją podjętą dla swojego key-down.
   - **Wskaźnik nigdy nie jest połykany.** Hook `WH_MOUSE_LL` przepuszcza ruch, kliknięcia i kółko w każdym trybie, bo nie rozróżnia urządzeń, a fizyczna mysz musi zawsze działać (wyjście awaryjne). Jedynym wyjątkiem jest kliknięcie poza `clipHwnd` w `osk`. Pole `pointer` jest tylko podpowiedzią kursora dla Shella: `blocked` = kursor ukryty w bezruchu i widoczny po ruchu myszy, `allowed` = widoczny. Żyroskop pilota klika w Shellu jak zwykła mysz [ADOPTED].
-  - Tabela routingu:
+  - **Bramka foreground: połykamy tylko na własnych oknach.** Klawisze i Actions z klawiatury i pada są połykane tylko wtedy, gdy okno na pierwszym planie jest nasze albo zarządzane. Przy obcym oknie (pulpit, Explorer, ręcznie otwarty Edge, przełącznik Alt+Tab, UAC) hook przepuszcza klawisz bez Action niezależnie od `mode`, więc PC działa normalnie bez wyłączania MediaStation [ADOPTED].
+    - **Wyjątek:** Home z urządzenia `remote` jest połykany i daje `home` nad dowolnym oknem (S6, S9).
+    - **Nasze lub zarządzane** to shell, OSK i okna z `AppWindowAttached` (AD-15), dopasowane po `hwnd` najwyższego okna (`GA_ROOT`) foreground, a gdy to nie pasuje, po `rootPid`. Okno otwarte przez użytkownika poza Orchestratorem nie jest zarządzane.
+    - Orchestrator wysyła zbiór komendą `SetManagedWindows{ shellHwnd, oskHwnd?, apps[{ hwnd, rootPid }], epoch }`, a InputHub trzyma lokalną kopię. **Hook sprawdza foreground sam przy key-down** (`GetForegroundWindow` i lookup w kopii), bez czekania na Orchestrator i bez WinEvent, żeby nie było wyścigu po Alt+Tab. Key-up idzie za decyzją key-down. Foreground nieznane lub chwilowe (brak okna, secure desktop) liczy się jako obce.
+    - Pad XInput jest odpytywany i nie połyka, a jego Actions podlegają tej samej bramce: kombinacja `gamepadHome` poza naszymi oknami nic nie robi [ASSUMPTION].
+    - `mode` opisuje stan MediaStation i nie zmienia się, gdy użytkownik przełączy okno; bramka tylko rozstrzyga, czy tabela poniżej w ogóle obowiązuje.
+  - Tabela routingu (obowiązuje przy foreground nasze lub zarządzane; Home z `remote` także poza nim):
 
     | Tryb / typ aktywnej aplikacji | D-pad, OK | Back | Home | Keyboard | Mysz/żyroskop |
     | --- | --- | --- | --- | --- | --- |
@@ -350,7 +356,8 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 - **Rule:**
   - AppHost po starcie albo adopcji raportuje `AppWindowAttached{ appId, hwnd, rootPid }`. WindowManager i AudioRouter działają tylko na `hwnd` i `rootPid` podanych w Command.
   - **WindowManager to jedyny kod**, który zmienia widoczność, Z-order i foreground dowolnego okna, w tym shella i OSK.
-  - WindowManager raportuje `ForegroundChanged`, także gdy okno na wierzchu zmieni się bez jego udziału, a Orchestrator decyduje, co dalej.
+  - WindowManager raportuje `ForegroundChanged`, także gdy okno na wierzchu zmieni się bez jego udziału, a Orchestrator decyduje, co dalej. Przełączenie przez użytkownika na obce okno (Alt+Tab) nie wymusza powrotu do shella; wraca się Home z pilota [ASSUMPTION].
+  - Orchestrator publikuje do InputHub zbiór okien zarządzanych (`SetManagedWindows`, AD-8) przy każdym `AppWindowAttached`, zamknięciu aplikacji i zmianie okna shella lub OSK.
 
 ### AD-16: Jedno źródło kontraktów Shell ↔ Core i page ↔ host
 
