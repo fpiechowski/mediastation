@@ -7,7 +7,7 @@ paradigm: 'hexagonal (ports & adapters) z jednowątkowym actor core (Orchestrato
 scope: 'MediaStation MVP: pełnoekranowy shell TV na Windows 11 (UM760), sterowanie Netflixem w Edge przez CDP, wejście z pilota/klawiatury/gamepada, audio focus, Moonlight, aplikacje natywne, „Do oceny”'
 status: final
 created: '2026-10-16'
-updated: '2026-10-22'
+updated: '2026-10-23'
 binds: [brief-mediastation, forge-filmweb-rating-prompt, ux-mediastation]
 sources:
   - ../brief-mediastation/brief-mediastation.md
@@ -193,14 +193,15 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
   - **Trzymana strzałka** daje `press` na key-down, a potem `repeat` po `timing.repeatDelayMs` i co `timing.repeatIntervalMs`, aż do key-up. `repeat` dostają wyłącznie strzałki; OK, Back, Home i Keyboard nigdy.
   - Mapowanie jest w `config/input.json`, kluczowane sygnaturą urządzenia i kodem.
   - Orchestrator wysyła `SetInputRouting{ mode, appType, pointer, epoch, clipHwnd? }`. `clipHwnd` jest opcjonalne (`null` = brak ograniczenia): w trybie `osk` niepuste `clipHwnd` ogranicza kursor do prostokąta tego okna (`ClipCursor`) i połyka kliknięcia poza nim, a ograniczenie jest zwalniane przy każdej zmianie trybu. Hook decyduje na podstawie lokalnej kopii, bez blokowania. Key-up idzie za decyzją podjętą dla swojego key-down.
+  - **Wskaźnik nigdy nie jest połykany.** Hook `WH_MOUSE_LL` przepuszcza ruch, kliknięcia i kółko w każdym trybie, bo nie rozróżnia urządzeń, a fizyczna mysz musi zawsze działać (wyjście awaryjne). Jedynym wyjątkiem jest kliknięcie poza `clipHwnd` w `osk`. Pole `pointer` jest tylko podpowiedzią kursora dla Shella: `blocked` = kursor ukryty w bezruchu i widoczny po ruchu myszy, `allowed` = widoczny. Żyroskop pilota klika w Shellu jak zwykła mysz [ADOPTED].
   - Tabela routingu:
 
     | Tryb / typ aktywnej aplikacji | D-pad, OK | Back | Home | Keyboard | Mysz/żyroskop |
     | --- | --- | --- | --- | --- | --- |
-    | `shell` (ekran główny) | połykane → Action do Shell | połykane → Action | połykane | połykane → OSK, gdy Shell zgłosił `textFocus{active:true}`; inaczej nic | wg `pointer` (domyślnie blokowana, kursor ukryty) |
+    | `shell` (ekran główny) | połykane → Action do Shell | połykane → Action | połykane | połykane → OSK, gdy Shell zgłosił `textFocus{active:true}`; inaczej nic | przechodzi; `pointer` (domyślnie `blocked`) tylko ukrywa kursor w bezruchu |
     | `osk` | połykane → OSK | połykane → OSK (zamyka rząd wariantów, a gdy go nie ma, OSK) | połykane → zamyka OSK i pokazuje ekran główny | połykane → zamyka OSK | dozwolona, kursor ograniczony do okna OSK (`ClipCursor`); kliknięcie poza OSK połykane |
-    | `app` + `web` | połykane → `action` do strony | połykane → `back` do strony | połykane | połykane → OSK, gdy strona zgłosiła `textFocus{active:true}`; inaczej nic | wg `pointer` (domyślnie blokowana) |
-    | `app` + `moonlight` / `native` | przechodzą do aplikacji (bez Actions) | połykane → polityka `back` (`home` \| `key:<VK>`) | połykane | połykane → OSK | wg `pointer` (domyślnie dozwolona) |
+    | `app` + `web` | połykane → `action` do strony | połykane → `back` do strony | połykane | połykane → OSK, gdy strona zgłosiła `textFocus{active:true}`; inaczej nic | przechodzi; `pointer` (domyślnie `blocked`) tylko ukrywa kursor w bezruchu |
+    | `app` + `moonlight` / `native` | przechodzą do aplikacji (bez Actions) | połykane → polityka `back` (`home` \| `key:<VK>`) | połykane | połykane → OSK | przechodzi; `pointer` (domyślnie `allowed`) = kursor widoczny |
 
   - `AppMenu` istnieje tylko w trybie `shell`. Wyzwalacze:
     - long-press OK (`phase: long`) na kafelku aplikacji w stanie `Background` albo `Failed`;
@@ -255,7 +256,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
   - Konfiguracja to trzy pliki w `config/`. Ich schematy to rekordy w Core, a nieznane pola są odrzucane.
     - `apps.json` zawiera wpisy `{ id, type: web|moonlight|native, category: video|audio|game, title, icon, back, pointer, … }`:
       - `category` wyznacza zakładkę ekranu głównego, a kolejność wpisów w pliku jest kolejnością kafelków w zakładce. Zakładka bez wpisów (w MVP `audio`) pokazuje empty state;
-      - domyślne polityki: `web` → Back przez stronę (AD-7), `pointer: blocked`; `moonlight` → `back: key:Escape`, `pointer: allowed`; `native` → `back: home`, `pointer: allowed`;
+      - domyślne polityki: `web` → Back przez stronę (AD-7), `pointer: blocked` (podpowiedź kursora, bez połykania, AD-8); `moonlight` → `back: key:Escape`, `pointer: allowed`; `native` → `back: home`, `pointer: allowed`;
       - `web`: `{ service, browser: edge|chrome, cdpPort }`, czyli tabela „serwis → przeglądarka” żyje tutaj;
       - `moonlight`: `{ host, app }`;
       - `native`: `{ exe, args }`.

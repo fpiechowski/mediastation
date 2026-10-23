@@ -73,7 +73,7 @@ Wypełniamy w trakcie (data, HEAD, maszyna UM760):
 
 | # | Wynik | Dowód |
 |---|-------|-------|
-| P0 | | |
+| P0 | pass z odchyleniem (2026-10-23, HEAD 261358d, host MEDIASTATION/UM760) | HEAD ≥ 55c0dfe; `check-home-s10.ps1 -SelfTest` exit 0; dongle VID_1915&PID_1025 obecny; config lokalny = sygnatura remote 1915:1025. **Odchylenie P0.2:** zwykły `dotnet publish` pada — Application Control (CodeIntegrity, Policy {0283ac0f…}) blokuje świeży niepodpisany `MediaStation.SchemaExport.dll` (0x800711C7). Obejście: `npm run build` w `web/`, `dotnet publish … -p:SkipWebBuild=true`, ręczna kopia `web/shell/dist/*` do `publish\shell`. Dotyczy narzędzia buildu, nie aplikacji (exe działa). Do `deferred-work.md`. |
 | S1 | | |
 | S2 | | |
 | S3 | | |
@@ -86,7 +86,9 @@ Wypełniamy w trakcie (data, HEAD, maszyna UM760):
 | S10 | | |
 | S11 | | |
 | S12 | | |
-| S13 | | |
+| S13 | **FAIL — odrzucone przez użytkownika** (2026-10-23, UM760) | Po starcie (log 17:42–17:46Z: `inputRouting {mode shell, pointer blocked, epoch 1}`) fizyczna mysz USB nie ruszała kursora, a odpięcie i ponowne podpięcie nic nie zmieniło; klawiatura działała (`action ok, source keyboard`). Mysz wróciła po zamknięciu aplikacji (`stop {exitCode 0}` 17:46:48Z). Przyczyna: `InputPolicy.OnPointer` połyka wszystko przy `PointerPolicy.Blocked`, a hook LL nie rozróżnia urządzeń (AD-8). Zachowanie zgodne z kontraktem, ale użytkownik go nie akceptuje: „User musi mieć możliwość używania myszy choćby do emergency exit”. |
 | S14 | | |
+
+**Przerwanie sesji (2026-10-23):** odbiór wstrzymany po S1/S13. S2–S12 i S14 nie uruchomione. Powód: wymaganie produktowe „fizyczna mysz nigdy nie może być w pełni zablokowana” zderza się z `pointer: blocked` w `shell` i `app`+`web`. Kierunek: `bmad-architecture` (zmiana AD-8 i tabeli routingu), potem `bmad-build`; odbiór wznowić od S1 po poprawce.
 
 **Pomiar / decyzje:** (wybrany przycisk Klawiatura, odpowiedź na pytanie o „down” hooka, kolejność hooka i `WM_INPUT`)
