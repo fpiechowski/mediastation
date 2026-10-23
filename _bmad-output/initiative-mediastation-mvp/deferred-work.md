@@ -44,6 +44,7 @@ location: src/MediaStation.Core/Input/InputPolicy.cs:111
 source_spec: `tickets/epic-input/tickets/story-tracer-bullet-pilot-na-donglu-daje-actions-z-watku-input-plan.md`
 severity: low
 reason: Story 1 odroczyła reset `_held`/`_pendingLong` do story, która rejestruje hook; InputHub nie ma ścieżki re-rejestracji ani watchdoga, więc reset nie ma wołającego. Skutek: utracony key-up (np. blokada sesji w trakcie trzymania klawisza) zamraża VK do końca procesu. Domknięcie wymaga watchdoga hooka.
+evidence: Retro A1 (2026-10-23, 19c5038): key-down Home, Back, OK i Keyboard (klawisze bez siatki `repeat`) starszy niż `MaxRepeatHoldMs` zaczyna nowe naciśnięcie, więc Home nie zamarza po utraconym key-up; test `Swallowed_home_with_missing_key_up_is_stale_after_max_hold_and_acts_again`. Zostaje otwarte tylko dla połkniętej strzałki (siatka `repeat`) i dla resetu `_pendingLong` przy re-rejestracji hooka.
 status: open
 
 ### DW-7: AD-8 („Jedno naciśnięcie daje jedną Action”, „InputHub jest właścicielem timingu”) i checklista odbioru epiku („dokładnie jeden wpis `action`” dla strzałek) nie opisują, że trzymana strzałka daje `press` + N×`repeat`
@@ -124,7 +125,9 @@ origin: spec-deferred 176036279b85
 location: tools/check-home-s10.ps1 Get-BrowserWindowIds / Find-WindowProcess
 source_spec: `tickets/epic-input/tickets/story-refactor-sweep-plan.md`
 reason: Review pass 2: zmiana zastąpiła `Process.MainWindowHandle` (pierwsze widoczne okno najwyższego poziomu bez właściciela) enumeracją bez informacji o właścicielu, a filtr klasy jest prefiksem `Chrome_WidgetWin_*`. Osiągalności nie wykazano: na ALDER jedyne widoczne okno przeglądarki to `Chrome_WidgetWin_1` bez właściciela, a `Find-WindowProcess` dla MediaStation zwrócił ten sam uchwyt co `MainWindowHandle` (także w stanie zawieszonym). Rozstrzyga przebieg S10 na UM760 z Edge i Moonlightem (porównanie zbioru `pid:handle` i uchwytu celu z `MainWindowHandle`, brak fałszywych `browser window`); wpis w ledgerze jako DW-15. Naprawa: pole `Owner` (`GetWindow(hwnd, GW_OWNER)`) w `Get-TopLevelWindows` i pomijanie okien z właścicielem w obu miejscach.
-status: open
+
+evidence: Duplikat DW-15 (ten sam problem `GW_OWNER`, wpis z harvestu spec-deferral story 3.10); kanoniczny jest DW-15. Scalone 2026-10-23 (retro epiki 3, A4).
+status: resolved
 
 ### DW-17: `Keyboard` jest emitowane jako Action w `app` + `web` także bez `textFocus`; epic-osk musi zbramkować je w Orchestratorze, zanim podłączy OSK
 origin: retro epiki 3, 2026-10-22 (F7a/A2)
@@ -132,4 +135,94 @@ location: src/MediaStation.Core/Input/InputPolicy.cs (emituje `Keyboard` w każd
 source_spec: `tickets/epic-input/epic-input-retrospective.md`, A2
 severity: medium
 reason: AD-8/AD-9 każą otwierać OSK z `Keyboard` w `app` + `web` tylko przy `textFocus{active:true}`, a InputHub sam nie bramkuje i dziś Orchestrator ignoruje każdą Action poza `Home`, więc zachowanie odpowiada tabeli tylko przypadkiem. Pierwsza story epic-osk, która podłączy `Keyboard` do OSK, musi dodać bramkę `textFocus` w Orchestratorze i test: `Keyboard` w `app` + `web` bez `textFocus` nie otwiera OSK, a z `textFocus` otwiera. Bez tego przycisk Klawiatura otworzy OSK w przeglądarce bez pola tekstowego.
+status: open
+
+### DW-18: Orchestrator nie zachowuje `rootPid` z `AppWindowAttached`, którego `epic-windows-audio` potrzebuje do AD-15.
+origin: retro epiki 2, 2026-10-22 (A3), przeniesione z prozy w `epic-orchestrator-lifecycle.md`
+location: src/MediaStation.Core/Orchestrator/Orchestrator.cs
+source_spec: `tickets/epic-orchestrator-lifecycle/epic-orchestrator-lifecycle-retrospective.md`, A3
+severity: medium
+reason: Retro epiki 3 (follow-through A3) stwierdziło, że punkt istniał tylko jako proza, bez właściciela. Pierwsza story `epic-windows-audio`, która mutuje audio lub okna po PID, musi wziąć `rootPid` z `AppWindowAttached` i zachować go w stanie sesji.
+owner: epic-windows-audio
+status: open
+
+### DW-19: `OrchestratorTests` (1 553 linii) i switch dispatchu (12 gałęzi) nie zostały rozbite przed kolejnymi epikami.
+origin: retro epiki 2 (A4), potwierdzone w retro epiki 3 (follow-through)
+location: tests/MediaStation.Core.Tests/OrchestratorTests.cs; src/MediaStation.Core/Orchestrator/Orchestrator.cs:71-84
+source_spec: `tickets/epic-input/epic-input-retrospective.md`, follow-through A4
+severity: low
+reason: `epic-input` dodała sink i command, nie gałąź, więc rozbicie nie stało się pilne. Wyzwalacz: pierwsza epika, która dodaje gałąź dispatchu (`epic-home-screen`, `epic-osk`) najpierw wydziela grupy handlerów per funkcja i dzieli plik testów.
+owner: epic-home-screen / epic-osk (pierwsza z nich)
+status: open
+
+### DW-20: Plany ticketów nie zapisują HEAD zamknięcia, a squashe pętli są nazywane `Merge`.
+origin: retro epiki 2 (A6), retro epiki 3 (A5)
+location: bmad-loop (narzędzie), plany w `tickets/*/tickets/`
+source_spec: `tickets/epic-input/epic-input-retrospective.md`, F17
+severity: low
+reason: Atrybucja per ticket zadziałała, bo żadna epika się nie przeplatała; następna przeplatana będzie wymagała ręcznej oceny zakresu commitów. Naprawa po stronie pętli: zapisać close HEAD w planie przy zamknięciu, nie etykietować jednorodzicowych squashy jako `Merge`.
+owner: bmad-loop tooling
+status: open
+
+### DW-21: Pętla nie uzgadnia planu w stanie `built` z sesją dev zakończoną timeoutem.
+origin: retro epiki 2 (A7)
+location: bmad-loop (narzędzie)
+source_spec: `tickets/epic-input/epic-input-retrospective.md`, follow-through A7
+severity: low
+reason: Nie wystąpiło w epice 3 (brak timeoutu sesji dev), więc ani niezrealizowane, ani obalone. Zostaje jako znany brak do pierwszego timeoutu.
+owner: bmad-loop tooling
+status: open
+
+### DW-22: Clip kursora jest liczony tylko przy zmianie `epoch`; zdegenerowany `GetWindowRect` jest przyjmowany jako clip.
+origin: retro epiki 3, 2026-10-23 (F9/A6/Q5)
+location: src/MediaStation.App/Platform/Input/ClipCursorGate.cs:54-57; InputHub.SyncClip
+source_spec: `tickets/epic-input/epic-input-retrospective.md`, F9, A6
+severity: medium
+reason: Dla stałego, nieaktywowanego okna OSK epoch-only wystarcza na start. Epic-osk musi odrzucić zdegenerowany (zerowy, zminimalizowany) `GetWindowRect`, bo inaczej każde kliknięcie w trybie `osk` zostanie połknięte, oraz przemierzyć clip przy przesunięciu lub zmianie rozmiaru okna i przy zmianie aktywacji. Wspólnie z DW-11 (przestrzeń DPI).
+owner: epic-osk
+status: open
+
+### DW-23: Wzorzec „źródła App linkowane do `MediaStation.Core.Tests`" (19 plików) jest opisany tylko komentarzem w csproj.
+origin: retro epiki 3, 2026-10-23 (F5/A7)
+location: tests/MediaStation.Core.Tests/MediaStation.Core.Tests.csproj
+source_spec: `tickets/epic-input/epic-input-retrospective.md`, A7
+severity: low
+reason: Świadoma konwencja (accepted as-is), ale niezapisana w architekturze, więc jest odkrywana ponownie. Przy następnym dotknięciu architektury dopisać ją jako konwencję projektu.
+owner: author, następny pass architektury
+status: open
+
+### DW-24: Dedupe wciśniętych usages w kalibracji czyści wszystkie usages przy dowolnym key-up pilota.
+origin: retro epiki 3, 2026-10-23 (F10/A8)
+location: src/MediaStation.Core/Input/InputCalibration.cs
+source_spec: `tickets/epic-input/epic-input-retrospective.md`, A8
+severity: low
+reason: Przy równoległym trzymaniu dwóch przycisków pilota puszczenie jednego pozwala zalogować drugi ponownie. Klucz dedupe powinien być VK→usage, nie globalny reset.
+owner: author, przy następnym dotknięciu kalibracji
+status: open
+
+### DW-25: `InputHub` (815 linii) i `InputPolicy` (678 linii) przerosły rolę „cienkiego adaptera".
+origin: retro epiki 3, 2026-10-23 (F2/F3/A11)
+location: src/MediaStation.App/Platform/Input/InputHub.cs; src/MediaStation.Core/Input/InputPolicy.cs
+source_spec: `tickets/epic-input/epic-input-retrospective.md`, A11
+severity: low
+reason: Klasy są spójne, ale każda story dokładała 150-520 linii. Przed rozszerzeniem przez epic-osk lub epic-browserhost wydzielić z `InputHub` polling XInput i pointer/clip, a z `InputPolicy` mapowanie pada; wspólny helper pompy w tle przy trzeciej pompie.
+owner: epic-osk / epic-browserhost (pierwsza z nich)
+status: open
+
+### DW-26: Refactor sweep (3.10) nie miał listy zakresu i zużył 20,5 M tokenów (budżet 2 M).
+origin: retro epiki 3, 2026-10-23 (F16/A10)
+location: bmad-loop (planowanie sweepów), PO
+source_spec: `tickets/epic-input/epic-input-retrospective.md`, A10
+severity: low
+reason: Zakres „odroczone znaleziska ze stories 1-9" rozrósł się do przepisania narzędzia, które potem wymagało własnego review, pominiętego. Sweep ma mieć listę ID z ledgera, dzielić się przy przekroczeniu budżetu sesji i nie przepisywać narzędzi bez wpisu w ledgerze.
+owner: PO / bmad-loop tooling
+status: open
+
+### DW-27: `--calibrate-input` filtruje po sygnaturach z `input.json`, więc nowy pilot (inny VID/PID) nie daje żadnego logu.
+origin: retro epiki 3, 2026-10-23 (Q4)
+location: src/MediaStation.Core/Input/InputCalibration.cs; `spike/` (sygnatury G20S Pro)
+source_spec: `tickets/epic-input/epic-input-retrospective.md`, Q4
+severity: low
+reason: Decyzja 2026-10-23: na teraz wystarcza ręczne odkrycie sygnatury (G20S Pro znany ze spike S10). Ulepszenie: kalibracja loguje nieznane urządzenia HID, gdy nic nie pasuje. Dotyczy kroku odbioru „wybór przycisku Klawiatura".
+owner: author, kiedy zmieni się pilot
 status: open
