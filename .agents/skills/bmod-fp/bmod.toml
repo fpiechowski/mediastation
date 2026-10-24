@@ -1,0 +1,15 @@
+# Everything true of the whole fp module. Unknown keys and tables are ignored.
+
+[bmod]
+code = "fp"
+version = "0.1.0"
+update_source = "github:fpiechowski/mediastation/.agents/skills"
+skills = ["fp-acceptance"]
+required_skills = [{ skill = "bmad", version = "6.13.0", source = "github:bmad-code-org/BMAD-METHOD/skills" }]
+
+# Nice to have alongside. `bmad` mentions these once and does not insist.
+recommended_skills = [{ skill = "bmad-retrospective", source = "github:bmad-code-org/BMAD-METHOD/skills" }, { skill = "bmad-agent-po", source = "github:bmad-code-org/BMAD-METHOD/skills" }]
+
+pre_install_message = ""
+post_install_message = ""
+

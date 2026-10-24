@@ -1,0 +1,3 @@
+[skill]
+bmod = "bmod-fp"
+source = "github:fpiechowski/mediastation/.agents/skills"

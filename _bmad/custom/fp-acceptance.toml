@@ -1,0 +1,19 @@
+# MediaStation values for fp-acceptance (team override, tracked).
+
+[workflow]
+
+machine = "UM760"
+log_glob = '%LOCALAPPDATA%\MediaStation\logs\mediastation-*.jsonl'
+build_command = "dotnet publish src/MediaStation.App -c Release -r win-x64 --self-contained true"
+app_path = 'src\MediaStation.App\bin\Release\net10.0-windows\win-x64\publish\MediaStation.exe'
+ready_entry = "msg=snapshotPublished"
+check_scripts = ["tools/check-*.ps1"]
+voice = "pl-PL"
+
+persistent_facts = [
+  "Per-ticket checks run on ALDER; only the whole-epic acceptance runs on UM760, and it is the user's.",
+  "The `start` entry carries `data.version` as `1.0.0+<full sha>`, so the first launch asserts the build with `msg=start,data.version~=<short HEAD>`; a stale publish folder otherwise passes unnoticed.",
+  "Run check scripts as `powershell -NoProfile -ExecutionPolicy Bypass -File tools/<script>.ps1`; `check-home-s10.ps1` has `-SelfTest` for P0. If execution policy still blocks: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.",
+  "MediaStation started from a terminal does not take the foreground by itself: `focus --pid` it before any press.",
+  "On UM760, Application Control can block `dotnet publish` (fresh unsigned `MediaStation.SchemaExport.dll`); the recorded workaround is `npm run build` in `web/`, `dotnet publish ... -p:SkipWebBuild=true`, then copy `web/shell/dist/*` into `publish\\shell`.",
+]

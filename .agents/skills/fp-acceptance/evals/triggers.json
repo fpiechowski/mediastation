@@ -1,0 +1,22 @@
+[
+  {"query": "Retro for epic-input is done and the verdict is accepted-with-open-items. Prepare the acceptance plan for the UM760 so I can test the whole epic tomorrow.", "should_trigger": true},
+  {"query": "przygotuj plan odbioru epiki epic-osk na UM760, retro już jest", "should_trigger": true},
+  {"query": "I'm at the TV with the remote in hand. Run the epic acceptance for epic-input, start from S1.", "should_trigger": true},
+  {"query": "wznów odbiór epic-input, ostatnio stanęliśmy na S2 po poprawce hooka", "should_trigger": true},
+  {"query": "Resume the acceptance where we left off yesterday; the results table has S1 to S4 filled.", "should_trigger": true},
+  {"query": "The fix for the Home key landed. Let's do the live demo of the whole epic on the target machine now, you drive and I press the buttons.", "should_trigger": true},
+  {"query": "poprowadź mnie przez odbiór całej epiki, ja naciskam pilota, ty patrzysz w logi i wpisujesz wyniki", "should_trigger": true},
+  {"query": "Our acceptance plan for epic-orchestrator-lifecycle is missing the Actor and Assertion columns, can you complete it before I run it?", "should_trigger": true},
+  {"query": "Before Sofia closes epic-shell I want to accept it myself on real hardware. Set up the session.", "should_trigger": true},
+  {"query": "uzupełnij istniejący plan odbioru o brakujący scenariusz S15 i asercje", "should_trigger": true},
+  {"query": "Run a retrospective on epic-input; look at the tickets and the commits and give me the acceptance decision.", "should_trigger": false},
+  {"query": "I accepted the epic yesterday on the UM760, please close it and update the board.", "should_trigger": false},
+  {"query": "Make a demo video script for the MediaStation landing page showing the remote navigating the shell.", "should_trigger": false},
+  {"query": "Write acceptance criteria for the new story about the on-screen keyboard.", "should_trigger": false},
+  {"query": "Add an end-to-end test that asserts the action entries in the JSONL log after pressing Home.", "should_trigger": false},
+  {"query": "S2 failed in the acceptance because Home never reaches the LL hook. Fix it.", "should_trigger": false},
+  {"query": "Run the app and take a screenshot so I can see the new tile layout.", "should_trigger": false},
+  {"query": "Check the Done when items of story 3.4 on this machine before I mark it done.", "should_trigger": false},
+  {"query": "przeprowadź mnie przez zmiany z epiki epic-input, commit po commicie", "should_trigger": false},
+  {"query": "Set up an automated acceptance test suite that runs the shell scenarios in CI.", "should_trigger": false}
+]

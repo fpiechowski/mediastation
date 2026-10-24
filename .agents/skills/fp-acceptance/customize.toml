@@ -1,0 +1,49 @@
+# Workflow customization surface for fp-acceptance. Project values go in _bmad/custom/fp-acceptance.toml
+# (team) or fp-acceptance.user.toml (personal); invoke `bmad-customize` to write them.
+
+[workflow]
+
+# --- Configurable below. Overrides merge per BMad structural rules: ---
+#   scalars: override wins • arrays: append
+
+# Steps to run before activation continues. Overrides append.
+activation_steps_prepend = []
+
+# Steps to run after persistent facts load, before the mode starts. Overrides append.
+activation_steps_append = []
+
+# Facts held for the whole session: literal sentences, or `file:` paths/globs under the project root.
+# Use them for the app's quirks on the acceptance machine (focus, execution policy, build workarounds).
+persistent_facts = []
+
+# Name of the acceptance machine. It names the plan, epic-<slug>-<machine lowercased>-acceptance.md.
+machine = ""
+
+# Glob of the app's JSON Lines logs; %VAR%, $VAR and ~ expand.
+log_glob = ""
+
+# Command that builds the app under test at the current HEAD (run in P0). Activation asks for it when empty.
+build_command = ""
+
+# Path of the executable `launch` starts, relative to the project root.
+app_path = ""
+
+# SPEC of the log entry that means the app is ready after launch, e.g. "msg=ready".
+ready_entry = ""
+
+# Globs of the project's acceptance scripts a plan may run, relative to the project root.
+check_scripts = []
+
+# Comma-separated levels that fail a scenario's window unless an --allow exempts the entry.
+# Override to change the set (e.g. "error" alone); the value replaces this one.
+forbidden_levels = "warn,error"
+
+# Seconds `wait` gives the user to make a physical act before asking.
+input_timeout_seconds = 60
+
+# Installed speech voice (culture such as "pl-PL", or a voice name) for spoken instructions and verdicts.
+# Empty: captions on the overlay only.
+voice = ""
+
+# A step run after the user's verdict is recorded, before the hand-over (e.g. "commit the plan"). Empty: none.
+on_complete = ""
