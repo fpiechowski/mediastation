@@ -30,6 +30,11 @@ namespace MediaStation.App.Platform.Input;
 /// </summary>
 internal sealed unsafe class InputHub : IDisposable
 {
+    private const string RawWindowClassName = "MediaStationInputHubRaw";
+
+    /// <summary><c>WM_APP + 2</c>: wątek Raw Input (spike 3.11) prosi wątek Input o uzbrojenie timera terminu.</summary>
+    private const uint ArmTimerMessage = 0x8000 + 2;
+
     private const string WindowClassName = "MediaStationInputHub";
 
     /// <summary>Strona usage HID Consumer rejestrowana w Raw Input (<c>usUsagePage = 0x0C</c>).</summary>
@@ -64,6 +69,14 @@ internal sealed unsafe class InputHub : IDisposable
     private readonly List<GamepadButton> _gamepadButtons = [];
     private readonly ManualResetEventSlim _threadReady = new(initialState: false);
     private readonly Thread _thread;
+    private readonly InputHubVariants _variants;
+
+    // Spike 3.11, wariant MS_HUB_RAW_THREAD: osobny wątek i okno tylko dla WM_INPUT.
+    private readonly ManualResetEventSlim _rawReady = new(initialState: false);
+    private Thread? _rawThread;
+    private uint _rawThreadId;
+    private WNDPROC? _rawWindowProc;
+    private HWND _rawWindow;
 
     // Delegate w polach: GC nie może zebrać callbacków, dopóki hook i okno ich używają.
     private WNDPROC? _windowProc;
@@ -87,7 +100,8 @@ internal sealed unsafe class InputHub : IDisposable
         ActionQueue queue,
         IInputHubErrorSink errors,
         TimeProvider time,
-        InputRoutingState routing)
+        InputRoutingState routing,
+        InputHubVariants? variants = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(queue);
@@ -100,6 +114,7 @@ internal sealed unsafe class InputHub : IDisposable
         _errors = errors;
         _time = time;
         _routing = routing;
+        _variants = variants ?? InputHubVariants.None;
         _clipGate = new ClipCursorGate(MeasureClipWindow, ApplyClipCursor);
         _thread = new Thread(Run)
         {
@@ -154,6 +169,12 @@ internal sealed unsafe class InputHub : IDisposable
             return;
         }
 
+        if (_rawThread is not null && _rawReady.Wait(ShutdownTimeout))
+        {
+            PInvoke.PostThreadMessage(_rawThreadId, PInvoke.WM_QUIT, default, default);
+            _rawThread.Join(ShutdownTimeout);
+        }
+
         PInvoke.PostThreadMessage(_threadId, PInvoke.WM_QUIT, default, default);
         if (!_thread.Join(ShutdownTimeout))
         {
@@ -178,7 +199,18 @@ internal sealed unsafe class InputHub : IDisposable
             // Od utworzenia okna kolejka komunikatów istnieje, więc Dispose może przerwać pętlę.
             _threadReady.Set();
 
-            RegisterRawInput();
+            if (!_variants.NoRawInput)
+            {
+                if (_variants.RawThread)
+                {
+                    StartRawThread();
+                }
+                else
+                {
+                    RegisterRawInput(_window);
+                }
+            }
+
             if (!InstallHook())
             {
                 return;
@@ -250,30 +282,115 @@ internal sealed unsafe class InputHub : IDisposable
     }
 
     /// <summary>Rejestruje klawiaturę i HID Consumer; porażka zostawia hook, więc <c>source</c> spada do <c>keyboard</c>.</summary>
-    private void RegisterRawInput()
+    private void RegisterRawInput(HWND target)
     {
-        ReadOnlySpan<RAWINPUTDEVICE> devices =
-        [
-            new RAWINPUTDEVICE
-            {
-                usUsagePage = 0x01,
-                usUsage = 0x06,
-                dwFlags = RAWINPUTDEVICE_FLAGS.RIDEV_INPUTSINK,
-                hwndTarget = _window,
-            },
-            new RAWINPUTDEVICE
-            {
-                usUsagePage = 0x0C,
-                usUsage = 0x01,
-                dwFlags = RAWINPUTDEVICE_FLAGS.RIDEV_INPUTSINK,
-                hwndTarget = _window,
-            },
-        ];
+        var keyboard = new RAWINPUTDEVICE
+        {
+            usUsagePage = 0x01,
+            usUsage = 0x06,
+            dwFlags = RAWINPUTDEVICE_FLAGS.RIDEV_INPUTSINK,
+            hwndTarget = target,
+        };
+        var consumer = new RAWINPUTDEVICE
+        {
+            usUsagePage = 0x0C,
+            usUsage = 0x01,
+            dwFlags = RAWINPUTDEVICE_FLAGS.RIDEV_INPUTSINK,
+            hwndTarget = target,
+        };
+
+        // Spike 3.11: MS_HUB_RAW_HID_ONLY pomija rejestrację klawiatury (eksperyment 4 pokazał, że ona milczy hook).
+        ReadOnlySpan<RAWINPUTDEVICE> devices = _variants.RawHidOnly ? [consumer] : [keyboard, consumer];
 
         if (!PInvoke.RegisterRawInputDevices(devices, (uint)sizeof(RAWINPUTDEVICE)))
         {
             Report(InputHubOperations.RawInput, Marshal.GetLastWin32Error());
         }
+    }
+
+    /// <summary>
+    /// Spike 3.11, wariant 3: Raw Input na własnym wątku z własnym oknem, żeby <c>WM_INPUT</c> nie dzielił wątku
+    /// z hookami. Porażka rejestracji idzie do <c>inputHubError {operation: rawInput}</c>. Uwaga: <c>OnRawInput</c>
+    /// dotyka wtedy stanu z innego wątku niż hook; to kod eksperymentalny, nie wzorzec dla <c>master</c>.
+    /// </summary>
+    private void StartRawThread()
+    {
+        _rawThread = new Thread(RunRaw) { IsBackground = true, Name = "input-raw" };
+        _rawThread.Start();
+
+        // Czekamy na rejestrację, żeby hooki startowały po Raw Input jak w wariancie bazowym.
+        _rawReady.Wait(ShutdownTimeout);
+    }
+
+    private void RunRaw()
+    {
+        _rawThreadId = PInvoke.GetCurrentThreadId();
+        try
+        {
+            _rawWindowProc = RawWindowProc;
+            var module = PInvoke.GetModuleHandle(default(PCWSTR));
+            fixed (char* className = RawWindowClassName)
+            {
+                var windowClass = new WNDCLASSEXW
+                {
+                    cbSize = (uint)Marshal.SizeOf<WNDCLASSEXW>(),
+                    lpfnWndProc = _rawWindowProc,
+                    hInstance = module,
+                    lpszClassName = className,
+                };
+
+                if (PInvoke.RegisterClassEx(in windowClass) == 0)
+                {
+                    Report(InputHubOperations.RawInput, Marshal.GetLastWin32Error());
+                    return;
+                }
+
+                _rawWindow = PInvoke.CreateWindowEx(0, className, className, 0, 0, 0, 0, 0, HWND.HWND_MESSAGE, default, module, null);
+            }
+
+            if (_rawWindow.IsNull)
+            {
+                Report(InputHubOperations.RawInput, Marshal.GetLastWin32Error());
+                return;
+            }
+
+            RegisterRawInput(_rawWindow);
+            _rawReady.Set();
+            while (true)
+            {
+                var result = PInvoke.GetMessage(out var message, default, wMsgFilterMin: 0, wMsgFilterMax: 0);
+                if (result.Value <= 0)
+                {
+                    break;
+                }
+
+                PInvoke.TranslateMessage(message);
+                PInvoke.DispatchMessage(message);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Report(InputHubOperations.RawInput, null);
+        }
+        finally
+        {
+            _rawReady.Set();
+            if (!_rawWindow.IsNull)
+            {
+                PInvoke.DestroyWindow(_rawWindow);
+                _rawWindow = default;
+            }
+        }
+    }
+
+    private LRESULT RawWindowProc(HWND hwnd, uint message, WPARAM wParam, LPARAM lParam)
+    {
+        if (message == PInvoke.WM_INPUT)
+        {
+            OnRawInput((HRAWINPUT)(nint)lParam);
+        }
+
+        return PInvoke.DefWindowProc(hwnd, message, wParam, lParam);
     }
 
     private bool InstallHook()
@@ -337,6 +454,10 @@ internal sealed unsafe class InputHub : IDisposable
         else if (message == PInvoke.WM_TIMER && (nuint)wParam == GamepadTimerId)
         {
             PollGamepad();
+        }
+        else if (message == ArmTimerMessage)
+        {
+            ArmTimer();
         }
         else if (message == RoutingChangedMessage)
         {
@@ -785,6 +906,13 @@ internal sealed unsafe class InputHub : IDisposable
     /// </summary>
     private void ArmTimer()
     {
+        if (_rawThread is not null && PInvoke.GetCurrentThreadId() == _rawThreadId)
+        {
+            // Timer należy do okna wątku Input; z wątku Raw Input prosimy go o uzbrojenie.
+            PInvoke.PostMessage(_window, ArmTimerMessage, default, default);
+            return;
+        }
+
         if (InputTimerDelay.Compute(_target.NextDeadline, _time.GetUtcNow()) is not { } elapsed)
         {
             PInvoke.KillTimer(_window, DeadlineTimerId);
