@@ -123,3 +123,16 @@ covers = ["CAP-3"]
 after = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 hitl = false
 risk = "low"
+
+[[entry]]
+id = 11
+type = "spike"
+title = "Dlaczego hook WH_KEYBOARD_LL nie dostaje klawiszy, gdy shell MediaStation jest na wierzchu na UM760?"
+description = "Ustala, dlaczego przy shellu (WebView2) na wierzchu hook LL nie dostaje żadnego klawisza, a Home z G20S Pro otwiera Edge przez powłokę (odbiór S2); przechodzi eksperymenty po kolei: bez `foregroundGate`, bez Raw Input, Raw Input na osobnym wątku, puste okno bez WebView2, alternatywy dla połykania Home; wynikiem jest decyzja dla AD-8."
+verify = "Tabela wyników eksperymentów z logami z UM760, trzy przebiegi pod rząd z jedną `action home` i bez nowego okna przeglądarki przy shellu na wierzchu dla wybranego wariantu, oraz zapisana decyzja dla AD-8 zaakceptowana przez użytkownika."
+covers = ["CAP-3"]
+after = []
+hitl = true
+risk = "high"
+refine = true
+references = ["../../spike/spike-results.md, S10", "epic-input-um760-acceptance.md, S2 i wstrzymanie 2026-10-24", "architecture-mediastation/architecture-mediastation.md, AD-8"]
