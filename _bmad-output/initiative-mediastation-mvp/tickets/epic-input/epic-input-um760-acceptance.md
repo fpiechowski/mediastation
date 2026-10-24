@@ -7,7 +7,7 @@ created: 2026-10-23
 status: aborted
 ---
 
-> **Przebieg przerwany (2026-10-24).** Wyniki poniżej zostają jako dowód (S1 pass, S2 i S13 fail). Baza HEAD zmieniła się w trakcie, więc nie są podstawą werdyktu. Nowy przebieg: od S1, na zamrożonym HEAD, po spike u `epic-input` 11 i z rozszerzeniem do odbioru. Epika nie jest zaakceptowana.
+> **Przebieg przerwany (2026-10-24).** Wyniki poniżej zostają jako dowód (S1 pass, S2 i S13 fail). Baza HEAD zmieniła się w trakcie, więc nie są podstawą werdyktu. Nowy przebieg: od S1, na zamrożonym HEAD, po spike'u `epic-input` 11 i z rozszerzeniem do odbioru. Epika nie jest zaakceptowana.
 
 # Odbiór epiki 3 (epic-input) na UM760 — plan i scenariusz
 
