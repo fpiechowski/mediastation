@@ -3,10 +3,10 @@ using MediaStation.Core.Contracts;
 
 namespace MediaStation.Core.Input;
 
-/// <summary>Okno pierwszego planu rozpoznane przez platformę: korzeń okna (<c>GA_ROOT</c>) i PID jego procesu.</summary>
+/// <summary>Okno pierwszego planu rozpoznane przez platformÄ™: korzeĹ„ okna (<c>GA_ROOT</c>) i PID jego procesu.</summary>
 public readonly record struct ForegroundWindowInfo(long Hwnd, int Pid);
 
-/// <summary>Odczyt okna pierwszego planu; <c>null</c> znaczy nieznane (brak okna, secure desktop, przełącznik Alt+Tab).</summary>
+/// <summary>Odczyt okna pierwszego planu; <c>null</c> znaczy nieznane (brak okna, secure desktop, przeĹ‚Ä…cznik Alt+Tab).</summary>
 public interface IForegroundWindow
 {
     ForegroundWindowInfo? Current();
@@ -15,14 +15,14 @@ public interface IForegroundWindow
 /// <summary>Bramka foreground (AD-8): czy na pierwszym planie jest okno MediaStation.</summary>
 public interface IForegroundProbe
 {
-    /// <summary><c>true</c> tylko dla znanego okna z zarządzanego zbioru; nieznane okno jest obce.</summary>
+    /// <summary><c>true</c> tylko dla znanego okna z zarzÄ…dzanego zbioru; nieznane okno jest obce.</summary>
     bool IsManaged();
 }
 
 /// <summary>
 /// Lokalna kopia zbioru okien MediaStation (AD-8): shell, klawiatura ekranowa i okna aplikacji. Shell wpisuje
-/// <see cref="SetShell"/> (App), resztę publikuje Orchestrator przez <see cref="Apply"/>, który przyjmuje wyłącznie
-/// <c>epoch</c> ściśle większy od bieżącego. Wątek Input czyta bez czekania na Orchestrator: <c>lock</c> obejmuje
+/// <see cref="SetShell"/> (App), resztÄ™ publikuje Orchestrator przez <see cref="Apply"/>, ktĂłry przyjmuje wyĹ‚Ä…cznie
+/// <c>epoch</c> Ĺ›ciĹ›le wiÄ™kszy od bieĹĽÄ…cego. WÄ…tek Input czyta bez czekania na Orchestrator: <c>lock</c> obejmuje
 /// jedno przypisanie niezmiennej migawki, tak jak w <see cref="InputRoutingState"/>.
 /// </summary>
 public sealed class ManagedWindows
@@ -40,8 +40,8 @@ public sealed class ManagedWindows
     }
 
     /// <summary>
-    /// Zapisuje zbiór z komendy, gdy <c>epoch</c> jest ściśle większy od bieżącego, i zwraca <c>true</c>.
-    /// Dla <c>epoch</c> równego albo starszego kopia zostaje bez zmian.
+    /// Zapisuje zbiĂłr z komendy, gdy <c>epoch</c> jest Ĺ›ciĹ›le wiÄ™kszy od bieĹĽÄ…cego, i zwraca <c>true</c>.
+    /// Dla <c>epoch</c> rĂłwnego albo starszego kopia zostaje bez zmian.
     /// </summary>
     public bool Apply(SetManagedWindows command)
     {
@@ -65,8 +65,8 @@ public sealed class ManagedWindows
     }
 
     /// <summary>
-    /// Czy okno należy do MediaStation: najpierw uchwyt (shell, OSK, okno aplikacji), potem PID korzenia aplikacji,
-    /// bo okna potomne i okna dialogowe aplikacji mają inne uchwyty tego samego procesu.
+    /// Czy okno naleĹĽy do MediaStation: najpierw uchwyt (shell, OSK, okno aplikacji), potem PID korzenia aplikacji,
+    /// bo okna potomne i okna dialogowe aplikacji majÄ… inne uchwyty tego samego procesu.
     /// </summary>
     public bool Contains(long hwnd, int pid)
     {
@@ -100,15 +100,33 @@ public sealed class ManagedForegroundProbe : IForegroundProbe
 {
     private readonly IForegroundWindow _window;
     private readonly ManagedWindows _managed;
+    private readonly Action<ForegroundWindowInfo?, bool>? _onChange;
+    private (ForegroundWindowInfo? Window, bool Managed)? _last;
 
-    public ManagedForegroundProbe(IForegroundWindow window, ManagedWindows managed)
+    /// <param name="onChange">WoĹ‚any tylko przy zmianie okna albo werdyktu (diagnostyka bramki, bez wpisu na kaĹĽdy klawisz).</param>
+    public ManagedForegroundProbe(
+        IForegroundWindow window,
+        ManagedWindows managed,
+        Action<ForegroundWindowInfo?, bool>? onChange = null)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(managed);
 
         _window = window;
         _managed = managed;
+        _onChange = onChange;
     }
 
-    public bool IsManaged() => _window.Current() is { } foreground && _managed.Contains(foreground.Hwnd, foreground.Pid);
+    public bool IsManaged()
+    {
+        var window = _window.Current();
+        var managed = window is { } foreground && _managed.Contains(foreground.Hwnd, foreground.Pid);
+        if (_onChange is not null && _last != (window, managed))
+        {
+            _last = (window, managed);
+            _onChange(window, managed);
+        }
+
+        return managed;
+    }
 }
