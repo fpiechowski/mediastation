@@ -7,7 +7,7 @@ paradigm: 'hexagonal (ports & adapters) z jednowątkowym actor core (Orchestrato
 scope: 'MediaStation MVP: pełnoekranowy shell TV na Windows 11 (UM760), sterowanie Netflixem w Edge przez CDP, wejście z pilota/klawiatury/gamepada, audio focus, Moonlight, aplikacje natywne, „Do oceny”'
 status: final
 created: '2026-10-16'
-updated: '2026-10-23'
+updated: '2026-10-24'
 binds: [brief-mediastation, forge-filmweb-rating-prompt, ux-mediastation]
 sources:
   - ../brief-mediastation/brief-mediastation.md
@@ -183,10 +183,13 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 ### AD-8: Wejście = Actions, routing z lokalną kopią trybu
 
 - **Binds:** InputHub, Orchestrator, Shell UI, OSK, PageRuntime
-- **Prevents:** dwie ścieżki D-pada w webie; hook czekający na Orchestrator (Windows usuwa hook po `LowLevelHooksTimeout`); zawieszone klawisze; podwójne Actions; pętla własnych `SendInput`; UI czytający surowe klawisze
+- **Prevents:** dwie ścieżki D-pada w webie; hook czekający na Orchestrator (Windows usuwa hook po `LowLevelHooksTimeout`); zawieszone klawisze; podwójne Actions; pętla własnych `SendInput`; UI czytający surowe klawisze; powtórzenie zaobserwowanego na ALDER milczenia hooka przy rejestracji Raw Input klawiatury w tym samym procesie
 - **Rule:**
   - InputHub zamienia źródła na **Actions** `{ kind: Up|Down|Left|Right|Ok|Back|Home|AppMenu|Keyboard, phase: press|repeat|long, source, tsMono }`. `Keyboard` daje przycisk pilota z `input.json` (wybrany w `--calibrate-input`) i klawisz konfigurowalny dla klawiatury i pada.
   - **Jedno naciśnięcie daje jedną Action.** Wyzwalaczem jest VK z hooka LL, a Raw Input służy tylko do identyfikacji urządzenia. Autorepeat systemu nie daje kolejnej Action.
+  - InputHub nie rejestruje Raw Input klawiatury (`0x01/0x06`, `RIDEV_INPUTSINK`) w procesie z `WH_KEYBOARD_LL`; pozostawia Raw Input HID Consumer (`0x0C/0x01`) dla korelacji Home/Back. Przeniesienie `WM_INPUT` na inny wątek tego procesu nie spełnia tego warunku. Nie zastępujemy VK raportem HID jako wyzwalacza Action.
+  - `source: remote` wymaga sygnału przypisanego do pilota; dla wstrzykniętego Home/Back korelacja musi łączyć sygnaturę urządzenia, czas i właściwą parę HID Consumer usage → VK (`0x0223` → `VK_BROWSER_HOME`, `0x0224` → `VK_BROWSER_BACK`). Sam VK albo inny raport Consumer nie dowodzi źródła. Bez Raw Input klawiatury zwykłe klawisze pilota (m.in. D-pad i OK) mogą mieć `source: keyboard`, choć nadal dają jedną Action według VK. Nie wolno deklarować ich jako `remote` na podstawie samego mapowania `input.json`. Wyjątek Home nad obcym oknem wymaga potwierdzonego `source: remote`; jeśli fizyczny Home nie spełni tego warunku, wariant nie spełnia AD-8.
+  - `--calibrate-input` nadal musi wskazać przycisk pilota z VK i zapisać jego sygnaturę do `input.json`. Diagnostyczny odczyt Raw Input klawiatury może działać tylko bez równoczesnego hooka LL w tym samym procesie (np. osobny tryb kalibracji albo proces); nie przywraca tej rejestracji w normalnym InputHub.
   - Własne `SendInput` (OSK, `back: key:<VK>`, odblokowanie foreground) mają znacznik w `dwExtraInfo` i hook je ignoruje. Flagi `LLKHF_INJECTED` samej w sobie nie ignorujemy, bo Home z pilota ją ma.
   - InputHub jest właścicielem timingu (repeat, long-press).
   - Klawisz, który w bieżącym trybie ma przypisane `long` (OK w `shell` i w `osk`), dostaje `press` dopiero na key-up przed progiem long-press. Po osiągnięciu progu InputHub emituje `long` i nie emituje już `press`. Pozostałe klawisze dostają `press` na key-down.
@@ -216,6 +219,12 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
   - Gamepad w Moonlight jest przepuszczany w całości: D-pad i OK nie dają Actions, a kombinacja Home z pada daje `home` w każdym trybie. Home z pada to konfigurowalna kombinacja.
   - InputHub emituje `Keyboard` w każdym wierszu tabeli i sam go nie bramkuje; bramkowanie `textFocus` należy do Orchestratora (AD-9) i dokłada je epic-osk razem z OSK. Dziś Orchestrator ignoruje Actions inne niż `Home`, więc zachowanie odpowiada tabeli.
   - Shell UI i OSK konsumują **wyłącznie** Actions z core.
+
+**Notes — spike 3.11 (2026-10-24):**
+- `Source conflict:` S10 na UM760 dowiódł ścieżki G20S Pro HID Consumer `0x0223` → `VK_BROWSER_HOME` i 16/16 Home nad czterema celami, lecz przypisanie problemu zajętemu wątkowi UI było hipotezą. Na ALDER z wejściem syntetycznym rejestracja Raw Input klawiatury korelowała z brakiem callbacku LL przy własnym oknie na wierzchu; osobny wątek Raw Input, `MS_NO_GATE` i usunięcie WebView2 tego nie naprawiły. Wariant rejestrujący tylko HID Consumer pozostawił hook VK zdolny do jednej Action dla Home/Back/OK w trzech kolejnych przebiegach. Mechanizm Windows i zachowanie fizycznego G20S Pro na UM760 pozostają niepotwierdzone.
+- Implementacja: przenieść wariant bez rejestracji klawiatury z gałęzi spike'u do zwykłej ścieżki InputHub; sprawdzić na ALDER przy shellu na wierzchu `keyEnter` down, jedną Action na Home/Back/OK w trzech uruchomieniach, brak `inputHubError` i brak Raw Input klawiatury. Testy polityki muszą pokazać `remote` tylko dla właściwej pary HID Home/Back, `keyboard` przy braku dowodu urządzenia lub obcym usage oraz zachowanie bramki nad obcym oknem. Sprawdzić, że `--calibrate-input` nadal rozpoznaje VK i sygnaturę urządzenia, bez współistnienia rejestracji Raw Input klawiatury i hooka; na ALDER użyć dostępnej klawiatury, a fizyczny przycisk G20S Pro sprawdzić na UM760. Wyniki i logi zapisać w planie ticketu implementacyjnego.
+- Oddzielny proces Raw Input klawiatury działający stale, inna korelacja źródła, `RIDEV_NOLEGACY` i `WM_APPCOMMAND` nie są przyjętymi rozwiązaniami: spike ich nie zweryfikował jako całości. Wiersz `source: remote` z `input.json` nie rozpozna zwykłych klawiszy pilota po ich sygnaturze podczas normalnej pracy; scalone mapowanie `kind` po VK może nadal dawać właściwe Actions. Jeśli produkt będzie wymagał `source: remote` także dla tych klawiszy, osobny ticket ma najpierw dowieść kanału identyfikacji i kolejności zdarzeń bez ponownego wyciszenia hooka; do tego czasu jawny fallback `keyboard` jest kosztem decyzji.
+- Po dostarczeniu zmiany fizyczny G20S Pro, `VK_BROWSER_HOME`, brak nowego okna przeglądarki, `source` Home/Back i zwykłych klawiszy oraz S10 16/16 sprawdza użytkownik w odbiorze **całej** `epic-input` na UM760 przez `fp-acceptance`. Wynik ALDER nie jest tym odbiorem.
 
 ### AD-9: Jedna klawiatura ekranowa w MediaStation
 
@@ -496,7 +505,7 @@ flowchart TB
 - **Przycisk Klawiatura na G20S Pro (dongle USB 2.4G):** pierwsza story epiki wejścia, `--calibrate-input`. Bluetooth nie jest wymagany.
 - **OSK nad pełnoekranowym Plexem i polskie znaki przez `SendInput` w Plexie i UI Moonlighta:** story „OSK w Plexie i UI Moonlighta” w epice Moonlight & native.
 - **Nakładka nad pełnoekranowym Edge:** pierwsza story epiki OSK.
-- **Hook LL we własnym wątku dostaje „down”** także przy MediaStation na wierzchu: prototyp InputHub.
+- **Hook LL i fizyczny pilot na UM760:** po zmianie AD-8 odbiór całej `epic-input` przez `fp-acceptance` sprawdza `down` przy shellu na wierzchu oraz Home/Back z G20S Pro; ALDER potwierdził tylko wejście syntetyczne.
 - **Nowe sesje audio po zmianie odcinka:** AudioRouter (AD-5).
 - **Pauza wielogodzinna bez uśpienia PC** (S8 zmierzył 30 min): story pomiarowa w epice Netflix (spec CAP-8). Powtarza S8 dla kilku godzin, w dwóch wariantach pauzy i chowania okna, i dodaje fixture'y nowych ekranów błędu. Jeśli wynik wymaga polityki w Core, wraca tu jako change. Ścieżka po Modern Standby jest ustalona w AD-10: ekran profili, a nie dokładne miejsce.
 - **Kontrole z forge i UX:** czy QR otwiera aplikację, czy przeglądarkę; język tytułu w wyszukiwarce Filmwebu; skanowanie QR (ECC L) z 3 m na prawdziwym TV dwoma telefonami. Wszystkie w story „Do oceny”.
