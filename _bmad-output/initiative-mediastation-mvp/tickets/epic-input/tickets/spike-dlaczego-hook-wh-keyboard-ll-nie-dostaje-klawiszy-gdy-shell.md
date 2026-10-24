@@ -30,14 +30,14 @@ To spike, nie odbiór: nie zmienia statusu odbioru epiki ani nie zamyka jej. `hi
 6. Po każdym eksperymencie jeden wiersz w tabeli wyników: co było na wierzchu, czy hook dostał „down", liczba wpisów `action`, czy otworzył się Edge. Eksperyment, który wskaże przyczynę, kończy kolejne.
 7. Kod eksperymentów tylko na gałęzi spike'u; zmiany w `master` wchodzą dopiero po decyzji dla AD-8.
 
-Zakończenie: jedna sesja na UM760. Dość dobre to ustalona przyczyna albo wyczerpana lista 1–5.
+Zakończenie per-ticket: sesja best-effort na ALDER; hipoteza i ograniczenia są zapisane. Próby z fizycznym pilotem należą do późniejszego odbioru całej epiki na UM760.
 
 ## Acceptance Criteria
 
 1. **Każdy wykonany eksperyment ma wynik: hook dostaje „down" przy shellu na wierzchu albo nie.**
-   Verify: tabela wyników w sekcji „Wynik" tego pliku, z odnośnikami do logów z UM760.
-2. **Wybrany wariant daje na UM760 jedną `action {kind: home}` i zero nowych okien przeglądarki przy shellu na wierzchu, w 3 przebiegach pod rząd.**
-   Verify: logi `mediastation-*.jsonl` i `check-home-s10-*.log` z trzech przebiegów, odnośniki w sekcji „Wynik".
+   Verify: tabela wyników w sekcji „Wynik" tego pliku z dowodami z ALDER; próby sprzętowe są oznaczone jako N/A z powodem.
+2. **Per-ticket best-effort na ALDER (zgodnie z `AGENTS.md`): wybrany wariant daje jedną `action {kind: home}` w trzech uruchomieniach pod rząd przy shellu na wierzchu.** Fizyczny pilot i brak nowych okien przy `VK_BROWSER_HOME` są N/A dla tego ticketu na ALDER; sprawdza je użytkownik podczas odbioru całej epiki na UM760.
+   Verify: logi `mediastation-*.jsonl` dla trzech procesów ALDER oraz tabela `spike-3-11-20261024-201421.md` w sekcji „Wynik". Wejście syntetyczne nie rozstrzyga zachowania fizycznego Home ani nowych okien przeglądarki.
 3. **Decyzja i jej skutki dla AD-8 są zapisane tak, że `bmad-architecture` i `bmad-build` mogą z nich skorzystać.**
    Verify: sekcja „Wynik" w tym pliku oraz `Source conflict:` w Notes AD-8, jeśli decyzja zmienia architekturę.
 4. **Użytkownik zaakceptował wynik.**
@@ -53,8 +53,9 @@ Zakończenie: jedna sesja na UM760. Dość dobre to ustalona przyczyna albo wycz
 ## Notes
 
 - Assumption: ticket nie zmienia statusu odbioru epiki (2026-10-24).
-- Assumption: czas to jedna sesja na UM760, bo użytkownik nie podał własnego limitu (2026-10-24).
-- Open question: czy przy eksperymentach 1–4 wystarczy sprawdzać tylko Home, czy też Back i OK (dziś Back i OK docierają, gdy na wierzchu jest obce okno).
+- Assumption: per-ticket weryfikacja odbywa się na ALDER; fizyczny pilot i UM760 należą do późniejszego odbioru całej epiki zgodnie z `AGENTS.md` (2026-10-24).
+- Resolved: eksperymenty sprawdzają Home, Back i OK; powtarzane przebiegi `raw-hid-only` na ALDER dały po jednej Action dla każdego klawisza.
+- HITL: AC 4 czeka na jawną akceptację użytkownika i nie jest blokadą sprzętową. Po decyzji zapisać `Decision:` z datą.
 
 ## Wynik
 
@@ -79,6 +80,12 @@ Stan na 2026-10-24, gałąź `spike-3-11` (kod eksperymentów niescalony do `mas
 Weryfikacja bez zmiennych (2026-10-24): `dotnet build src/MediaStation.App -c Release` 0 ostrzeżeń i 0 błędów, `dotnet test tests/MediaStation.Core.Tests` 892/892, `tools/spike-3-11.ps1 -SelfTest` przechodzi. Wiersze 4a–4c i 5 dodano po zatwierdzeniu planu, żeby zawęzić przyczynę.
 
 Powtórzenie w innej kolejności (no-rawinput, baseline, raw-thread, no-rawinput, hook-probe; 2 naciśnięcia) dało te same wyniki, więc kolejność uruchomień nie wpływa. Dowody: `%LOCALAPPDATA%\MediaStation\logs\spike-3-11-alder-final.md` (wiersze 0–4a), `spike-3-11-alder-order2.md`, `spike-3-11-alder-rawsplit.md` (4b, 4c), `spike-3-11-alder-hidonly.md` (5), logi aplikacji `mediastation-2026-10-24.jsonl` (wpisy `inputHubVariant`, `keyEnter`, `action`) oraz `hook-probe-*.jsonl` w tym samym katalogu. Wariant 3 nie dał `inputHubError`, rejestracja na osobnym wątku się powiodła.
+
+### Powtórzone przebiegi wybranego wariantu (ALDER)
+
+Po wyborze `MS_HUB_RAW_HID_ONLY=1` wykonano trzy osobne uruchomienia aplikacji pod rząd, po jednym syntetycznym Home na przebieg, przy shellu na wierzchu. Każdy proces miał jeden wpis `inputHubVariant` z `rawHidOnly=true`, jeden `keyEnter` down dla `VK_HOME`, jedną `action {kind: home}` i zero `inputHubError`. Back i OK także dały po jednej Action w każdym procesie. Asercja JSONL po PID: 19388, 3304, 2164. Pełna tabela: `%LOCALAPPDATA%\MediaStation\logs\spike-3-11-20261024-201421.md`; aplikacyjne wpisy: `%LOCALAPPDATA%\MediaStation\logs\mediastation-2026-10-24.jsonl`.
+
+Nowe okna przeglądarki nie są oceniane w tej próbie: syntetyczny `VK_HOME` nie odtwarza pilota, który wysyła HID Consumer `0x0223` i `VK_BROWSER_HOME`. To sprawdza odbiór całej epiki na UM760.
 
 ### Wniosek
 

@@ -55,13 +55,13 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] gałąź `spike-3-11` z `master` -- utworzyć przed zmianą kodu -- kod eksperymentów poza `master`
-- [ ] `src/MediaStation.App/Platform/Input/InputHub.cs` -- warianty `MS_HUB_NO_RAWINPUT` i `MS_HUB_RAW_THREAD` z jednym wpisem `warn inputHubVariant` -- eksperymenty 2 i 3
-- [ ] `src/MediaStation.App/CompositionRoot.cs` -- `MS_NO_GATE` (sonda zawsze „managed") -- eksperyment 1
-- [ ] `tools/hook-probe/` -- minimalna aplikacja Win32 bez WebView2: okno na wierzchu, ten sam hook LL, log „down" -- eksperyment 4
-- [ ] `tools/spike-3-11.ps1` -- uruchamia warianty, wstrzykuje klawisze `SendInput` przy shellu/oknie na wierzchu, czyta log i dopisuje wiersz do tabeli wyników; instrukcja z góry i „start" -- powtarzalny pomiar
-- [ ] plik ticketu 3.11, sekcja „Wynik" -- tabela wyników z ALDER, wiersze UM760 jako „nie dotyczy na ALDER: brak pilota" z odnośnikami do logów, decyzja i skutki dla AD-8 -- AC 1 i 3
-- [ ] handoff UM760 -- lista przebiegów (3× Home przy shellu na wierzchu, wariant wybrany) -- AC 2 i 4 należą do użytkownika
+- [x] gałąź `spike-3-11` z `master` -- utworzona przed zmianą kodu -- kod eksperymentów poza `master`
+- [x] `src/MediaStation.App/Platform/Input/InputHub.cs` -- warianty `MS_HUB_NO_RAWINPUT` i `MS_HUB_RAW_THREAD` z jednym wpisem `warn inputHubVariant` -- eksperymenty 2 i 3
+- [x] `src/MediaStation.App/CompositionRoot.cs` -- `MS_NO_GATE` (sonda zawsze „managed") -- eksperyment 1
+- [x] `tools/hook-probe/` -- minimalna aplikacja Win32 bez WebView2: okno na wierzchu, ten sam hook LL, log „down" -- eksperyment 4
+- [x] `tools/spike-3-11.ps1` -- uruchamia warianty, wstrzykuje klawisze `SendInput` przy shellu/oknie na wierzchu, czyta log i dopisuje wiersz do tabeli wyników; instrukcja z góry i „start" -- powtarzalny pomiar
+- [x] plik ticketu 3.11, sekcja „Wynik" -- tabela i odnośniki do dowodów ALDER, ograniczenia wniosku i skutki dla AD-8
+- [x] przekazanie fizycznych prób Home na UM760 do odbioru całej epiki; per-ticket best-effort wykonany na ALDER. Jawna akceptacja w AC 4 pozostaje decyzją użytkownika, nie blokadą sprzętową.
 
 **Acceptance Criteria:**
 - Given shell MediaStation na wierzchu na ALDER, when skrypt wstrzykuje Home, Back i OK w każdym wariancie, then tabela ma wiersz z „down" hooka tak/nie na wariant.
@@ -71,6 +71,8 @@ context:
 ## Implementation Notes
 
 ## Plan Change Log
+
+- 2026-10-24: po trzech powtórzonych przebiegach `raw-hid-only` na ALDER zapisano weryfikację i doprecyzowano, że fizyczny pilot/UM760 należy do odbioru całej epiki wg `AGENTS.md`.
 
 ## Review Triage Log
 
@@ -92,9 +94,13 @@ Wstrzyknięcie `SendInput` na ALDER ma flagę `LLKHF_INJECTED`; hook dostaje je 
 ## Verification
 
 **Commands:**
-- `dotnet build src/MediaStation.App -c Release` -- expected: sukces
-- `dotnet test tests/MediaStation.Core.Tests` -- expected: wszystkie przechodzą
-- `powershell -NoProfile -ExecutionPolicy Bypass -File tools/spike-3-11.ps1 -SelfTest` -- expected: sukces
+- `dotnet build src/MediaStation.App -c Release -v q` -- PASS, 0 ostrzeżeń, 0 błędów.
+- `dotnet test tests/MediaStation.Core.Tests -v q` -- PASS, 892/892, 0 pominiętych.
+- `dotnet build tools/hook-probe/hook-probe.csproj -c Release -v q` -- PASS, 0 ostrzeżeń, 0 błędów.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File tools/spike-3-11.ps1 -SelfTest` -- PASS.
+- Test aplikacyjny ALDER: `-Variants raw-hid-only,raw-hid-only,raw-hid-only -Presses 1 -StartDelaySeconds 3 -SettleSeconds 1` -- trzy uruchomienia pod rząd; w każdym shell na wierzchu, hook down dla Home/Back/OK, po jednej odpowiadającej Action, `inputHubVariant` dokładnie raz i brak `inputHubError`. Dla Home: 1 `action {kind: home}` w każdym z trzech przebiegów.
+- Asercje JSONL dla powtórzeń: każdy z PID 19388, 3304 i 2164 ma jeden wpis wariantu `rawHidOnly`, jedno `keyEnter` down `VK_HOME`, jedną `action home` i zero `inputHubError`; tabela skryptu zawiera także po jednej Action Back i OK w każdym przebiegu.
+- Sonda `hook-probe --raw-hid`: 9/9 syntetycznych down (Home/Back/OK), potwierdzone w `hook-probe-20261024-194709.jsonl`.
 
-**Manual checks (if no CLI):**
-- Przebieg na UM760 (użytkownik, całość epiki): Home ×3 przy shellu na wierzchu w wybranym wariancie → jedna `action {kind: home}`, zero nowych okien przeglądarki.
+- **Granica sprzętowa:** fizyczny pilot G20S Pro i zachowanie okna przeglądarki są N/A dla per-ticket testu na ALDER: wejście było syntetyczne i nie modeluje `VK_BROWSER_HOME`/HID Consumer. Najmocniejszy per-ticket dowód to trzy uruchomienia ALDER powyżej. UM760 jest częścią późniejszego odbioru całej epiki, nie warunkiem ukończenia tego ticketu.
+- **Decyzja użytkownika:** AC 4 wymaga jawnej akceptacji wyniku i pozostaje do odnotowania w `Notes` ticketu jako `Decision:` z datą.
