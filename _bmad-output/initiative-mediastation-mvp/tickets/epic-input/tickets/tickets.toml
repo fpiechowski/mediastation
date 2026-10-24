@@ -136,3 +136,16 @@ hitl = true
 risk = "high"
 refine = true
 references = ["../../spike/spike-results.md, S10", "epic-input-um760-acceptance.md, S2 i wstrzymanie 2026-10-24", "architecture-mediastation/architecture-mediastation.md, AD-8"]
+
+[[entry]]
+id = 12
+type = "story"
+title = "Home przy shellu na wierzchu bez Raw Input klawiatury"
+description = "Wprowadza do zwykłej pracy InputHub wariant bez rejestracji Raw Input klawiatury w procesie hooka, zachowuje HID Consumer i wyzwalanie Actions przez VK, rozróżnia źródło Home/Back po właściwej parze HID usage–VK oraz utrzymuje kalibrację przycisku pilota z VK. Dokumentuje fallback `source: keyboard` dla zwykłych klawiszy pilota bez potwierdzenia urządzenia."
+verify = "Na ALDER trzy kolejne uruchomienia z shellem na wierzchu dają po jednym `keyEnter` down i jednej Action dla syntetycznych Home/Back/OK, bez `inputHubError` i rejestracji Raw Input klawiatury; testy Core sprawdzają poprawną i błędną parę HID usage–VK, fallback `source: keyboard` i bramkę nad obcym oknem; kalibracja nadal zapisuje VK i sygnaturę urządzenia. Wyniki i logi trafiają do planu. Fizyczny G20S Pro i S10 16/16 należą do odbioru całej epiki na UM760 przez `fp-acceptance`."
+covers = ["CAP-3"]
+after = [11]
+hitl = false
+risk = "high"
+refine = true
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (Notes — spike 3.11)", "tickets/epic-input/tickets/spike-dlaczego-hook-wh-keyboard-ll-nie-dostaje-klawiszy-gdy-shell.md, Wynik"]
