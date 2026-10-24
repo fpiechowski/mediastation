@@ -55,7 +55,7 @@ Zakończenie per-ticket: sesja best-effort na ALDER; hipoteza i ograniczenia są
 - Assumption: ticket nie zmienia statusu odbioru epiki (2026-10-24).
 - Assumption: per-ticket weryfikacja odbywa się na ALDER; fizyczny pilot i UM760 należą do późniejszego odbioru całej epiki zgodnie z `AGENTS.md` (2026-10-24).
 - Resolved: eksperymenty sprawdzają Home, Back i OK; powtarzane przebiegi `raw-hid-only` na ALDER dały po jednej Action dla każdego klawisza.
-- HITL: AC 4 czeka na jawną akceptację użytkownika i nie jest blokadą sprzętową. Po decyzji zapisać `Decision:` z datą.
+- Decision: zaakceptowano wynik per-ticket jako hipotezę potwierdzoną na ALDER przy wejściu syntetycznym; fizyczny pilot G20S Pro i walidacja `VK_BROWSER_HOME` pozostają częścią odbioru całej epiki na UM760. Nie podjęto jeszcze decyzji o zmianie architektury AD-8. (2026-10-24)
 
 ## Wynik
 

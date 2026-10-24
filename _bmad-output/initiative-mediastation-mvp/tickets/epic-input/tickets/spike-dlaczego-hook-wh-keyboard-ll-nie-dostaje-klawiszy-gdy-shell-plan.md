@@ -3,7 +3,7 @@ title: 'Spike 3.11: dlaczego hook WH_KEYBOARD_LL milczy, gdy shell jest na wierz
 type: 'chore'
 ticket: '11'
 created: '2026-10-24'
-status: 'built'
+status: done
 baseline_revision: '9a166fed0c08b19082d056e716a5c17f543d66e1'
 route: 'full'
 route_source: 'auto'
