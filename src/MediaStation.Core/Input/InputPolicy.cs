@@ -711,16 +711,15 @@ public sealed class InputPolicy : IInputTarget
         if (_pendingRemoteEvidence is { } evidence)
         {
             var ageMs = key.TimeMs - evidence.TimeMs;
-            if (ageMs > CorrelationWindowMs)
+            var isHomeOrBack = key.VirtualKey is BrowserHomeVirtualKey or BrowserBackVirtualKey;
+            if (ageMs > CorrelationWindowMs || isHomeOrBack)
             {
                 _pendingRemoteEvidence = null;
-            }
-            else if (ageMs >= 0 && (key.VirtualKey is BrowserHomeVirtualKey or BrowserBackVirtualKey))
-            {
-                // Pierwsze Home/Back zdarzenie zużywa raport, nawet gdy para jest błędna albo VK fizyczny.
-                // Późniejsze naciśnięcie nie może odziedziczyć tożsamości tego raportu.
-                _pendingRemoteEvidence = null;
-                if (key.Injected && MatchesRemotePair(evidence.Usage, key.VirtualKey))
+                if (ageMs >= 0
+                    && ageMs <= CorrelationWindowMs
+                    && isHomeOrBack
+                    && key.Injected
+                    && MatchesRemotePair(evidence.Usage, key.VirtualKey))
                 {
                     return ActionSource.Remote;
                 }

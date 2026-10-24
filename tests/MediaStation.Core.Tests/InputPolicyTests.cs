@@ -863,6 +863,12 @@ public class InputPolicyTests
         Assert.Equal(
             Press(ActionKind.Home, ActionSource.Keyboard, 1000),
             Assert.Single(policy.OnKey(Down(0xAC, 1000, injected: true)).Actions));
+
+        policy.OnKey(Up(0xAC, 1005, injected: true));
+
+        Assert.Equal(
+            Press(ActionKind.Home, ActionSource.Keyboard, 1020),
+            Assert.Single(policy.OnKey(Down(0xAC, 1020, injected: true)).Actions));
     }
 
     [Fact]

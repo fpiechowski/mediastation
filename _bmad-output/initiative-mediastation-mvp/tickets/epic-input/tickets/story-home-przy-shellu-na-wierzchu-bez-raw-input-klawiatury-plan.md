@@ -73,6 +73,12 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-10-24 — Review pass
+- verdicts: 2 findings — high 0, medium 1, low 0, false 1, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` Future-dated Home/Back evidence could be reused by a later press — cleared pending evidence on the first Home/Back event regardless of timestamp ordering and extended `Consumer_report_after_the_key_is_ignored` to assert the later matching press stays `keyboard`; targeted regression test passed.
+  - `[false]` `[reject]` The matrix conflicts with confirmed Home over a foreign window — the ticket requires confirmed remote Home to be swallowed with an Action over foreign windows; the matrix's error-handling clause begins with “No match” and describes the unconfirmed case, so the acceptance target is consistent.
+
 ## Design Notes
 
 The VK remains the sole Action trigger. HID Consumer is evidence for attribution and foreign-window Home policy only. A report is matched once and cleared on use or expiry, so a second key cannot inherit the first press's device identity. Calibration keeps the LL hook for injected VK pairing and physical Esc; its Raw Input registration is limited to HID Consumer.
@@ -82,14 +88,38 @@ The VK remains the sole Action trigger. HID Consumer is evidence for attribution
 **Commands:**
 - `dotnet test tests/MediaStation.Core.Tests -v q` — **PASS**, 899 passed, 0 failed, 0 skipped.
 - `dotnet build src/MediaStation.App -c Release -v q` — **PASS**, 0 warnings and 0 errors.
-- `powershell -NoProfile -ExecutionPolicy Bypass -File tools/spike-3-11.ps1 -Variants baseline,baseline,baseline -Presses 1 -StartDelaySeconds 3 -SettleSeconds 1` — **PASS** on the current Windows desktop (harness header: `MEDIASTATION`). Result: `C:\Users\Użytkownik\AppData\Local\MediaStation\logs\spike-3-11-20261024-214626.md`; application log: `C:\Users\Użytkownik\AppData\Local\MediaStation\logs\mediastation-2026-10-24.jsonl`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File tools/spike-3-11.ps1 -Variants baseline,baseline,baseline -Presses 1 -StartDelaySeconds 3 -SettleSeconds 1` — **PASS** on the current Windows desktop (harness header: `MEDIASTATION`). Final result: `C:\Users\Użytkownik\AppData\Local\MediaStation\logs\spike-3-11-20261024-215710.md`; application log: `C:\Users\Użytkownik\AppData\Local\MediaStation\logs\mediastation-2026-10-24.jsonl`.
 
   Each process had one `rawInputRegistration` entry with `keyboard=false`, `hidConsumer=true`, `usagePage=0x0C`, `usage=0x01`, `success=true`, and zero `inputHubError` entries. For each PID, Home (`0x24`), Back (`0x1B`), and OK (`0x0D`) each produced exactly one `keyEnter` down and one expected Action; no Edge window appeared:
 
   | PID | Home down / Action | Back down / Action | OK down / Action |
   |---:|---:|---:|---:|
-  | 20940 | 1 / 1 | 1 / 1 | 1 / 1 |
-  | 21736 | 1 / 1 | 1 / 1 | 1 / 1 |
-  | 15220 | 1 / 1 | 1 / 1 | 1 / 1 |
+| 17468 | 1 / 1 | 1 / 1 | 1 / 1 |
+| 14544 | 1 / 1 | 1 / 1 | 1 / 1 |
+| 21736 | 1 / 1 | 1 / 1 | 1 / 1 |
+
+The first post-patch harness attempt skipped the third process's OK because the target was no longer foreground; the complete command was repeated, and all three presses passed in each final process.
 
 **Manual checks:** The harness brought the shell foreground and verified the foreground handle before each synthetic press. The registration summary confirms the active `RegisterRawInputDevices` configuration. Physical G20S Pro behavior, physical browser-window behavior, and S10 16/16 are N/A for this synthetic per-ticket run; include them in whole-epic UM760 acceptance via `fp-acceptance`.
+
+## Auto Run Result
+
+Status: built
+
+Summary: Normal InputHub and calibration now register HID Consumer only; exact one-use Home/Back HID–VK correlation is required for `source: remote`. The ticket is built; whole-epic acceptance remains with the user on UM760.
+
+Files changed:
+- `src/MediaStation.App/CompositionRoot.cs` — remove spike experiment selection and pass trace-only registration logging to InputHub.
+- `src/MediaStation.App/Platform/Input/InputHub.cs` — register HID Consumer only and report the active registration under `MS_INPUT_TRACE`.
+- `src/MediaStation.App/Platform/Input/InputHubVariants.cs` — remove obsolete experiment selectors.
+- `src/MediaStation.App/Platform/Input/AlwaysManagedProbe.cs` — remove the spike-only foreground bypass.
+- `src/MediaStation.Core/Input/InputPolicy.cs` — enforce exact one-use Home/Back correlation and keyboard fallback.
+- `tests/MediaStation.Core.Tests/InputPolicyTests.cs`, `ForegroundGateTests.cs`, `InputClockTests.cs`, `InputCalibrationTests.cs` — cover correlation, gating, clock rollover, calibration pairing, filtering, and exits.
+- `tools/spike-3-11.ps1` — keep only the default MediaStation path and capture per-process registration evidence.
+- This plan — record implementation, review triage, and current-machine verification.
+
+Review findings: one medium patch applied; one false finding rejected with the no-match branch clarification above; none deferred. Patched counts: high 0, medium 1, low 0. Follow-up review recommendation: false.
+
+Verification: 899/899 Core tests passed (0 skipped); Release build passed with 0 warnings and 0 errors; three final shell-foreground processes each produced one `keyEnter` down and one Action for Home, Back, and OK, showed `keyboard=false` and `hidConsumer=true`, and logged no `inputHubError`. One earlier harness attempt was rerun after the third process lost foreground before OK.
+
+Residual risk: synthetic ALDER input does not establish physical G20S Pro behavior, browser handling of `VK_BROWSER_HOME`, or S10 16/16. Those checks remain in whole-epic UM760 acceptance via `fp-acceptance`.
