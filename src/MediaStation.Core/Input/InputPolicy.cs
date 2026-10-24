@@ -37,7 +37,7 @@ public sealed record GamepadSnapshot(long TimeMs, IReadOnlyList<GamepadButton> B
 
 /// <summary>
 /// Raport HID Consumer (np. pilot na donglu) z Raw Input; <paramref name="DevicePath"/> to ścieżka urządzenia,
-/// a <paramref name="UsagePage"/>/<paramref name="Usage"/> — surowy usage raportu (czytany tylko przez kalibrację).
+/// a <paramref name="UsagePage"/>/<paramref name="Usage"/> — surowe pola raportu używane do korelacji i kalibracji.
 /// </summary>
 public sealed record HidConsumerReport(string DevicePath, long TimeMs, int UsagePage, int Usage);
 
@@ -78,6 +78,12 @@ public sealed class InputPolicy : IInputTarget
     /// <summary>Okno korelacji raportu urządzenia z klawiszem; okno jest jednostronne (raport przed klawiszem).</summary>
     public const int CorrelationWindowMs = 50;
 
+    private const int HidConsumerUsagePage = 0x0C;
+    private const int RemoteHomeUsage = 0x0223;
+    private const int RemoteBackUsage = 0x0224;
+    private const int BrowserBackVirtualKey = 0xA6;
+    private const int BrowserHomeVirtualKey = 0xAC;
+
     /// <summary>
     /// Górna granica trzymania klawisza z repeat: po niej siatka kończy się bez emisji, bo key-up mógł zginąć
     /// (secure desktop, UAC, odpięta klawiatura, usunięty hook). Klawisz zostaje połknięty do key-up.
@@ -103,8 +109,7 @@ public sealed class InputPolicy : IInputTarget
     private PendingLong? _pendingLong;
     private bool _homeEmitted;
     private bool _gamepadBaselinePending;
-    private (long TimeMs, ActionSource Source)? _lastConsumer;
-    private (long TimeMs, ActionSource Source)? _lastKeyboard;
+    private RemoteEvidence? _pendingRemoteEvidence;
 
     /// <param name="config">Config wejścia; mapowanie jest scalane ze wszystkich urządzeń, pierwsze wygrywa.</param>
     /// <param name="time">Zegar terminów long-press i repeat (AD-14).</param>
@@ -483,17 +488,23 @@ public sealed class InputPolicy : IInputTarget
     }
 
     /// <summary>
-    /// Buforuje ostatni raport HID Consumer dopasowany do konkretnej sygnatury z configu; wildcard nie uczestniczy
-    /// w korelacji <c>source</c>, żeby raport zwykłej klawiatury nie oznaczył pilota jako <c>keyboard</c>.
-    /// Nie decyduje o połknięciu.
+    /// Buforuje wyłącznie pilotowy Consumer usage Home lub Back. Atrybucję <c>remote</c> może dostać tylko
+    /// wstrzyknięty Browser Home/Back VK o zgodnej parze usage, w ciągu 50 ms. Każdy nowy raport zastępuje
+    /// poprzednie świadectwo, a pierwsze Home/Back naciśnięcie próbuje je zużyć.
     /// </summary>
     public void OnHidConsumer(HidConsumerReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
 
-        if (MatchDevice(report.DevicePath, includeWildcard: false) is { } device)
+        _pendingRemoteEvidence = null;
+        var device = MatchDevice(report.DevicePath, includeWildcard: false);
+
+        if (report.UsagePage == HidConsumerUsagePage
+            && report.Usage is RemoteHomeUsage or RemoteBackUsage
+            && device is { } matched
+            && matched.Source == ActionSource.Remote)
         {
-            _lastConsumer = (report.TimeMs, device.Source);
+            _pendingRemoteEvidence = new RemoteEvidence(report.TimeMs, report.Usage);
         }
     }
 
@@ -524,17 +535,15 @@ public sealed class InputPolicy : IInputTarget
     }
 
     /// <summary>
-    /// Buforuje ostatni <c>WM_INPUT</c> klawiatury dopasowany do sygnatury z configu (wildcard jest fallbackiem);
-    /// nie decyduje o połknięciu.
+    /// Zdarzenie Raw Input klawiatury nie określa źródła Actions. Tylko dokładna para Consumer Home/Back i VK
+    /// Browser Home/Back może nadać <c>remote</c>; pozostałe mapowane klawisze są <c>keyboard</c>.
     /// </summary>
     public void OnRawKeyboard(RawKeyboardInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        if (MatchDevice(input.DevicePath, includeWildcard: true) is { } device)
-        {
-            _lastKeyboard = (input.TimeMs, device.Source);
-        }
+        // Normalna rejestracja nie obejmuje klawiatury Raw Input. Pozostawiamy port w kontrakcie IInputTarget
+        // dla kalibracji, ale zwykłe WM_INPUT nie może przypisać Action do urządzenia z input.json.
     }
 
     /// <summary>
@@ -694,28 +703,36 @@ public sealed class InputPolicy : IInputTarget
     }
 
     /// <summary>
-    /// Korelacja <c>source</c>: wstrzyknięty klawisz po raporcie HID Consumer dopasowanego urządzenia daje jego
-    /// <c>source</c>, inaczej ostatni <c>WM_INPUT</c> w oknie, w ostateczności <c>keyboard</c>.
+    /// Korelacja <c>source</c> wymaga raportu z podpisanego urządzenia <c>remote</c> oraz ścisłej pary
+    /// Consumer Home/Browser Home albo Consumer Back/Browser Back. Pozostałe Actions pochodzą z <c>keyboard</c>.
     /// </summary>
     private ActionSource ResolveSource(KeyStroke key)
     {
-        if (key.Injected && WithinWindow(_lastConsumer, key.TimeMs))
+        if (_pendingRemoteEvidence is { } evidence)
         {
-            return _lastConsumer!.Value.Source;
-        }
-
-        if (WithinWindow(_lastKeyboard, key.TimeMs))
-        {
-            return _lastKeyboard!.Value.Source;
+            var ageMs = key.TimeMs - evidence.TimeMs;
+            if (ageMs > CorrelationWindowMs)
+            {
+                _pendingRemoteEvidence = null;
+            }
+            else if (ageMs >= 0 && (key.VirtualKey is BrowserHomeVirtualKey or BrowserBackVirtualKey))
+            {
+                // Pierwsze Home/Back zdarzenie zużywa raport, nawet gdy para jest błędna albo VK fizyczny.
+                // Późniejsze naciśnięcie nie może odziedziczyć tożsamości tego raportu.
+                _pendingRemoteEvidence = null;
+                if (key.Injected && MatchesRemotePair(evidence.Usage, key.VirtualKey))
+                {
+                    return ActionSource.Remote;
+                }
+            }
         }
 
         return ActionSource.Keyboard;
     }
 
-    private static bool WithinWindow((long TimeMs, ActionSource Source)? report, long timeMs) =>
-        report is { } value
-        && value.TimeMs <= timeMs
-        && timeMs - value.TimeMs <= CorrelationWindowMs;
+    private static bool MatchesRemotePair(int usage, int virtualKey) =>
+        (usage == RemoteHomeUsage && virtualKey == BrowserHomeVirtualKey)
+        || (usage == RemoteBackUsage && virtualKey == BrowserBackVirtualKey);
 
     /// <summary>
     /// Dopasowanie ścieżki Raw Input do sygnatury z configu, bez rozróżniania wielkości liter. Wpisy konkretne mają
@@ -789,6 +806,9 @@ public sealed class InputPolicy : IInputTarget
         ActionSource Source,
         long DownTimeMs,
         DateTimeOffset Deadline);
+
+    /// <summary>Jednorazowy Consumer report oczekujący na zgodny, wstrzyknięty Browser Home/Back VK.</summary>
+    private sealed record RemoteEvidence(long TimeMs, int Usage);
 
     /// <summary>
     /// Jeden trzymany klawisz albo przycisk pada: kind i source z naciśnięcia (repeat dziedziczy je bez nowej

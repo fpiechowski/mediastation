@@ -97,6 +97,26 @@ public class InputCalibrationTests
     }
 
     [Fact]
+    public void Remote_hid_and_injected_hook_pair_without_raw_keyboard_keeps_vk()
+    {
+        var (calibration, time, sink) = Create();
+
+        calibration.OnHidConsumer(new HidConsumerReport(DonglePath, 1000, 0x0C, 0x00B0));
+        var decision = calibration.OnKey(Down(0xAC, 1005, injected: true, scan: 0x6A));
+        time.Advance(TimeSpan.FromMilliseconds(InputCalibration.MergeWindowMs));
+        calibration.OnTimer(time.GetUtcNow());
+
+        Assert.False(decision.Swallow);
+        Assert.Empty(decision.Actions);
+        var entry = Assert.Single(sink.Entries);
+        Assert.Equal(DongleSignature, entry.Signature);
+        Assert.Equal(0xAC, entry.VirtualKey);
+        Assert.Equal(0x6A, entry.Scan);
+        Assert.Equal(0x00B0, entry.Usage);
+        Assert.True(entry.HasVk);
+    }
+
+    [Fact]
     public void Hook_before_the_device_event_is_attached_from_the_buffer()
     {
         var (calibration, time, sink) = Create();

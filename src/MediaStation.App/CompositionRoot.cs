@@ -149,7 +149,14 @@ public static class CompositionRoot
         {
             // Kalibracja nie emituje Actions, więc kolejka nie ma czytelnika i budzik jest pusty. Świeża kopia
             // routingu (bez zmian `epoch`) znaczy, że clip kursora nigdy nie obowiązuje w tym trybie.
-            hub = new InputHub(calibration, new ActionQueue(static () => { }), rawSink, time, new InputRoutingState());
+            var traceInput = Environment.GetEnvironmentVariable("MS_INPUT_TRACE") == "1";
+            hub = new InputHub(
+                calibration,
+                new ActionQueue(static () => { }),
+                rawSink,
+                time,
+                new InputRoutingState(),
+                traceInput ? log : null);
             hub.Start();
 
             // Termin kalibracji to 60 s; zapas 10 s pokrywa start wątku Input i rotację timera. Przekroczenie
@@ -281,34 +288,17 @@ public static class CompositionRoot
             actionPump = new ActionPump(actionSink, actionSink);
             actionPump.Start();
 
-            // Spike 3.11: warianty eksperymentalne z zmiennych środowiskowych; bez nich zachowanie bez zmian.
-            var variants = InputHubVariants.FromEnvironment();
-            var noGate = Environment.GetEnvironmentVariable("MS_NO_GATE") == "1";
-            if (variants.Any || noGate)
-            {
-                log.Warn("input", "inputHubVariant", new Dictionary<string, object?>
+            IForegroundProbe foregroundProbe = new ManagedForegroundProbe(new Win32ForegroundWindow(), managedWindows, (window, managed) =>
+                log.Info("input", "foregroundGate", new Dictionary<string, object?>
                 {
-                    ["noRawInput"] = variants.NoRawInput,
-                    ["rawThread"] = variants.RawThread,
-                    ["rawHidOnly"] = variants.RawHidOnly,
-                    ["noGate"] = noGate,
-                });
-            }
-
-            IForegroundProbe foregroundProbe = noGate
-                ? new AlwaysManagedProbe()
-                : new ManagedForegroundProbe(new Win32ForegroundWindow(), managedWindows, (window, managed) =>
-                    log.Info("input", "foregroundGate", new Dictionary<string, object?>
-                    {
-                        ["hwnd"] = window?.Hwnd,
-                        ["pid"] = window?.Pid,
-                        ["managed"] = managed,
-                    }));
+                    ["hwnd"] = window?.Hwnd,
+                    ["pid"] = window?.Pid,
+                    ["managed"] = managed,
+                }));
             var inputPolicy = new InputPolicy(config.Input, time, routing, foregroundProbe);
-            IInputTarget inputTarget = Environment.GetEnvironmentVariable("MS_INPUT_TRACE") == "1"
-                ? new TracingInputTarget(inputPolicy, log)
-                : inputPolicy;
-            inputHub = new InputHub(inputTarget, actionPump.Queue, actionSink, time, routing, variants);
+            var traceInput = Environment.GetEnvironmentVariable("MS_INPUT_TRACE") == "1";
+            IInputTarget inputTarget = traceInput ? new TracingInputTarget(inputPolicy, log) : inputPolicy;
+            inputHub = new InputHub(inputTarget, actionPump.Queue, actionSink, time, routing, traceInput ? log : null);
             inputHub.Start();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

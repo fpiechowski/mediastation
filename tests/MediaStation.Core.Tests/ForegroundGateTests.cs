@@ -36,7 +36,12 @@ public class ForegroundGateTests
             new InputDevice(
                 "VID_1915&PID_1025",
                 ActionSource.Remote,
-                new Dictionary<string, ActionKind> { ["0xAC"] = ActionKind.Home, ["0x0D"] = ActionKind.Ok }),
+                new Dictionary<string, ActionKind>
+                {
+                    ["0xAC"] = ActionKind.Home,
+                    ["0xA6"] = ActionKind.Back,
+                    ["0x0D"] = ActionKind.Ok,
+                }),
             new InputDevice(
                 InputDevice.WildcardSignature,
                 ActionSource.Keyboard,
@@ -112,7 +117,7 @@ public class ForegroundGateTests
     {
         var (policy, _) = Create(InputMode.Shell, null, managed: false);
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, 0x00B0));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, 0x0223));
         var down = policy.OnKey(Down(0xAC, 1000, injected: true));
         var up = policy.OnKey(Up(0xAC, 1050));
 
@@ -135,11 +140,26 @@ public class ForegroundGateTests
     }
 
     [Fact]
+    public void Remote_back_over_foreign_window_passes_without_action()
+    {
+        var (policy, _) = Create(InputMode.Shell, null, managed: false);
+
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, 0x0224));
+        var down = policy.OnKey(Down(0xA6, 1000, injected: true));
+        var up = policy.OnKey(Up(0xA6, 1050));
+
+        Assert.False(down.Swallow);
+        Assert.Empty(down.Actions);
+        Assert.False(up.Swallow);
+        Assert.Empty(up.Actions);
+    }
+
+    [Fact]
     public void Remote_non_home_key_over_foreign_window_passes()
     {
         var (policy, _) = Create(InputMode.Shell, null, managed: false);
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, 0x00B0));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, 0x0223));
         var down = policy.OnKey(Down(0x0D, 1000, injected: true));
 
         Assert.False(down.Swallow);

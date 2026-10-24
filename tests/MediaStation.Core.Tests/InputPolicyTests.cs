@@ -18,6 +18,10 @@ public class InputPolicyTests
     private const string DonglePath =
         @"\\?\HID#VID_1915&PID_1025&MI_01#7&2a3b4c5d&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}";
 
+    private const int RemoteHomeUsage = 0x0223;
+
+    private const int RemoteBackUsage = 0x0224;
+
     private static InputDevice RemoteDevice() => new(
         "VID_1915&PID_1025",
         ActionSource.Remote,
@@ -824,16 +828,18 @@ public class InputPolicyTests
 
     // ── Korelacja source ──────────────────────────────────────────────────────
 
-    [Fact]
-    public void Injected_home_after_consumer_report_30_ms_earlier_is_remote()
+    [Theory]
+    [InlineData(RemoteHomeUsage, 0xAC, ActionKind.Home)]
+    [InlineData(RemoteBackUsage, 0xA6, ActionKind.Back)]
+    public void Exact_remote_consumer_and_browser_vk_pair_is_remote(int usage, int vk, ActionKind kind)
     {
         var (policy, _, _) = Create();
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, 0x00B0));
-        var decision = policy.OnKey(Down(0xAC, 1000, injected: true));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 950, 0x0C, usage));
+        var decision = policy.OnKey(Down(vk, 1000, injected: true));
 
         Assert.True(decision.Swallow);
-        Assert.Equal(Press(ActionKind.Home, ActionSource.Remote, 1000), Assert.Single(decision.Actions));
+        Assert.Equal(Press(kind, ActionSource.Remote, 1000), Assert.Single(decision.Actions));
     }
 
     [Fact]
@@ -852,7 +858,7 @@ public class InputPolicyTests
     {
         var (policy, _, _) = Create();
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 949, 0x0C, 0x00B0));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 949, 0x0C, RemoteHomeUsage));
 
         Assert.Equal(
             Press(ActionKind.Home, ActionSource.Keyboard, 1000),
@@ -864,7 +870,7 @@ public class InputPolicyTests
     {
         var (policy, _, _) = Create();
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 1010, 0x0C, 0x00B0));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 1010, 0x0C, RemoteHomeUsage));
 
         Assert.Equal(
             Press(ActionKind.Home, ActionSource.Keyboard, 1000),
@@ -872,51 +878,57 @@ public class InputPolicyTests
     }
 
     [Fact]
-    public void Raw_keyboard_input_20_ms_earlier_gives_device_source_and_matches_path_case_insensitively()
+    public void Raw_keyboard_input_from_remote_row_does_not_change_a_mapped_key_source()
     {
         var (policy, _, _) = Create();
 
         policy.OnRawKeyboard(new RawKeyboardInput(DonglePath.ToLowerInvariant(), 980, 0x26, 0x48, Down: true));
         var decision = policy.OnKey(Down(0x26, 1000));
 
-        Assert.Equal(Press(ActionKind.Up, ActionSource.Remote, 1000), Assert.Single(decision.Actions));
+        Assert.Equal(Press(ActionKind.Up, ActionSource.Keyboard, 1000), Assert.Single(decision.Actions));
     }
 
-    [Fact]
-    public void Raw_keyboard_input_from_a_device_outside_config_is_ignored()
+    [Theory]
+    [InlineData(@"\\?\HID#VID_046D&PID_C52B#1", 0x0C, RemoteHomeUsage)]
+    [InlineData(DonglePath, 0x01, RemoteHomeUsage)]
+    [InlineData(DonglePath, 0x0C, 0x00B0)]
+    public void Consumer_report_from_wrong_device_page_or_usage_is_ignored(string path, int usagePage, int usage)
     {
         var (policy, _, _) = Create();
 
-        policy.OnRawKeyboard(new RawKeyboardInput(@"\\?\HID#VID_046D&PID_C52B#1", 980, 0x26, 0x48, Down: true));
+        policy.OnHidConsumer(new HidConsumerReport(path, 990, usagePage, usage));
 
         Assert.Equal(
-            Press(ActionKind.Up, ActionSource.Keyboard, 1000),
-            Assert.Single(policy.OnKey(Down(0x26, 1000)).Actions));
+            Press(ActionKind.Home, ActionSource.Keyboard, 1000),
+            Assert.Single(policy.OnKey(Down(0xAC, 1000, injected: true)).Actions));
+    }
+
+    [Theory]
+    [InlineData(RemoteHomeUsage, 0xA6, ActionKind.Back)]
+    [InlineData(RemoteBackUsage, 0xAC, ActionKind.Home)]
+    public void A_consumer_usage_with_the_wrong_home_back_pair_falls_back_to_keyboard(int usage, int vk, ActionKind kind)
+    {
+        var (policy, _, _) = Create();
+
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 990, 0x0C, usage));
+        var decision = policy.OnKey(Down(vk, 1000, injected: true));
+
+        Assert.True(decision.Swallow);
+        Assert.Equal(Press(kind, ActionSource.Keyboard, 1000), Assert.Single(decision.Actions));
     }
 
     [Fact]
-    public void Mapping_is_merged_across_devices_and_source_comes_from_the_correlated_device()
+    public void One_consumer_report_cannot_authorize_two_home_presses()
     {
-        var config = new InputConfig(
-            [
-                new InputDevice(
-                    "VID_1915&PID_1025",
-                    ActionSource.Remote,
-                    new Dictionary<string, ActionKind> { ["0x0D"] = ActionKind.Ok }),
-                new InputDevice(
-                    "HID\\VID_046D&PID_C52B",
-                    ActionSource.Keyboard,
-                    new Dictionary<string, ActionKind> { ["0xA6"] = ActionKind.Back }),
-            ],
-            [GamepadButton.Back, GamepadButton.Start]);
-        var policy = new InputPolicy(config, new FakeTimeProvider(T0), new InputRoutingState());
+        var (policy, _, _) = Create();
 
-        // VK pochodzi z drugiego urządzenia, a skorelowany WM_INPUT należy do pierwszego.
-        policy.OnRawKeyboard(new RawKeyboardInput(DonglePath, 980, 0xA6, 0x0E, Down: true));
-        var decision = policy.OnKey(Down(0xA6, 1000));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 990, 0x0C, RemoteHomeUsage));
+        var first = policy.OnKey(Down(0xAC, 1000, injected: true));
+        policy.OnKey(Up(0xAC, 1010, injected: true));
+        var second = policy.OnKey(Down(0xAC, 1020, injected: true));
 
-        Assert.True(decision.Swallow);
-        Assert.Equal(Press(ActionKind.Back, ActionSource.Remote, 1000), Assert.Single(decision.Actions));
+        Assert.Equal(Press(ActionKind.Home, ActionSource.Remote, 1000), Assert.Single(first.Actions));
+        Assert.Equal(Press(ActionKind.Home, ActionSource.Keyboard, 1020), Assert.Single(second.Actions));
     }
 
     [Fact]
@@ -924,7 +936,7 @@ public class InputPolicyTests
     {
         var (policy, _, _) = Create();
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 990, 0x0C, 0x00B0));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 990, 0x0C, RemoteHomeUsage));
 
         var decision = policy.OnKey(Down(0x26, 1000));
 
@@ -936,19 +948,19 @@ public class InputPolicyTests
     {
         var (policy, time, _) = Create();
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, 0x00B0));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, RemoteHomeUsage));
         policy.OnKey(Down(0x0D, 1000, injected: true));
         time.Advance(TimeSpan.FromMilliseconds(600));
 
         var timer = policy.OnTimer(time.GetUtcNow());
 
         Assert.Equal(
-            new Action(ActionKind.Ok, ActionPhase.Long, ActionSource.Remote, 1600),
+            new Action(ActionKind.Ok, ActionPhase.Long, ActionSource.Keyboard, 1600),
             Assert.Single(timer.Actions));
     }
 
     [Fact]
-    public void Remote_button_mapped_to_keyboard_gives_one_swallowed_press_with_remote_source()
+    public void Remote_input_row_mapping_still_produces_keyboard_source_without_a_home_back_pair()
     {
         var config = new InputConfig(
             [
@@ -960,7 +972,7 @@ public class InputPolicyTests
             [GamepadButton.Back, GamepadButton.Start]);
         var policy = new InputPolicy(config, new FakeTimeProvider(T0), new InputRoutingState());
 
-        // WM_INPUT dongla w oknie czyni przycisk źródłem `remote`, a nie zwykłą klawiaturą.
+        // Sam wpis `source: remote` w input.json nie stanowi dowodu, że to naciśnięcie pochodziło z pilota.
         policy.OnRawKeyboard(new RawKeyboardInput(DonglePath, 980, 0x5D, 0x2B, Down: true));
         var down = policy.OnKey(Down(0x5D, 1000));
 
@@ -972,7 +984,7 @@ public class InputPolicyTests
         Assert.Equal("action", entry.Msg);
         Assert.Equal(ActionKind.Keyboard, entry.Data!["kind"]);
         Assert.Equal(ActionPhase.Press, entry.Data["phase"]);
-        Assert.Equal(ActionSource.Remote, entry.Data["source"]);
+        Assert.Equal(ActionSource.Keyboard, entry.Data["source"]);
     }
 
     [Fact]
@@ -980,14 +992,14 @@ public class InputPolicyTests
     {
         var (policy, time, _) = Create();
 
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, 0x00B0));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 970, 0x0C, RemoteHomeUsage));
         policy.OnKey(Down(0x26, 1000, injected: true));
         time.Advance(TimeSpan.FromMilliseconds(400));
 
         var timer = policy.OnTimer(time.GetUtcNow());
 
         Assert.False(timer.Swallow);
-        Assert.Equal(Repeat(ActionKind.Up, ActionSource.Remote, 1400), Assert.Single(timer.Actions));
+        Assert.Equal(Repeat(ActionKind.Up, ActionSource.Keyboard, 1400), Assert.Single(timer.Actions));
     }
 
     // ── Własne wstrzyknięcia (znacznik) ───────────────────────────────────────
@@ -1081,7 +1093,7 @@ public class InputPolicyTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void Concrete_device_wins_over_wildcard_regardless_of_config_order(bool wildcardFirst)
+    public void Raw_keyboard_device_cannot_make_an_arrow_remote(bool wildcardFirst)
     {
         var policy = new InputPolicy(WildcardConfig(wildcardFirst), new FakeTimeProvider(T0), new InputRoutingState());
 
@@ -1089,23 +1101,22 @@ public class InputPolicyTests
 
         var decision = policy.OnKey(Down(0x26, 1000));
 
-        Assert.Equal(Press(ActionKind.Up, ActionSource.Remote, 1000), Assert.Single(decision.Actions));
+        Assert.Equal(Press(ActionKind.Up, ActionSource.Keyboard, 1000), Assert.Single(decision.Actions));
     }
 
     [Fact]
-    public void Wildcard_is_not_the_consumer_correlation_source()
+    public void Unrelated_consumer_device_does_not_match_remote_signature()
     {
         var policy = new InputPolicy(WildcardConfig(wildcardFirst: true), new FakeTimeProvider(T0), new InputRoutingState());
 
-        // Raport HID Consumer zwykłej klawiatury (poza configiem) przy `*` nie może przykryć dongla:
-        // korelacja source bierze tylko wpisy konkretne, więc świeży WM_INPUT dongla decyduje o `remote`.
+        // Inny HID z tym samym usage nie może przypisać remote do wpisu dongla.
         policy.OnHidConsumer(new HidConsumerReport(@"\\?\HID#VID_046D&PID_C52B#1", 970, 0x0C, 0x00B0));
         policy.OnRawKeyboard(new RawKeyboardInput(DonglePath, 980, 0xAC, 0x45, Down: true));
 
         var decision = policy.OnKey(Down(0xAC, 1000, injected: true));
 
         Assert.True(decision.Swallow);
-        Assert.Equal(Press(ActionKind.Home, ActionSource.Remote, 1000), Assert.Single(decision.Actions));
+        Assert.Equal(Press(ActionKind.Home, ActionSource.Keyboard, 1000), Assert.Single(decision.Actions));
     }
 
     [Fact]

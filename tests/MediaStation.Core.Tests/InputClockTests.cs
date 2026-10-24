@@ -66,7 +66,7 @@ public class InputClockTests
                 [new InputDevice(
                     "VID_1915&PID_1025",
                     ActionSource.Remote,
-                    new Dictionary<string, ActionKind> { ["0x0D"] = ActionKind.Ok })],
+                    new Dictionary<string, ActionKind> { ["0xAC"] = ActionKind.Home })],
                 [GamepadButton.Back, GamepadButton.Start]),
             time,
             new InputRoutingState());
@@ -74,20 +74,20 @@ public class InputClockTests
         // Raport Consumer 32 ms przed klawiszem, po zawinięciu 32-bitowego licznika.
         var reportMs = clock.Normalize(0xFFFF_FFF0);
         var downMs = clock.Normalize(0x0000_0010);
-        policy.OnHidConsumer(new HidConsumerReport(DonglePath, reportMs, 0x0C, 0x00B0));
-        var down = policy.OnKey(new KeyStroke(0x0D, KeyTransition.Down, Injected: true, downMs));
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, reportMs, 0x0C, 0x0223));
+        var down = policy.OnKey(new KeyStroke(0xAC, KeyTransition.Down, Injected: true, downMs));
 
         Assert.True(down.Swallow);
-        Assert.True(policy.NextDeadline > T0);
-
-        var upMs = clock.Normalize(0x0000_0080);
-        var up = policy.OnKey(new KeyStroke(0x0D, KeyTransition.Up, Injected: true, upMs));
-
-        var action = Assert.Single(up.Actions);
-        Assert.Equal(ActionKind.Ok, action.Kind);
+        var action = Assert.Single(down.Actions);
+        Assert.Equal(ActionKind.Home, action.Kind);
         Assert.Equal(ActionPhase.Press, action.Phase);
         Assert.Equal(ActionSource.Remote, action.Source);
-        Assert.Equal(upMs, action.TsMono);
+        Assert.Equal(downMs, action.TsMono);
+
+        var upMs = clock.Normalize(0x0000_0080);
+        var up = policy.OnKey(new KeyStroke(0xAC, KeyTransition.Up, Injected: true, upMs));
+
+        Assert.Empty(up.Actions);
         Assert.True(upMs > reportMs);
     }
 }

@@ -6,18 +6,15 @@
 
 .DESCRIPTION
     Variants (each starts its own process; the person touches nothing after "start"):
-      baseline      MediaStation as is (control)
-      no-gate       MS_NO_GATE=1          foreground gate always "managed" (experiment 1)
-      no-rawinput   MS_HUB_NO_RAWINPUT=1  hook without RegisterRawInputDevices (experiment 2)
-      raw-thread    MS_HUB_RAW_THREAD=1   Raw Input on a separate thread (experiment 3)
-      raw-hid-only  MS_HUB_RAW_HID_ONLY=1 only HID Consumer registered, no keyboard (added after experiment 4)
+      baseline      MediaStation default path (HID Consumer Raw Input only; MS_INPUT_TRACE=1)
       hook-probe    tools/hook-probe      empty window without WebView2, same hook (experiment 4)
       hook-probe-raw-kbd / -hid  as above with only the keyboard (0x01/0x06) or only the HID Consumer (0x0C/0x01) registration
       hook-probe-raw  same window plus RegisterRawInputDevices RIDEV_INPUTSINK (isolates Raw Input from WebView2)
 
-    All MediaStation variants run with MS_INPUT_TRACE=1: `keyEnter` is logged BEFORE the policy, so a
-    `keyEnter {vk, transition: down}` means the hook callback ran. A row is: variant, what was on top, key,
-    hook "down" yes/no, number of `action` entries of the expected kind, whether a new Edge window appeared.
+    The MediaStation path runs with only MS_INPUT_TRACE=1: `keyEnter` is logged BEFORE the policy, so a
+    `keyEnter {vk, transition: down}` means the hook callback ran. It also records the active Raw Input registration.
+    A row is: variant, what was on top, key, hook "down" yes/no, number of `action` entries of the expected kind,
+    whether a new Edge window appeared.
 
     Keys are injected with keybd_event/SendInput, so they carry LLKHF_INJECTED and never come from a real
     remote: the HID Consumer / physical Raw Input path (UM760, G20S Pro) is not reproduced here. Default keys
@@ -32,10 +29,10 @@
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/spike-3-11.ps1 -SelfTest
 
 .EXAMPLE
-    powershell -NoProfile -ExecutionPolicy Bypass -File tools/spike-3-11.ps1 -Variants baseline,raw-thread
+    powershell -NoProfile -ExecutionPolicy Bypass -File tools/spike-3-11.ps1 -Variants baseline,baseline,baseline
 #>
 param(
-    [string[]]$Variants = @('baseline', 'no-gate', 'no-rawinput', 'raw-thread', 'raw-hid-only', 'hook-probe', 'hook-probe-raw', 'hook-probe-raw-kbd', 'hook-probe-raw-hid'),
+    [string[]]$Variants = @('baseline', 'hook-probe', 'hook-probe-raw', 'hook-probe-raw-kbd', 'hook-probe-raw-hid'),
     [int]$Presses = 1,
     [string]$MediaStation = '',
     [string]$HookProbe = '',
@@ -70,13 +67,7 @@ $Keys = @(
     [pscustomobject]@{ Name = 'OK'; Vk = 0x0D; Kind = 'ok' }
 )
 
-$VariantEnv = @{
-    'baseline'    = @{}
-    'no-gate'     = @{ MS_NO_GATE = '1' }
-    'no-rawinput' = @{ MS_HUB_NO_RAWINPUT = '1' }
-    'raw-thread'  = @{ MS_HUB_RAW_THREAD = '1' }
-    'raw-hid-only' = @{ MS_HUB_RAW_HID_ONLY = '1' }
-}
+$MediaStationVariants = @('baseline')
 
 # ---------------------------------------------------------------------------
 # Scoring (shared by the live run and -SelfTest)
@@ -373,7 +364,7 @@ function Invoke-Presses {
 function Invoke-MediaStationVariant {
     param([string]$Variant)
 
-    $names = @('MS_NO_GATE', 'MS_HUB_NO_RAWINPUT', 'MS_HUB_RAW_THREAD', 'MS_HUB_RAW_HID_ONLY', 'MS_INPUT_TRACE')
+    $names = @('MS_INPUT_TRACE')
     $saved = @{}
     foreach ($name in $names) {
         $saved[$name] = [Environment]::GetEnvironmentVariable($name)
@@ -383,10 +374,6 @@ function Invoke-MediaStationVariant {
     $app = $null
     try {
         $env:MS_INPUT_TRACE = '1'
-        foreach ($pair in $VariantEnv[$Variant].GetEnumerator()) {
-            [Environment]::SetEnvironmentVariable($pair.Key, $pair.Value)
-        }
-
         $app = Start-Process -FilePath $MediaStation -PassThru
         if (-not (Wait-For -What 'MediaStation window' -Seconds 30 -Condition { $app.Refresh(); $app.MainWindowHandle -ne 0 })) {
             Note (Format-Row -Variant $Variant -OnTop 'shell' -Key '*' -Down 0 -Actions 0 -NewEdge 0 -Note 'brak okna shella (instanceRejected?)')
@@ -403,12 +390,15 @@ function Invoke-MediaStationVariant {
 
         Start-Sleep -Seconds 1
         $run = @(Get-RunEntries -Entries (Read-JsonLines -Path (Get-AppLogPaths)) -ProcessId $appPid)
-        $variantEntries = @($run | Where-Object { $_.msg -eq 'inputHubVariant' })
+        $registrationEntries = @($run | Where-Object { $_.msg -eq 'rawInputRegistration' })
+        $registration = if ($registrationEntries.Count -gt 0) { $registrationEntries[-1].data } else { $null }
         $hubErrors = @($run | Where-Object { $_.msg -eq 'inputHubError' } | ForEach-Object { $_.data.operation })
-        Note ('<!-- {0}: pid {1}; inputHubVariant entries={2}; inputHubError={3} -->' -f $Variant, $appPid, $variantEntries.Count, ($hubErrors -join ','))
-        $expectVariant = $Variant -ne 'baseline'
-        if ($expectVariant -and $variantEntries.Count -ne 1) {
-            Note ('<!-- UWAGA: wariant {0} powinien dac dokladnie 1 wpis inputHubVariant, jest {1} -->' -f $Variant, $variantEntries.Count)
+        $appLogPath = Get-AppLogPaths | ForEach-Object { Get-Item -LiteralPath $_ } |
+            Sort-Object LastWriteTimeUtc -Descending | Select-Object -ExpandProperty FullName -First 1
+        Note ('<!-- {0}: pid {1}; appLog={2}; rawInputRegistration entries={3}; keyboard={4}; hidConsumer={5}; success={6}; inputHubError={7} -->' -f `
+            $Variant, $appPid, $appLogPath, $registrationEntries.Count, $registration.keyboard, $registration.hidConsumer, $registration.success, ($hubErrors -join ','))
+        if ($registrationEntries.Count -ne 1 -or $registration.keyboard -ne $false -or $registration.hidConsumer -ne $true -or $registration.success -ne $true) {
+            Note ('<!-- UWAGA: {0} nie potwierdzil rejestracji HID Consumer bez Raw Input klawiatury. -->' -f $Variant)
         }
 
         $handle = $app.MainWindowHandle
@@ -516,7 +506,7 @@ foreach ($variant in $Variants) {
             Invoke-ProbeVariant
         }
     }
-    elseif ($VariantEnv.ContainsKey($variant)) {
+    elseif ($MediaStationVariants -contains $variant) {
         if (-not (Test-Path -LiteralPath $MediaStation)) {
             throw "MediaStation.exe not found: $MediaStation - build src/MediaStation.App (Release) first."
         }
