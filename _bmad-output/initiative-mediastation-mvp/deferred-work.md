@@ -235,3 +235,21 @@ severity: medium
 reason: Application Control blokuje świeży niepodpisany `MediaStation.SchemaExport.dll` (0x800711C7, CodeIntegrity 3077/3033), więc `dotnet build` nie odświeża `web/contracts` i publish wymaga `-p:SkipWebBuild=true`, ręcznego `npm run build` w `web/` i ręcznego skopiowania `web/shell/dist` do `publish/shell`. Schemat `set-managed-windows.schema.json` i `generated/set-managed-windows.ts` zostały napisane ręcznie w formacie istniejących plików (pliki nie są w gicie, więc nic nie rozjeżdża się w repo; test `CoreMessageContractTests` sprawdza kształt schematu z kodu). Dotyczy też UM760, jeśli ma tę samą politykę. Rozwiązanie: podpisać narzędzie albo dodać je do reguł Application Control; alternatywnie generować schematy z testów.
 owner: author
 status: open
+
+### DW-29: `check-home-s10.ps1` nie znajduje okna Edge jako celu (`no target window`), mimo że okno Edge jest otwarte.
+origin: plan `tickets/epic-input/epic-input-um760-acceptance-2.md`, S12 (rerun 1), 2026-10-25
+location: `tools/check-home-s10.ps1` (wybór celu `edge`)
+source_spec: `tickets/epic-input/epic-input-um760-acceptance-2.md`, S12; DW-13, DW-14, DW-15
+severity: medium
+reason: Na UM760 (HEAD 2bb3c95) powtórka S12 z otwartymi przez użytkownika oknami dała moonlight 4/4 i desktop 4/4, ale edge 4 × `no target window`; shell-hung dał 2 × `browser window` i 2 × `target not foreground`. Przyczyna nie zbadana (acceptance nie diagnozuje); powiązane z DW-13/14/15 (wykrywanie okien Edge po `pid:handle`, `GW_OWNER`). Bez tego nie ma wyniku 16/16 (Done when 3).
+owner: bmad-build (S12 odbioru epiki 3)
+status: open
+
+### DW-30: `rawInput` w `--calibrate-input` loguje tylko Home i Back; OK, strzałki nie dają wpisów, a przycisk asystenta głosowego G20S Pro ma tylko usage 0x00CF bez VK.
+origin: plan `tickets/epic-input/epic-input-um760-acceptance-2.md`, S9 i S10, 2026-10-25
+location: `src/MediaStation.Core/Input/InputCalibration.cs`; `src/MediaStation.App/Platform/Input/InputHub.cs`; AD-8
+source_spec: `tickets/epic-input/epic-input.md`, Done when 5; `tickets/epic-input/tickets/story-home-przy-shellu-na-wierzchu-bez-raw-input-klawiatury.md`, wymaganie 4
+severity: medium
+reason: Trzy przebiegi S9 na UM760 (HEAD 2bb3c95): wpisy tylko Home (vk 0xAC, usage 0x0223) i Back (vk 0xA6, usage 0x0224), oba injected true, `llBeforeRawMs` null; brak OK i strzałek; asystent głosowy: usage 0x00CF, `hasVk` false. Kryterium „≥7 wpisów z hasVk” niespełnione. S10: żaden przycisk z VK nie pasuje na Klawiaturę, więc Source conflict do `bmad-architecture` (wyzwalacz HID zamiast VK, zmiana AD-8). Dodatkowo obserwacja użytkownika: Home w trybie kalibracji (nie połyka klawiszy) otworzył Edge.
+owner: bmad-architecture (Source conflict), bmad-build (wpisy kalibracji)
+status: open
