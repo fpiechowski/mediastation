@@ -14,9 +14,17 @@
     and another foreground window is "target not foreground". A browser window is every visible top-level
     `msedge`/`chrome` window of class `Chrome_WidgetWin_*`, identified as `pid:handle`, so a second window in
     an existing process is a new window too. The foreground check compares the target handle with the
-    foreground handle, not the process, so another window of the same process is not a pass; two shell
-    exceptions are named: the DWM ghost window of a hung shell (`shell-hung`) and the desktop window
-    (`Progman`/`WorkerW` owned by `explorer`, target `desktop`).
+    foreground handle, not the process, so another window of the same process is not a pass; one shell
+    exception is named: the desktop window (`Progman`/`WorkerW` owned by `explorer`, target `desktop`). A DWM
+    ghost window (`dwm`) over the shell is a failure ("target not foreground (DWM ghost over the shell)"):
+    the keyboard hook receives no input while the ghost has the foreground.
+    -EdgeTitle is a regular expression matched against the window title.
+
+    Targets run in the order of -Targets (default `shell-hung, edge, moonlight, desktop`): the hung shell goes
+    first and the desktop last, because MinimizeAll leaves a hung shell behind and Windows then replaces it
+    with a ghost. Before the first press the script opens an `about:blank` Edge window when none is open
+    (-EdgeTitle narrows the Edge window by title); Moonlight is not started by the script: open it
+    (borderless) before the run, otherwise its presses fail with "no target window".
 
     The person only presses Home after each beep and touches nothing else.
 
@@ -33,7 +41,8 @@
     -SelfTest scores the recorded fixture without any hardware: four windows must give counts
     0/1/2/1 and verdicts fail/pass/fail/pass, and a correct count plus a new browser window must fail.
     It also exercises the clean decision cases (window ids, new ids, foreground) with fake windows, so
-    the rules that used to need a live desktop (DW-13, DW-14) are covered before Add-Type.
+    the rules that used to need a live desktop (DW-13, DW-14, the Edge window choice, the ghost and the target
+    order of 3.13) are covered before Add-Type.
 
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-home-s10.ps1 -SelfTest
@@ -42,7 +51,8 @@
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-home-s10.ps1
 #>
 param(
-    [string[]]$Targets = @('edge', 'moonlight', 'desktop', 'shell-hung'),
+    [string[]]$Targets = @('shell-hung', 'edge', 'moonlight', 'desktop'),
+    [string]$EdgeTitle = '',
     [int]$Presses = 4,
     [string]$MediaStation = '',
     [string]$LogsDir = (Join-Path $env:LOCALAPPDATA 'MediaStation\logs'),
@@ -56,6 +66,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+$script:TargetsBound = $PSBoundParameters.ContainsKey('Targets')
 
 if ([string]::IsNullOrWhiteSpace($Fixture)) {
     $Fixture = Join-Path $PSScriptRoot 'fixtures\check-home-s10.fixture.jsonl'
@@ -229,6 +241,37 @@ function Get-NewWindowIds {
     return @($After | Where-Object { $Before -notcontains $_ })
 }
 
+function Select-EdgeWindow {
+    param(
+        [object[]]$Windows,
+        [string]$TitlePattern = ''
+    )
+
+    # The first (topmost) real Edge window with a title; the title is not part of the contract, so the default
+    # accepts any (3.13: the window of the person was not called "Netflix"). A tooltip/popup has another class.
+    foreach ($window in $Windows) {
+        if ($window.ProcessName -ne 'msedge') {
+            continue
+        }
+
+        if (-not ([string]$window.Class).StartsWith('Chrome_WidgetWin_', [System.StringComparison]::Ordinal)) {
+            continue
+        }
+
+        if ([string]::IsNullOrWhiteSpace([string]$window.Title)) {
+            continue
+        }
+
+        if ($TitlePattern.Length -gt 0 -and $window.Title -notmatch $TitlePattern) {
+            continue
+        }
+
+        return [IntPtr]$window.Handle
+    }
+
+    return [IntPtr]::Zero
+}
+
 function Test-TargetForeground {
     param(
         [string]$Target,
@@ -247,12 +290,9 @@ function Test-TargetForeground {
         return $true
     }
 
-    # A shell hung for more than ~5 s is replaced on screen by a DWM ghost window owned by dwm.exe; that ghost is the
-    # hung shell on top.
-    if ($Target -eq 'shell-hung' -and $ForegroundProcessName -eq 'dwm') {
-        return $true
-    }
-
+    # A DWM ghost (dwm.exe) over the hung shell is not "shell on top": the keyboard hook receives no input while the
+    # ghost has the foreground (no keyEnter/action in the application log, Home then opens a browser), so a press
+    # measured there would test Windows, not the product (3.13).
     # After MinimizeAll the desktop window is `Progman` (FindWindow) or `WorkerW` (GetForegroundWindow); both belong
     # to explorer. The class name is not reserved, so the process gate keeps a `WorkerW` window of another app
     # (e.g. a wallpaper app) from passing.
@@ -262,6 +302,20 @@ function Test-TargetForeground {
     }
 
     return $false
+}
+
+function Get-NotForegroundReason {
+    param(
+        [string]$Target,
+        [string]$ForegroundProcessName = ''
+    )
+
+    # Names the DWM ghost over the shell (hung or on top), so the log says why the press never measured the product.
+    if ($Target -in @('shell-hung', 'shell-top') -and $ForegroundProcessName -eq 'dwm') {
+        return 'target not foreground (DWM ghost over the shell)'
+    }
+
+    return 'target not foreground'
 }
 
 function Test-Press {
@@ -388,7 +442,33 @@ function Invoke-SelfTest {
     & $expect 'new window in the same process is new' ((Get-NewWindowIds -Before @('4242:273') -After @('4242:273', '4242:546')) -join ',') '4242:546'
     & $expect 'same handle is foreground' (Test-TargetForeground -Target 'edge' -ForegroundHandle ([IntPtr]273) -TargetHandle ([IntPtr]273) -ForegroundProcessName 'msedge' -ForegroundClass 'Chrome_WidgetWin_1') $true
     & $expect 'other window of the same process is not foreground' (Test-TargetForeground -Target 'edge' -ForegroundHandle ([IntPtr]546) -TargetHandle ([IntPtr]273) -ForegroundProcessName 'msedge' -ForegroundClass 'Chrome_WidgetWin_1') $false
-    & $expect 'dwm ghost passes for a hung shell' (Test-TargetForeground -Target 'shell-hung' -ForegroundHandle ([IntPtr]900) -TargetHandle ([IntPtr]273) -ForegroundProcessName 'dwm' -ForegroundClass 'Ghost') $true
+    & $expect 'dwm ghost does not pass for a hung shell' (Test-TargetForeground -Target 'shell-hung' -ForegroundHandle ([IntPtr]900) -TargetHandle ([IntPtr]273) -ForegroundProcessName 'dwm' -ForegroundClass 'Ghost') $false
+    & $expect 'real hung shell window passes for a hung shell' (Test-TargetForeground -Target 'shell-hung' -ForegroundHandle ([IntPtr]273) -TargetHandle ([IntPtr]273) -ForegroundProcessName 'MediaStation' -ForegroundClass 'HwndWrapper') $true
+
+    & $expect 'ghost reason for the hung shell' (Get-NotForegroundReason -Target 'shell-hung' -ForegroundProcessName 'dwm') 'target not foreground (DWM ghost over the shell)'
+    & $expect 'ghost reason for the shell on top' (Get-NotForegroundReason -Target 'shell-top' -ForegroundProcessName 'dwm') 'target not foreground (DWM ghost over the shell)'
+    & $expect 'plain reason for edge' (Get-NotForegroundReason -Target 'edge' -ForegroundProcessName 'dwm') 'target not foreground'
+    & $expect 'plain reason for another foreground process' (Get-NotForegroundReason -Target 'shell-hung' -ForegroundProcessName 'msedge') 'target not foreground'
+
+    # Edge target (3.13): any titled Edge window, not only "Netflix"; tooltips, other processes and untitled windows are skipped.
+    $edgeWindows = @(
+        [pscustomobject]@{ Handle = [IntPtr]777; ProcessId = 4242; ProcessName = 'msedge'; Class = 'Chrome_Tooltip_Window'; Title = 'tip' }
+        [pscustomobject]@{ Handle = [IntPtr]888; ProcessId = 5353; ProcessName = 'notepad'; Class = 'Chrome_WidgetWin_1'; Title = 'Other app' }
+        [pscustomobject]@{ Handle = [IntPtr]999; ProcessId = 4242; ProcessName = 'msedge'; Class = 'Chrome_WidgetWin_1'; Title = '' }
+        [pscustomobject]@{ Handle = [IntPtr]1111; ProcessId = 4242; ProcessName = 'msedge'; Class = 'Chrome_WidgetWin_1'; Title = 'Nowa karta - Microsoft Edge' }
+        [pscustomobject]@{ Handle = [IntPtr]2222; ProcessId = 4242; ProcessName = 'msedge'; Class = 'Chrome_WidgetWin_1'; Title = 'Netflix - Microsoft Edge' }
+    )
+    & $expect 'edge window without Netflix in the title is found' ((Select-EdgeWindow -Windows $edgeWindows).ToInt64()) 1111
+    & $expect 'edge title pattern selects the matching window' ((Select-EdgeWindow -Windows $edgeWindows -TitlePattern 'Netflix').ToInt64()) 2222
+    & $expect 'edge title pattern without a match gives no window' ((Select-EdgeWindow -Windows $edgeWindows -TitlePattern 'Disney').ToInt64()) 0
+    & $expect 'no edge window gives no window' ((Select-EdgeWindow -Windows @($edgeWindows[0], $edgeWindows[1])).ToInt64()) 0
+
+    # Order of the default targets (3.13): the hung shell is measured first (before any MinimizeAll can leave it
+    # behind a DWM ghost) and the desktop last.
+    if (-not $script:TargetsBound) {
+        & $expect 'default targets start with the hung shell' $Targets[0] 'shell-hung'
+        & $expect 'default targets end with the desktop' $Targets[$Targets.Count - 1] 'desktop'
+    }
     & $expect 'dwm ghost does not pass for edge' (Test-TargetForeground -Target 'edge' -ForegroundHandle ([IntPtr]900) -TargetHandle ([IntPtr]273) -ForegroundProcessName 'dwm' -ForegroundClass 'Ghost') $false
     & $expect 'explorer WorkerW passes for desktop' (Test-TargetForeground -Target 'desktop' -ForegroundHandle ([IntPtr]901) -TargetHandle ([IntPtr]902) -ForegroundProcessName 'explorer' -ForegroundClass 'WorkerW') $true
     & $expect 'explorer Progman passes for desktop' (Test-TargetForeground -Target 'desktop' -ForegroundHandle ([IntPtr]901) -TargetHandle ([IntPtr]902) -ForegroundProcessName 'explorer' -ForegroundClass 'Progman') $true
@@ -604,7 +684,7 @@ function TargetWindow {
             return [MediaStationHomeS10.Native]::FindWindow('Progman', [NullString]::Value)
         }
         'edge' {
-            return Find-WindowProcess -Name 'msedge' -TitlePattern 'Netflix'
+            return Select-EdgeWindow -Windows @(Get-TopLevelWindows) -TitlePattern $EdgeTitle
         }
         'moonlight' {
             return Find-WindowProcess -Name 'Moonlight'
@@ -619,6 +699,41 @@ function TargetWindow {
         default {
             return [IntPtr]::Zero
         }
+    }
+}
+
+function Initialize-Targets {
+    # Edge is prepared here (a new `about:blank` window when none is open); Moonlight cannot be started
+    # reliably, so the person opens it borderless before the run (3.13). Both happen before the first press, so
+    # the window the script opens is part of the baseline and never counts as a "new browser window".
+    $desktopAt = [array]::IndexOf($Targets, 'desktop')
+    $shellAt = [array]::IndexOf($Targets, 'shell-hung')
+    if ($desktopAt -ge 0 -and $shellAt -ge 0 -and $desktopAt -lt $shellAt) {
+        Note 'WARN: desktop runs before shell-hung; MinimizeAll leaves the hung shell behind a DWM ghost and its presses fail'
+    }
+
+    if ($Targets -contains 'edge' -and (Select-EdgeWindow -Windows @(Get-TopLevelWindows) -TitlePattern $EdgeTitle) -eq [IntPtr]::Zero) {
+        Note 'edge: no Edge window; opening about:blank'
+        try {
+            Start-Process -FilePath 'msedge' -ArgumentList '--new-window', 'about:blank' | Out-Null
+        }
+        catch {
+            Note ('WARN: cannot start Edge: {0}' -f $_.Exception.Message)
+        }
+
+        if (Wait-For -What 'Edge window' -Seconds 20 -Condition {
+                (Select-EdgeWindow -Windows @(Get-TopLevelWindows) -TitlePattern $EdgeTitle) -ne [IntPtr]::Zero
+            }) {
+            # Session restore may add windows right after the first one; they belong to the baseline, not to a press.
+            Start-Sleep -Seconds 2
+        }
+        else {
+            Note 'WARN: no Edge window appeared; the edge presses will fail (open Edge by hand or use -EdgeTitle)'
+        }
+    }
+
+    if ($Targets -contains 'moonlight' -and (Find-WindowProcess -Name 'Moonlight') -eq [IntPtr]::Zero) {
+        Note 'WARN: no Moonlight window; open Moonlight (borderless) before the run, otherwise the moonlight presses fail'
     }
 }
 
@@ -660,8 +775,9 @@ function Measure-Press {
 
     # Focus is advisory: a press delivered to another window must not count as a pass for the target.
     if (-not $targetIsForeground) {
-        Note ('  {0} #{1}: FAIL (target not foreground)' -f $Target, $Index)
-        return [pscustomobject]@{ Ok = $false; Count = 0; Reason = 'target not foreground' }
+        $reason = Get-NotForegroundReason -Target $Target -ForegroundProcessName $foregroundProcessName
+        Note ('  {0} #{1}: FAIL ({2})' -f $Target, $Index, $reason)
+        return [pscustomobject]@{ Ok = $false; Count = 0; Reason = $reason }
     }
 
     $before = @(Get-BrowserWindows)
@@ -749,6 +865,8 @@ try {
     if (-not (Test-Path -LiteralPath $MediaStation)) {
         throw "MediaStation.exe not found: $MediaStation - build/publish Release first."
     }
+
+    Initialize-Targets
 
     # ---- Pass 1: hung shell ---------------------------------------------------------------
     $env:MEDIASTATION_DEBUG_HANG_UI = [string]$HangSeconds

@@ -253,3 +253,18 @@ severity: medium
 reason: Trzy przebiegi S9 na UM760 (HEAD 2bb3c95): wpisy tylko Home (vk 0xAC, usage 0x0223) i Back (vk 0xA6, usage 0x0224), oba injected true, `llBeforeRawMs` null; brak OK i strzałek; asystent głosowy: usage 0x00CF, `hasVk` false. Kryterium „≥7 wpisów z hasVk” niespełnione. S10: żaden przycisk z VK nie pasuje na Klawiaturę, więc Source conflict do `bmad-architecture` (wyzwalacz HID zamiast VK, zmiana AD-8). Dodatkowo obserwacja użytkownika: Home w trybie kalibracji (nie połyka klawiszy) otworzył Edge.
 owner: bmad-architecture (Source conflict), bmad-build (wpisy kalibracji)
 status: open
+
+### DW-31: Zawieszony shell zasłonięty oknem-duchem `dwm` nie dostaje Home od hooka LL (brak `keyEnter`/`action` w logu aplikacji), więc Home otwiera przeglądarkę.
+origin: spec-deferred 36ef84bc8a59
+location: src/MediaStation.App/Platform/Input/InputHub.cs (hook LL)
+source_spec: `tickets/epic-input/tickets/bug-check-home-s10-home-przy-zawieszonym-shellu-i-cel-edge-nie-d-plan.md`
+reason: Logi przebiegów 1 i 2 z 2026-10-25 (brak wpisów w oknach shell-hung #1 i #2, na wierzchu `Ghost` procesu `dwm`) oraz sonda na UM760: z duchem na wierzchu wstrzyknięte Enter nie dało `keyEnter`, bez ducha dało. Wstrzyknięcie mogła zablokować UIPI, więc dla fizycznego pilota rozstrzygnie dopiero przebieg użytkownika; ewentualna poprawka to zmiana uprawnień hooka (AD-8).
+status: open
+
+### DW-32: Domyślny cel Edge to pierwsze okno `msedge` z tytułem, więc może to być obce okno użytkownika (np. DevTools, PWA).
+origin: spec-deferred 34503e8bb1f7
+location: tools/check-home-s10.ps1 Select-EdgeWindow
+source_spec: `tickets/epic-input/tickets/bug-check-home-s10-home-przy-zawieszonym-shellu-i-cel-edge-nie-d-plan.md`
+severity: low
+reason: `Select-EdgeWindow` nie odróżnia okien tego samego procesu; zawężenie daje `-EdgeTitle`. Skutek: Home wysyłany nad niewłaściwym oknem Edge, wynik nadal mierzy log aplikacji.
+status: open
