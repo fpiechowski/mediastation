@@ -3,7 +3,7 @@ title: 'check-home-s10: Home przy zawieszonym shellu i cel Edge nie dają 16/16 
 type: 'bugfix'
 ticket: '13'
 created: '2026-10-25'
-status: blocked
+status: done
 operator_actions:
   - "Na UM760 otwórz Moonlight (borderless) i zostaw okno Edge albo pozwól skryptowi otworzyć about:blank, potem uruchom `powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-home-s10.ps1` i po każdym sygnale naciśnij Home na pilocie G20S Pro (dongle USB 2.4G); oczekiwane 16/16, 4/4 i exit 0."
   - "Powtórz ten sam przebieg drugi raz (osobne uruchomienie, ten sam build) i zapisz oba wyniki z logami `check-home-s10-*.log` w notatce odbioru epiki."
@@ -34,8 +34,6 @@ deferred:
     location: >-
       tools/check-home-s10.ps1 Select-EdgeWindow
     severity: low
-blocked_at: "2026-10-25"
-blocked_reason: "awaiting operator: Na UM760 otwórz Moonlight (borderless) i zostaw okno Edge albo pozwól skryptowi otworzyć about:blank, potem uruchom `powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-home-s10.ps1` i po każdym sygnale naciśnij Home na pilocie G20S Pro (dongle USB 2.4G); oczekiwane 16/16, 4/4 i exit 0.; Powtórz ten sam przebieg drugi raz (osobne uruchomienie, ten sam build) i zapisz oba wyniki z logami `check-home-s10-*.log` w notatce odbioru epiki.; Jeśli shell-hung nadal pokazuje `DWM ghost over the shell` albo `browser window`, zapisz log skryptu i log aplikacji i zgłoś to do decyzji `bmad-architecture` (uprawnienia hooka LL, AD-8)."
 ---
 
 <intent-contract>
@@ -107,3 +105,13 @@ Oneshot: jedna zmiana w jednym pliku (`tools/check-home-s10.ps1`, około 80 lini
 **Verification (UM760, 2026-10-25, branch master):** `tools/check-home-s10.ps1 -SelfTest` — exit 0 (w tym przypadki Edge, kolejności i ducha); `dotnet build MediaStation.slnx -c Release` — 0 ostrzeżeń, 0 błędów; `dotnet test` — 899/899; przebieg bez pilota `-Targets shell-hung,edge,desktop`: shell-hung i Edge z prawdziwym oknem na wierzchu (nie `Ghost`), tylko `no action`; `-Targets desktop,shell-hung`: odtworzony `Ghost` i nazwana porażka. AC2 (16/16 i 4/4 w dwóch uruchomieniach z pilotem) wymaga fizycznego G20S Pro — `operator_actions`.
 
 **Residual risks:** diagnoza „hook nie widzi klawiszy przy duchu” opiera się na logach fizycznego pilota z przebiegów 1 i 2 oraz na wstrzykniętym wejściu (UIPI mogło je zablokować); jeśli ghost pojawi się mimo nowej kolejności, wymaga to decyzji `bmad-architecture` o uprawnieniach hooka (AD-8). Okno Moonlight musi przygotować operator.
+
+## Operator Confirmation
+
+Confirmed 2026-10-25: the external actions this story owed were carried out.
+
+- Na UM760 otwórz Moonlight (borderless) i zostaw okno Edge albo pozwól skryptowi otworzyć about:blank, potem uruchom `powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-home-s10.ps1` i po każdym sygnale naciśnij Home na pilocie G20S Pro (dongle USB 2.4G); oczekiwane 16/16, 4/4 i exit 0.
+- Powtórz ten sam przebieg drugi raz (osobne uruchomienie, ten sam build) i zapisz oba wyniki z logami `check-home-s10-*.log` w notatce odbioru epiki.
+- Jeśli shell-hung nadal pokazuje `DWM ghost over the shell` albo `browser window`, zapisz log skryptu i log aplikacji i zgłoś to do decyzji `bmad-architecture` (uprawnienia hooka LL, AD-8).
+
+_Appended by the bmad-loop orchestrator (`bmad-loop confirm`, #335): a human confirmed these external actions out of band, and the story was advanced from `awaiting-operator` to `done`._
