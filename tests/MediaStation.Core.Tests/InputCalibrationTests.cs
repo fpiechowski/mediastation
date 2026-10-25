@@ -167,6 +167,26 @@ public class InputCalibrationTests
         Assert.Empty(sink.Entries);
     }
 
+    [Theory]
+    [InlineData(0x0D)]
+    [InlineData(0x25)]
+    [InlineData(0x26)]
+    [InlineData(0x27)]
+    [InlineData(0x28)]
+    public void Remote_keyboard_collection_key_without_device_evidence_produces_no_entry(int virtualKey)
+    {
+        // Po story 3.12 kalibracja rejestruje tylko HID Consumer: OK i strzałki pilota to zwykłe zdarzenia klawiatury
+        // (nie wstrzyknięte, bez raportu Consumer), więc hook nie ma jak przypisać ich do dongla (bug 3.14).
+        var (calibration, time, sink) = Create();
+
+        calibration.OnKey(Down(virtualKey, 1000, injected: false));
+
+        time.Advance(TimeSpan.FromSeconds(InputCalibration.DurationSeconds));
+        calibration.OnTimer(time.GetUtcNow());
+
+        Assert.Empty(sink.Entries);
+    }
+
     [Fact]
     public void Keyboard_outside_the_config_and_its_hook_never_produce_an_entry()
     {
