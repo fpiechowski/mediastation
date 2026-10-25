@@ -6,7 +6,7 @@ parent: epic-input
 covers: [CAP-3]
 after: [12]
 refined: true
-hitl: true
+hitl: false
 risk: medium
 severity: P2
 ---
