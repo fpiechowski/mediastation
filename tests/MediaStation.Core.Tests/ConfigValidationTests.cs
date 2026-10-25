@@ -196,6 +196,8 @@ public class ConfigValidationTests
         Assert.Equal("VID_1915&PID_1025", remote.Signature);
         Assert.Equal(7, remote.Keys.Count);
         Assert.Equal(ActionKind.Back, remote.Keys["0xA6"]);
+        Assert.Equal(ActionKind.Keyboard, Assert.Single(remote.Hid!).Value);
+        Assert.Equal("0x000C:0x00CF", Assert.Single(remote.Hid!).Key);
         var wildcard = config.Input.Devices[1];
         Assert.Equal(InputDevice.WildcardSignature, wildcard.Signature);
         Assert.Equal(ActionSource.Keyboard, wildcard.Source);
@@ -208,6 +210,53 @@ public class ConfigValidationTests
         Assert.Equal(400, config.Input.Timing.RepeatDelayMs);
         Assert.Equal(120, config.Input.Timing.RepeatIntervalMs);
     }
+
+    // ── Sekcja hid (AD-8) ─────────────────────────────────────────────────────
+
+    private static string HidInput(string hid, string signature = "VID_1915&PID_1025", string source = "remote") =>
+        $$"""{ "devices": [ { "signature": "{{signature}}", "source": "{{source}}", "keys": {}, "hid": {{hid}} } ], "gamepadHome": ["back", "start"] }""";
+
+    [Fact]
+    public void Hid_section_with_assistant_usage_is_loaded()
+    {
+        var device = Assert.Single(Loaded(input: HidInput("""{ "0x000C:0x00CF": "keyboard" }""")).Input.Devices);
+
+        Assert.Equal(ActionKind.Keyboard, Assert.Single(device.Hid!).Value);
+    }
+
+    [Fact]
+    public void Missing_hid_section_means_no_hid_trigger() =>
+        Assert.Null(Assert.Single(Loaded().Input.Devices).Hid);
+
+    [Theory]
+    [InlineData("""{ "0x000C:0x00CF": "ok" }""", "$.devices[0].hid['0x000C:0x00CF']")]
+    [InlineData("""{ "0x000C:0x0223": "keyboard" }""", "$.devices[0].hid['0x000C:0x0223']")]
+    [InlineData("""{ "0x000C:0x0224": "keyboard" }""", "$.devices[0].hid['0x000C:0x0224']")]
+    [InlineData("""{ "0x000C:0x0000": "keyboard" }""", "$.devices[0].hid['0x000C:0x0000']")]
+    [InlineData("""{ "0x0001:0x00CF": "keyboard" }""", "$.devices[0].hid['0x0001:0x00CF']")]
+    [InlineData("""{ "0x00CF": "keyboard" }""", "$.devices[0].hid['0x00CF']")]
+    [InlineData("""{ "0x000C:0x00CF": "keyboard", "0x000c:0x00cf": "keyboard" }""", "$.devices[0].hid['0x000c:0x00cf']")]
+    [InlineData("""{ "0x000C:0x00CF": "keyboard", "0xC:0xCF": "keyboard" }""", "$.devices[0].hid['0xC:0xCF']")]
+    [InlineData("""{ "0x000C:0x00CF": "keyboard", "0x000C:0x00B5": "keyboard" }""", "$.devices[0].hid['0x000C:0x00B5']")]
+    public void Invalid_hid_entry_is_rejected(string hid, string path) =>
+        Assert.Equal(path, SingleError(input: HidInput(hid)).Path);
+
+    [Fact]
+    public void Textually_duplicated_hid_key_is_rejected()
+    {
+        var result = Validate(input: HidInput("""{ "0x000C:0x00CF": "keyboard", "0x000C:0x00CF": "keyboard" }"""));
+
+        Assert.Null(result.Config);
+        Assert.NotEmpty(result.Errors);
+    }
+
+    [Theory]
+    [InlineData("*", "keyboard")]
+    [InlineData("VID_1915&PID_1025", "keyboard")]
+    public void Hid_section_is_rejected_on_non_remote_device(string signature, string source) =>
+        Assert.Equal(
+            "$.devices[0].hid",
+            SingleError(input: HidInput("""{ "0x000C:0x00CF": "keyboard" }""", signature, source)).Path);
 
     public static TheoryData<string, string, string, string> InvalidSamples => new()
     {

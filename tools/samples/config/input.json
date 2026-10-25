@@ -11,6 +11,9 @@
         "0x0D": "ok",
         "0xA6": "back",
         "0xAC": "home"
+      },
+      "hid": {
+        "0x000C:0x00CF": "keyboard"
       }
     },
     {

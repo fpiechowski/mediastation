@@ -195,6 +195,12 @@ public static class ConfigValidation
     // \z, nie $: w .NET `$` pasuje też przed końcowym \n („0x26\n” wywaliłby Convert.ToInt32).
     private static readonly Regex KebabCase = new(@"^[a-z][a-z0-9]*(-[a-z0-9]+)*\z", RegexOptions.CultureInvariant);
     private static readonly Regex BackPolicy = new(@"^(home|key:[A-Za-z0-9]+)\z", RegexOptions.CultureInvariant);
+    private static readonly Regex HidKey = new(@"^0x([0-9A-Fa-f]{1,4}):0x([0-9A-Fa-f]{1,4})\z", RegexOptions.CultureInvariant);
+
+    private const int HidConsumerPage = 0x000C;
+
+    private static readonly int[] HidReservedUsages = [0x0223, 0x0224];
+
     private static readonly Regex VirtualKey = new(@"^0x[0-9A-Fa-f]{2}\z", RegexOptions.CultureInvariant);
     private static readonly Regex GitHubRepo = new(@"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?/[A-Za-z0-9._-]+\z", RegexOptions.CultureInvariant);
 
@@ -367,6 +373,8 @@ public static class ConfigValidation
                     kindsByVirtualKey.Add(virtualKey, (kind, keyPath));
                 }
             }
+
+            CheckHid(device, devicePath, errors);
         }
 
         CheckGamepad(config, errors);
@@ -392,6 +400,62 @@ public static class ConfigValidation
         if (buttons.Count < 2)
         {
             errors.Add(homePath, "potrzeba co najmniej 2 różnych przycisków");
+        }
+    }
+
+    /// <summary>
+    /// Sekcja <c>hid</c> urządzenia (AD-8): tylko <c>remote</c>, strona Consumer <c>0x000C</c>, wartość <c>keyboard</c>,
+    /// bez usage Home/Back (<c>0x0223</c>/<c>0x0224</c>, korelacja <c>source</c>) i bez usage 0 (znacznik zwolnienia);
+    /// jeden klucz na Action w urządzeniu.
+    /// </summary>
+    private static void CheckHid(InputDevice device, string devicePath, FileErrors errors)
+    {
+        if (device.Hid is null)
+        {
+            return;
+        }
+
+        var hidPath = JsonErrorPath.Property(devicePath, "hid");
+        if (device.Source != ActionSource.Remote || device.Signature == InputDevice.WildcardSignature)
+        {
+            errors.Add(hidPath, $"sekcja „hid” jest dozwolona tylko na urządzeniu z source {Quote("remote")} (nie na {Quote(InputDevice.WildcardSignature)})");
+            return;
+        }
+
+        var seen = new Dictionary<(int Page, int Usage), string>();
+        var kinds = new Dictionary<ActionKind, string>();
+        foreach (var (key, kind) in device.Hid)
+        {
+            var keyPath = JsonErrorPath.Property(hidPath, key);
+            var match = HidKey.Match(key);
+            if (!match.Success)
+            {
+                errors.Add(keyPath, $"klucz {Quote(key)} nie jest w formacie 0x<strona>:0x<usage>");
+                continue;
+            }
+
+            var page = Convert.ToInt32(match.Groups[1].Value, 16);
+            var usage = Convert.ToInt32(match.Groups[2].Value, 16);
+            if (page != HidConsumerPage)
+            {
+                errors.Add(keyPath, $"strona {Quote($"0x{page:X4}")} niedozwolona (tylko 0x000C)");
+            }
+            else if (usage == 0 || Array.IndexOf(HidReservedUsages, usage) >= 0)
+            {
+                errors.Add(keyPath, $"usage {Quote($"0x{usage:X4}")} niedozwolone (0x0000 to zwolnienie, 0x0223 i 0x0224 to Home i Back)");
+            }
+            else if (kind != ActionKind.Keyboard)
+            {
+                errors.Add(keyPath, $"wartość {Quote(KindName(kind))} niedozwolona w „hid” (tylko „keyboard”)");
+            }
+            else if (!seen.TryAdd((page, usage), keyPath))
+            {
+                errors.Add(keyPath, $"klucz {Quote(key)} powtarza {seen[(page, usage)]}");
+            }
+            else if (!kinds.TryAdd(kind, keyPath))
+            {
+                errors.Add(keyPath, $"Action {Quote(KindName(kind))} ma już klucz w {kinds[kind]}");
+            }
         }
     }
 

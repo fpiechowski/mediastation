@@ -117,6 +117,12 @@ public sealed record InputGamepad
 public sealed record InputDevice(string Signature, ActionSource Source, IReadOnlyDictionary<string, ActionKind> Keys)
 {
     /// <summary>
+    /// Raport HID Consumer → Action: klucz <c>0x&lt;strona&gt;:0x&lt;usage&gt;</c> (np. <c>0x000C:0x00CF</c>), wartość wyłącznie
+    /// <c>keyboard</c>. Tylko dla urządzenia <c>remote</c>; brak sekcji oznacza brak wyzwalacza HID (AD-8).
+    /// </summary>
+    public IReadOnlyDictionary<string, ActionKind>? Hid { get; init; }
+
+    /// <summary>
     /// Sygnatura urządzenia zastępczego: pasuje do każdej niepustej ścieżki Raw Input i przegrywa z każdym wpisem
     /// konkretnym; może mieć wyłącznie <c>source: keyboard</c> (AD-13).
     /// </summary>
