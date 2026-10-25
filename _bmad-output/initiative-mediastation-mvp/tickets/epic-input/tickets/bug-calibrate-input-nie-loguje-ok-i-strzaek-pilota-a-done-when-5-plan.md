@@ -3,7 +3,7 @@ title: '--calibrate-input nie loguje OK i strzałek pilota'
 type: 'bugfix'
 ticket: '14'
 created: '2026-10-25'
-status: blocked
+status: done
 baseline_revision: '07a5cde8325063506b60e346b7a4cc71540f5889'
 route: 'oneshot'
 route_source: 'auto'
@@ -21,8 +21,6 @@ operator_actions:
   - 'Decide how to resolve bug 3.14 criterion 2: either (a) approve correcting epic-input Done when 5 and Odbiór na UM760 point 2 so calibration is only required to log remote buttons that arrive as HID Consumer reports (Home, Back, voice assistant), or (b) approve a new story for a hook-free calibration mode that registers keyboard Raw Input (architecture AD-8 allows this only without an LL hook in the same process).'
   - 'If (b) is chosen, run the new calibration on UM760 with the physical G20S Pro and check that OK and the arrows get rawInput entries and that Home and Back still get VK.'
   - 'Resolve the Source conflict for the Keyboard button with bmad-architecture (HID usage 0x00CF as an additional trigger next to VK); it is the same decision that blocks Done when 5.'
-blocked_at: "2026-10-25"
-blocked_reason: "awaiting operator: Decide how to resolve bug 3.14 criterion 2: either (a) approve correcting epic-input Done when 5 and Odbiór na UM760 point 2 so calibration is only required to log remote buttons that arrive as HID Consumer reports (Home, Back, voice assistant), or (b) approve a new story for a hook-free calibration mode that registers keyboard Raw Input (architecture AD-8 allows this only without an LL hook in the same process).; If (b) is chosen, run the new calibration on UM760 with the physical G20S Pro and check that OK and the arrows get rawInput entries and that Home and Back still get VK.; Resolve the Source conflict for the Keyboard button with bmad-architecture (HID usage 0x00CF as an additional trigger next to VK); it is the same decision that blocks Done when 5."
 ---
 
 <intent-contract>
@@ -76,3 +74,13 @@ Status: awaiting-operator
 Summary: Cause established with log evidence: OK and arrows are absent from calibration because, after 3.12, calibration registers only HID Consumer and those keys carry no device evidence. This is a channel property, not a filter bug. A characterization test was added; Done when 5 and acceptance point 2 still need the user's decision.
 
 Operator actions owed: see `operator_actions` in the frontmatter.
+
+## Operator Confirmation
+
+Confirmed 2026-10-25: the external actions this story owed were carried out.
+
+- Decide how to resolve bug 3.14 criterion 2: either (a) approve correcting epic-input Done when 5 and Odbiór na UM760 point 2 so calibration is only required to log remote buttons that arrive as HID Consumer reports (Home, Back, voice assistant), or (b) approve a new story for a hook-free calibration mode that registers keyboard Raw Input (architecture AD-8 allows this only without an LL hook in the same process).
+- If (b) is chosen, run the new calibration on UM760 with the physical G20S Pro and check that OK and the arrows get rawInput entries and that Home and Back still get VK.
+- Resolve the Source conflict for the Keyboard button with bmad-architecture (HID usage 0x00CF as an additional trigger next to VK); it is the same decision that blocks Done when 5.
+
+_Appended by the bmad-loop orchestrator (`bmad-loop confirm`, #335): a human confirmed these external actions out of band, and the story was advanced from `awaiting-operator` to `done`._
