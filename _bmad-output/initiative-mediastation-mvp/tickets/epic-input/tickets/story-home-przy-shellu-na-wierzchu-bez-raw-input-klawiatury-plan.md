@@ -3,7 +3,7 @@ title: 'Home przy shellu na wierzchu bez Raw Input klawiatury'
 type: 'bugfix' # feature | bugfix | refactor | chore
 ticket: '12' # the entry id from the ticket tree, or the story file's stem when the entry has no id; empty outside it
 created: '2026-10-24'
-status: 'built' # draft | ready-for-dev | in-progress | in-review | built | done | blocked | dropped
+status: 'done' # draft | ready-for-dev | in-progress | in-review | built | done | blocked | dropped
 baseline_revision: 'b291d0939fb61c50229438cbb19e317e6e25d4de'
 route: 'full' # oneshot | full — set by step-02
 route_source: 'auto' # pinned | auto — set with route by step-02
@@ -104,7 +104,7 @@ The first post-patch harness attempt skipped the third process's OK because the 
 
 ## Auto Run Result
 
-Status: built
+Status: done
 
 Summary: Normal InputHub and calibration now register HID Consumer only; exact one-use Home/Back HID–VK correlation is required for `source: remote`. The ticket is built; whole-epic acceptance remains with the user on UM760.
 
