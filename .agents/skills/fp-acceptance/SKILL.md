@@ -24,3 +24,4 @@ The outcome is the acceptance plan with its results table filled, one row per sc
 
 - The retrospective's machine verdict is evidence, not acceptance; the user's run on real hardware is the gate. The epic's status is Sofia's (`bmad-agent-po`) to change, never yours.
 - Write the plan in the language of the epic file; speak to the user in theirs.
+- The user accepts as a stakeholder: they decide whether the epic is good enough for the project, and need to hear what is tested, what the project gains and what it unblocks. Lead every message with that purpose in plain words; log SPECs, `msg=` entries and flags stay in the plan and the evidence, and enter the conversation only when asked.
