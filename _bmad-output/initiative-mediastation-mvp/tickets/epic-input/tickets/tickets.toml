@@ -149,3 +149,29 @@ hitl = false
 risk = "high"
 refine = true
 references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (Notes — spike 3.11)", "tickets/epic-input/tickets/spike-dlaczego-hook-wh-keyboard-ll-nie-dostaje-klawiszy-gdy-shell.md, Wynik"]
+
+[[entry]]
+id = 13
+type = "bug"
+title = "check-home-s10: Home przy zawieszonym shellu i cel Edge nie dają 16/16 na UM760"
+description = "Na odbiorze UM760 (przebieg 2, S12) skrypt `check-home-s10.ps1` dał 4/16, w powtórce 8/16: Edge 4 × `no target window` mimo otwartego okna, shell-hung 2 × nowe okno przeglądarki i 2 × `target not foreground`; Moonlight 4/4, pulpit 4/4 i „shell na wierzchu” 4/4 przeszły. Najpierw diagnoza, czy winny jest skrypt (wykrywanie okna Edge, cel zawieszony), czy produkt (Home przy zawieszonym UI)."
+verify = "Na UM760 `tools/check-home-s10.ps1` daje 16/16 i 4/4 z exit 0 (powtórzone, logi w planie); testy dla każdego znalezionego warunku przechodzą."
+covers = ["CAP-3"]
+after = [12]
+hitl = true
+risk = "high"
+refine = true
+references = ["epic-input-um760-acceptance-2.md, S12 i uwaga S12", "architecture-mediastation/architecture-mediastation.md, AD-8"]
+
+[[entry]]
+id = 14
+type = "bug"
+title = "--calibrate-input nie loguje OK i strzałek pilota, a Done when 5 wymaga co najmniej 7 przycisków z VK"
+description = "Na odbiorze UM760 (przebieg 2, S9, trzy podejścia) kalibracja zalogowała `rawInput` z VK tylko dla Home (0xAC) i Back (0xA6); asystent głosowy (usage 0x00CF) przyszedł bez VK, a OK i strzałek nie ma w logu wcale. Diagnoza: błąd kalibracji po story 3.12 albo kanał, którego Raw Input nie widzi, i wtedy kryterium „≥7” trzeba poprawić."
+verify = "Na UM760 `--calibrate-input` loguje `rawInput` dla każdego przycisku pilota, który ma VK, albo dowód, że OK i strzałki nie przychodzą tym kanałem, a kryterium w epice jest poprawione za zgodą użytkownika; testy dla znalezionej przyczyny przechodzą."
+covers = ["CAP-3"]
+after = [12]
+hitl = true
+risk = "medium"
+refine = true
+references = ["epic-input-um760-acceptance-2.md, S9 (trzy podejścia) i S10", "architecture-mediastation/architecture-mediastation.md, AD-8"]
