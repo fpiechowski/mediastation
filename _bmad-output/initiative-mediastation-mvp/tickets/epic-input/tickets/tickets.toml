@@ -175,3 +175,39 @@ hitl = false
 risk = "medium"
 refine = true
 references = ["epic-input-um760-acceptance-2.md, S9 (trzy podejścia) i S10", "architecture-mediastation/architecture-mediastation.md, AD-8"]
+
+[[entry]]
+id = 15
+type = "story"
+title = "Config: sekcja hid w input.json dla przycisku asystenta"
+description = "Dodaje w `InputConfig` opcjonalną sekcję `hid` urządzenia obok `keys` (klucz `<usagePage>:<usage>` w hex z `0x`, wartość wyłącznie `keyboard`), jej schemat i walidację zgodną z AD-8 (wyzwalacz HID usage dla `Keyboard`), oraz wpis `\"hid\": { \"0x000C:0x00CF\": \"keyboard\" }` dla `VID_1915&PID_1025` w `tools/samples/config/input.json`; sekcję czyta story 3.16 (polityka) i zapisuje story 3.17 (kalibracja). Brak sekcji = brak wyzwalacza HID."
+verify = "`dotnet test` przechodzi z testami walidacji: sample z wpisem `0x000C:0x00CF` ładuje się poprawnie, a walidacja odrzuca sekcję `hid` na urządzeniu innym niż `remote` (w tym `*`), wartość inną niż `keyboard`, usage `0x0223` i `0x0224`, stronę inną niż `0x000C`, zdublowany klucz i drugi klucz z tą samą Action w obrębie urządzenia. Dowody (wynik `dotnet test`) trafiają do planu, zebrane na bieżącej maszynie."
+covers = ["CAP-3"]
+after = [14]
+hitl = false
+risk = "low"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (wyzwalacz HID usage dla `Keyboard`, `input.json`)"]
+
+[[entry]]
+id = 16
+type = "story"
+title = "Polityka i hub: Action Keyboard z raportu HID Consumer"
+description = "Dodaje w `InputPolicy` metodę `OnHidConsumer`, która dla raportu HID Consumer z urządzenia `source: remote` zmapowanego w sekcji `hid` (story 3.15) emituje Action `Keyboard` z `source: remote` na przejściu „brak → usage” (kolejne raporty tego samego usage bez zwolnienia ignoruje; raport z usage 0 to zwolnienie), bez `repeat` i `long`, bez połykania, z bramką foreground jak dla innych klawiszy (nad obcym oknem bez Action), bez korelacji czasowej z VK; sprawdza i w razie potrzeby poprawia `InputHub`, tak by do polityki trafiały też raporty z usage 0, a normalne logowanie zostawia tylko wpis `action` (AD-13)."
+verify = "`dotnet test` przechodzi z testami polityki na `FakeTimeProvider`: jedna `Keyboard`/`remote` dla `0x000C:0x00CF`, drugi raport bez zwolnienia bez Action, po raporcie z usage 0 kolejne naciśnięcie daje Action, brak `repeat` i `long` przy trzymaniu, nic nad obcym oknem, nic dla usage spoza sekcji `hid` ani z urządzenia innego niż `remote`, Home/Back po `0x0223`/`0x0224` nadal jedna Action po VK; test hubu potwierdza, że raport z usage 0 dociera do polityki, a log normalnej pracy ma tylko `action`. Dowody trafiają do planu, zebrane na bieżącej maszynie."
+covers = ["CAP-3"]
+after = [15]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (zakres, `source`, połykanie, jedno naciśnięcie)", "architecture-mediastation/architecture-mediastation.md, AD-13 (Logi)"]
+
+[[entry]]
+id = 17
+type = "story"
+title = "Kalibracja: przycisk Klawiatura także bez VK, zapis do hid"
+description = "Rozszerza `--calibrate-input`, by wybór przycisku Klawiatura obejmował przyciski pilota z raportów HID Consumer bez VK (asystent głosowy `0x00CF`) obok przycisków z VK, a zapis do `input.json` szedł według typu przycisku: VK do `keys`, usage bez VK do `hid` (format ze story 3.15); wpis `rawInput` zostaje z `hasVk`, a usage jest logowany tylko w tym trybie (AD-13)."
+verify = "`dotnet test` przechodzi z testami Core: wybór przycisku bez VK (`hasVk` = `false`) zapisuje wpis `\"0x000C:0x00CF\": \"keyboard\"` w `hid`, wybór przycisku z VK zapisuje wpis w `keys`, zapisany plik przechodzi walidację ze story 3.15, a z wpisem `hid` polityka ze story 3.16 daje `Keyboard`/`remote`. Dowody trafiają do planu, zebrane na bieżącej maszynie."
+covers = ["CAP-3"]
+after = [16]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (kalibracja: VK do `keys`, usage do `hid`)", "architecture-mediastation/architecture-mediastation.md, AD-13 (Logi: surowe kody tylko w --calibrate-input)"]
