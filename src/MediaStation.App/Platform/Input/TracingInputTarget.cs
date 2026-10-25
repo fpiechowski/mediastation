@@ -56,14 +56,14 @@ internal sealed class TracingInputTarget : IInputTarget
 
     public InputDecision OnGamepad(GamepadSnapshot snapshot) => _inner.OnGamepad(snapshot);
 
-    public void OnHidConsumer(HidConsumerReport report)
+    public InputDecision OnHidConsumer(HidConsumerReport report)
     {
         _log.Info("input", "hidTrace", new Dictionary<string, object?>
         {
             ["usagePage"] = $"0x{report.UsagePage:X4}",
             ["usage"] = $"0x{report.Usage:X4}",
         });
-        _inner.OnHidConsumer(report);
+        return _inner.OnHidConsumer(report);
     }
 
     public InputDecision OnPointer(PointerStroke pointer, ScreenRectangle? clip) => _inner.OnPointer(pointer, clip);

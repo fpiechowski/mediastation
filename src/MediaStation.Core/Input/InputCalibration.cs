@@ -166,29 +166,29 @@ public sealed class InputCalibration : IInputTarget
     /// Raport HID Consumer urządzenia <c>remote</c>: nowy usage otwiera (albo domyka poprzednie i otwiera nowe)
     /// naciśnięcie, a <c>usage == 0</c> to zwolnienie przycisku według konwencji HID Consumer i nie tworzy wpisu.
     /// </summary>
-    public void OnHidConsumer(HidConsumerReport report)
+    public InputDecision OnHidConsumer(HidConsumerReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
 
         if (_completed)
         {
-            return;
+            return PassDecision;
         }
 
         if (MatchRemote(report.DevicePath) is not { } signature)
         {
-            return;
+            return PassDecision;
         }
 
         if (report.Usage == 0)
         {
             ReleaseAll();
-            return;
+            return PassDecision;
         }
 
         if (!_heldUsages.Add(report.Usage))
         {
-            return;
+            return PassDecision;
         }
 
         PruneHooks(report.TimeMs);
@@ -196,6 +196,7 @@ public sealed class InputCalibration : IInputTarget
         press.UsagePage ??= report.UsagePage;
         press.Usage ??= report.Usage;
         AttachBufferedHook(press);
+        return PassDecision;
     }
 
     /// <summary>

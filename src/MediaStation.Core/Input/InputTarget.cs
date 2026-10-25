@@ -25,8 +25,11 @@ public interface IInputTarget
     /// </summary>
     InputDecision OnGamepad(GamepadSnapshot snapshot);
 
-    /// <summary>Raport HID Consumer z Raw Input; nie decyduje o połknięciu.</summary>
-    void OnHidConsumer(HidConsumerReport report);
+    /// <summary>
+    /// Raport HID Consumer z Raw Input; nigdy nie połyka (<c>Swallow=false</c>), ale może nieść Actions
+    /// (<c>Keyboard</c> z sekcji <c>hid</c> urządzenia <c>remote</c>, AD-8).
+    /// </summary>
+    InputDecision OnHidConsumer(HidConsumerReport report);
 
     /// <summary>
     /// Zdarzenie wskaźnika z hooka myszy: czy połknąć ruch, kliknięcie albo kółko na podstawie wiersza

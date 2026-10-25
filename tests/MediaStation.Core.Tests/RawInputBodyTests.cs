@@ -50,6 +50,16 @@ public class RawInputBodyTests
     }
 
     [Fact]
+    public void Hid_release_report_with_zero_usage_is_read_so_the_hub_forwards_it()
+    {
+        var body = HidBody(reportSize: 3, [0x02, 0x00, 0x00]);
+
+        Assert.True(RawInputBody.TryReadHidUsage(body, out var usage));
+
+        Assert.Equal(0, usage);
+    }
+
+    [Fact]
     public void Hid_two_byte_report_has_no_report_id()
     {
         var body = HidBody(reportSize: 2, [0xB0, 0x00]);

@@ -428,10 +428,12 @@ internal sealed unsafe class InputHub : IDisposable
             {
                 if (!RawInputBody.TryReadHidUsage(body, out var usage))
                 {
-                    usage = 0;
+                    // Nieczytelny raport nie jest zwolnieniem (usage 0 zmienia stan polityki): pomijamy go.
+                    return;
                 }
 
-                _target.OnHidConsumer(new HidConsumerReport(devicePath, timeMs, HidConsumerUsagePage, usage));
+                var decision = _target.OnHidConsumer(new HidConsumerReport(devicePath, timeMs, HidConsumerUsagePage, usage));
+                Enqueue(decision.Actions);
                 ArmTimer();
             }
         }

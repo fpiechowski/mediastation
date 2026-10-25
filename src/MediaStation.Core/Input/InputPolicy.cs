@@ -110,6 +110,8 @@ public sealed class InputPolicy : IInputTarget
     private bool _homeEmitted;
     private bool _gamepadBaselinePending;
     private RemoteEvidence? _pendingRemoteEvidence;
+    private readonly Dictionary<string, HashSet<int>> _hidKeyboardUsages = [];
+    private readonly Dictionary<string, HidHeld> _hidHeld = [];
 
     /// <param name="config">Config wejścia; mapowanie jest scalane ze wszystkich urządzeń, pierwsze wygrywa.</param>
     /// <param name="time">Zegar terminów long-press i repeat (AD-14).</param>
@@ -153,6 +155,26 @@ public sealed class InputPolicy : IInputTarget
             if (!string.IsNullOrWhiteSpace(device.Signature))
             {
                 _devices.Add((device.Signature, device.Source));
+
+                if (device.Source == ActionSource.Remote
+                    && device.Signature != InputDevice.WildcardSignature
+                    && device.Hid is { } hid)
+                {
+                    foreach (var (hidKey, hidKind) in hid)
+                    {
+                        if (hidKind == ActionKind.Keyboard
+                            && TryParseHidKey(hidKey, out var page, out var usage)
+                            && page == HidConsumerUsagePage)
+                        {
+                            if (!_hidKeyboardUsages.TryGetValue(device.Signature, out var set))
+                            {
+                                _hidKeyboardUsages[device.Signature] = set = [];
+                            }
+
+                            set.Add(usage);
+                        }
+                    }
+                }
             }
         }
 
@@ -492,20 +514,59 @@ public sealed class InputPolicy : IInputTarget
     /// wstrzyknięty Browser Home/Back VK o zgodnej parze usage, w ciągu 50 ms. Każdy nowy raport zastępuje
     /// poprzednie świadectwo, a pierwsze Home/Back naciśnięcie próbuje je zużyć.
     /// </summary>
-    public void OnHidConsumer(HidConsumerReport report)
+    public InputDecision OnHidConsumer(HidConsumerReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
 
         _pendingRemoteEvidence = null;
         var device = MatchDevice(report.DevicePath, includeWildcard: false);
 
+        if (device is not { } matched || matched.Source != ActionSource.Remote)
+        {
+            return PassDecision;
+        }
+
         if (report.UsagePage == HidConsumerUsagePage
-            && report.Usage is RemoteHomeUsage or RemoteBackUsage
-            && device is { } matched
-            && matched.Source == ActionSource.Remote)
+            && report.Usage is RemoteHomeUsage or RemoteBackUsage)
         {
             _pendingRemoteEvidence = new RemoteEvidence(report.TimeMs, report.Usage);
         }
+
+        if (report.UsagePage != HidConsumerUsagePage)
+        {
+            return PassDecision;
+        }
+
+        // Usage 0 to zwolnienie przycisku (konwencja HID Consumer): kolejne naciśnięcie znów daje Action.
+        if (report.Usage == 0)
+        {
+            _hidHeld.Remove(matched.Signature);
+            return PassDecision;
+        }
+
+        // Ten sam usage bez zwolnienia to trzymanie (brak repeat/long); nieświeży wpis (zgubione zwolnienie)
+        // starszy niż MaxRepeatHoldMs zaczyna nowe naciśnięcie. Inny usage kończy poprzednie trzymanie.
+        if (_hidHeld.TryGetValue(matched.Signature, out var held)
+            && held.Usage == report.Usage
+            && report.TimeMs - held.TimeMs <= MaxRepeatHoldMs)
+        {
+            // ĹšwieĹĽoĹ›Ä‡ liczona od ostatniego raportu: trzymany przycisk z ciÄ…gĹ‚ymi raportami nie startuje nowego naciĹ›niÄ™cia.
+            _hidHeld[matched.Signature] = held with { TimeMs = report.TimeMs };
+            return PassDecision;
+        }
+
+        _hidHeld[matched.Signature] = new HidHeld(report.Usage, report.TimeMs);
+
+        if (!_hidKeyboardUsages.TryGetValue(matched.Signature, out var usages)
+            || !usages.Contains(report.Usage)
+            || IsForeign())
+        {
+            return PassDecision;
+        }
+
+        return new InputDecision(
+            false,
+            [new ActionMessage(ActionKind.Keyboard, ActionPhase.Press, ActionSource.Remote, report.TimeMs)]);
     }
 
     /// <summary>
@@ -768,6 +829,25 @@ public sealed class InputPolicy : IInputTarget
         return null;
     }
 
+    /// <summary>Klucz sekcji <c>hid</c> w formacie <c>0x&lt;strona&gt;:0x&lt;usage&gt;</c> (1-4 cyfry hex), jak w walidacji.</summary>
+    private static bool TryParseHidKey(string key, out int page, out int usage)
+    {
+        page = 0;
+        usage = 0;
+        var separator = key.IndexOf(':', StringComparison.Ordinal);
+        return separator > 0
+            && TryParseHex(key.AsSpan(0, separator), out page)
+            && TryParseHex(key.AsSpan(separator + 1), out usage);
+    }
+
+    private static bool TryParseHex(ReadOnlySpan<char> text, out int value)
+    {
+        value = 0;
+        return text.Length is >= 3 and <= 6
+            && text.StartsWith("0x", StringComparison.Ordinal)
+            && int.TryParse(text[2..], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value);
+    }
+
     private static bool TryParseVirtualKey(string key, out int virtualKey)
     {
         virtualKey = 0;
@@ -808,6 +888,9 @@ public sealed class InputPolicy : IInputTarget
 
     /// <summary>Jednorazowy Consumer report oczekujący na zgodny, wstrzyknięty Browser Home/Back VK.</summary>
     private sealed record RemoteEvidence(long TimeMs, int Usage);
+
+    /// <summary>Trzymany usage Consumer urządzenia <c>remote</c>: do rozpoznania przejścia „brak → usage”.</summary>
+    private sealed record HidHeld(int Usage, long TimeMs);
 
     /// <summary>
     /// Jeden trzymany klawisz albo przycisk pada: kind i source z naciśnięcia (repeat dziedziczy je bez nowej
