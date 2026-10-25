@@ -29,7 +29,7 @@ deferred: []
 
 ## Boundaries & Constraints
 
-**Always:** Preserve one Action per press, VK-triggered Actions, existing key-up/long/repeat/SendInput and foreground rules, calibration's non-swallowing behavior, 60-second and physical-Esc exits, and the user's epic-level UM760 acceptance boundary. Ordinary runs require no experiment variable; `MS_INPUT_TRACE=1` is the only diagnostic override used for ALDER runs.
+**Always:** Preserve one Action per press, VK-triggered Actions, existing key-up/long/repeat/SendInput and foreground rules, calibration's non-swallowing behavior, 60-second and physical-Esc exits, and the user's epic-level UM760 acceptance boundary. Ordinary runs require no experiment variable; `MS_INPUT_TRACE=1` is the only diagnostic override used for UM760 runs.
 
 **Never:** Register Raw Input keyboard in a process with an active LL hook; use HID as an Action trigger; infer `remote` from VK, `input.json`, an unrelated HID usage, or a stale/reused report; add a permanently running helper process or change Actions/routing/epic status.
 
@@ -59,7 +59,7 @@ deferred: []
 - [x] `src/MediaStation.App/Platform/Input/InputHubVariants.cs`, `src/MediaStation.App/CompositionRoot.cs` — remove the obsolete experiment selectors from production startup and ensure no variant variable is needed — prevent the spike path from masking the default behavior.
 - [x] `src/MediaStation.Core/Input/InputPolicy.cs` — enforce exact, time-bounded, one-use Home/Back correlation and keyboard fallback — prevent false remote attribution and reused evidence.
 - [x] `tests/MediaStation.Core.Tests/InputPolicyTests.cs`, `tests/MediaStation.Core.Tests/ForegroundGateTests.cs`, `tests/MediaStation.Core.Tests/InputCalibrationTests.cs` — exercise the correlation matrix, foreign-window behavior, no-VK/filtering, non-swallowing, and both calibration exits — prove policy and calibration invariants.
-- [x] `tools/spike-3-11.ps1` run evidence and this plan's Verification section — execute three baseline launches with synthetic Home, Back, and OK on ALDER; record each PID/log and registration evidence — prove the default path at the app surface.
+- [x] `tools/spike-3-11.ps1` run evidence and this plan's Verification section — execute three baseline launches with synthetic Home, Back, and OK on UM760; record each PID/log and registration evidence — prove the default path at the app surface.
 
 **Acceptance Criteria:**
 - Given a default app start with the shell foreground and only `MS_INPUT_TRACE=1`, when synthetic mapped Home, Back, and OK are sent in each of three separate launches, then every press has exactly one LL `keyEnter` down and one expected Action, the registration trace shows HID Consumer without keyboard Raw Input, and no process logs `inputHubError`.
@@ -122,4 +122,4 @@ Review findings: one medium patch applied; one false finding rejected with the n
 
 Verification: 899/899 Core tests passed (0 skipped); Release build passed with 0 warnings and 0 errors; three final shell-foreground processes each produced one `keyEnter` down and one Action for Home, Back, and OK, showed `keyboard=false` and `hidConsumer=true`, and logged no `inputHubError`. One earlier harness attempt was rerun after the third process lost foreground before OK.
 
-Residual risk: synthetic ALDER input does not establish physical G20S Pro behavior, browser handling of `VK_BROWSER_HOME`, or S10 16/16. Those checks remain in whole-epic UM760 acceptance via `fp-acceptance`.
+Residual risk: synthetic UM760 input does not establish physical G20S Pro behavior, browser handling of `VK_BROWSER_HOME`, or S10 16/16. Those checks remain in whole-epic UM760 acceptance via `fp-acceptance`.
