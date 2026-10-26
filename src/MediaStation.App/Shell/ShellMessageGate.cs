@@ -99,10 +99,6 @@ public sealed class ShellMessageGate
         return new ShellMessage.IntentAccepted(intent);
     }
 
-    /// <summary>Origin to scheme + host + port po sparsowaniu <c>Source</c>, nie prefiks napisu.</summary>
-    private bool IsShellOrigin(string? source) =>
-        Uri.TryCreate(source, UriKind.Absolute, out var uri)
-        && string.Equals(uri.Scheme, _origin.Scheme, StringComparison.OrdinalIgnoreCase)
-        && string.Equals(uri.Host, _origin.Host, StringComparison.OrdinalIgnoreCase)
-        && uri.Port == _origin.Port;
+    /// <summary>Origin to scheme + host + port po sparsowaniu <c>Source</c> (jedna definicja w <see cref="ShellNavigationPolicy"/>).</summary>
+    private bool IsShellOrigin(string? source) => ShellNavigationPolicy.SameOrigin(_origin, source);
 }

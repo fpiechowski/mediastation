@@ -14,6 +14,8 @@ public partial class ShellWindow : Window
 {
     private static readonly Uri ShellUri = ShellOrigin.Uri;
 
+    private static readonly ShellNavigationPolicy _policy = new(ShellUri);
+
     private readonly ShellBridge _bridge;
     private readonly string _userDataDir;
     private readonly ILog _log;
@@ -50,6 +52,8 @@ public partial class ShellWindow : Window
                 CoreWebView2HostResourceAccessKind.DenyCors);
 #endif
 
+            core.NavigationStarting += (_, args) => args.Cancel = IsBlocked(args.Uri, isMainFrame: true);
+            core.FrameNavigationStarting += (_, args) => args.Cancel = IsBlocked(args.Uri, isMainFrame: false);
             core.NavigationCompleted += OnNavigationCompleted;
             core.ProcessFailed += OnProcessFailed;
             core.NewWindowRequested += OnNewWindowRequested;
@@ -65,9 +69,24 @@ public partial class ShellWindow : Window
         }
     }
 
+    private bool IsBlocked(string? uri, bool isMainFrame)
+    {
+        if (_policy.IsAllowed(uri))
+        {
+            return false;
+        }
+
+        _log.Warn("shell", "navigationBlocked", new Dictionary<string, object?>
+        {
+            ["uri"] = uri,
+            ["isMainFrame"] = isMainFrame,
+        });
+        return true;
+    }
+
     private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-        if (e.IsSuccess)
+        if (!ShellNavigationPolicy.ShouldLogFailure(e.IsSuccess, e.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled))
         {
             return;
         }
