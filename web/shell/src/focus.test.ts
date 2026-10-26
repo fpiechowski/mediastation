@@ -203,3 +203,66 @@ describe('zakładki i category', () => {
     expect(state).toMatchObject({ activeTab: 'video', focusedAppId: 'v' });
   });
 });
+
+describe('focusRequest i powrót na ostatni kafelek (AD-16)', () => {
+  const atFirst = (list: AppTile[], seq = 1) =>
+    applyFocusRequest(initialFocusState, snapshot(list, { target: 'default', seq }));
+
+  it('snapshot z tym samym seq i nowym rev nie rusza fokusu', () => {
+    let state = atFirst(apps);
+    state = press(state, apps, 'right');
+    const next = applyFocusRequest(state, snapshot(apps, { target: 'default', seq: 1 }, 7));
+    expect(next).toBe(state);
+    expect(next.focusedAppId).toBe('b');
+  });
+
+  it('nowy seq z appId przestawia fokus raz, także z zakładek', () => {
+    const inTabs = press(focused('a'), apps, 'up');
+    const request = snapshot(apps, { target: 'c', seq: 2 });
+    const state = applyFocusRequest(inTabs, request);
+    expect(state).toMatchObject({ zone: 'tiles', focusedAppId: 'c', appliedSeq: 2 });
+    const moved = press(state, apps, 'left');
+    expect(applyFocusRequest(moved, request)).toBe(moved);
+  });
+
+  it('fokus po appId przeżywa przestawienie kafelków', () => {
+    const state = applyFocusRequest(initialFocusState, snapshot(apps, { target: 'b', seq: 1 }));
+    const reordered = [apps[2]!, apps[1]!, apps[0]!];
+    expect(press(state, reordered, 'right').focusedAppId).toBe('a');
+    const again = applyFocusRequest(state, snapshot(reordered, { target: 'b', seq: 2 }));
+    expect(again.focusedAppId).toBe('b');
+    expect(applyFocusRequest(state, snapshot(reordered, { target: 'b', seq: 1 }, 9))).toBe(state);
+  });
+
+  it('powrót z aplikacji (Home, Back) zostawia fokus na ostatnim kafelku', () => {
+    let state = press(atFirst(apps), apps, 'right');
+    const launch = applyAction(state, apps, action('ok'));
+    expect(launch.intent).toEqual({ appId: 'b' });
+    state = launch.state;
+    const launched = apps.map((app) => (app.appId === 'b' ? { ...app, state: 'foreground' as const } : app));
+    state = applyFocusRequest(state, snapshot(launched, { target: 'default', seq: 1 }, 2));
+    for (const kind of ['home', 'back'] as const) {
+      expect(applyAction(state, launched, action(kind)).state).toEqual(state);
+    }
+    const back = applyFocusRequest(state, snapshot(apps, { target: 'default', seq: 1 }, 3));
+    expect(back).toMatchObject({ zone: 'tiles', focusedAppId: 'b' });
+    expect(press(back, apps, 'right').focusedAppId).toBe('c');
+  });
+
+  it('zmiana stanu kafelka pod fokusem nie przenosi fokusu', () => {
+    const state = press(atFirst(apps), apps, 'right');
+    for (const next of ['starting', 'foreground', 'background', 'failed', 'notRunning'] as const) {
+      const list = apps.map((app) => (app.appId === 'b' ? { ...app, state: next } : app));
+      expect(applyFocusRequest(state, snapshot(list, null, 5))).toBe(state);
+      expect(applyFocusRequest(state, snapshot(list, { target: 'default', seq: 1 }, 6))).toBe(state);
+      expect(applyAction(state, list, action('left')).state.focusedAppId).toBe('a');
+      expect(applyAction(state, list, action('right')).state.focusedAppId).toBe('c');
+    }
+  });
+
+  it('awaria aplikacji z innej zakładki przenosi fokus na jej kafelek i zakładkę (seq nowy)', () => {
+    const state = applyFocusRequest(atFirst(mixed), snapshot(mixed, { target: 'moonlight', seq: 2 }, 2));
+    expect(state).toMatchObject({ zone: 'tiles', activeTab: 'game', focusedAppId: 'moonlight', appliedSeq: 2 });
+    expect(state.memory).toMatchObject({ video: 'netflix', game: 'moonlight' });
+  });
+});

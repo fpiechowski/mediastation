@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { AppSnapshot } from '../../contracts/generated/shell-snapshot';
-import { initialFocusState, tabsWithBackground } from './focus';
+import { applyFocusRequest, initialFocusState, tabsWithBackground } from './focus';
 import { Placeholder } from './Placeholder';
 
 const app = (appId: string, category: AppSnapshot['category'], state: AppSnapshot['state']): AppSnapshot => ({
@@ -48,5 +48,22 @@ describe('kropka „w tle” na zakładce', () => {
 
   it('kropka jest przy zakładce Game, gdy tam działa aplikacja w tle', () => {
     expect(tabsWithDot([app('moonlight', 'game', 'background'), app('plex', 'video', 'foreground')])).toEqual(['Game']);
+  });
+});
+
+describe('fokus po starcie (focusRequest default)', () => {
+  it('po pierwszym snapshocie jedyny kafelek z fokusem to pierwszy kafelek Video', () => {
+    const apps = [app('moonlight', 'game', 'notRunning'), app('netflix', 'video', 'notRunning'), app('plex', 'video', 'notRunning')];
+    const focus = applyFocusRequest(initialFocusState, {
+      rev: 1,
+      screen: 'placeholder',
+      configErrors: [],
+      apps,
+      focusRequest: { target: 'default', seq: 1 },
+    });
+    const html = renderToStaticMarkup(<Placeholder apps={apps} focus={focus} />);
+
+    expect(html.match(/tile--focused/g)).toHaveLength(1);
+    expect(html).toMatch(/<li class="tile tile--focused">(?:(?!<li).)*netflix/);
   });
 });
