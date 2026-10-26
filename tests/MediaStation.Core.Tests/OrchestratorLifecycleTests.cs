@@ -86,6 +86,7 @@ public class OrchestratorLifecycleTests
 
         Assert.Collection(
             completed.Commands,
+            command => Assert.IsType<ForgetProcessTree>(command),
             command => Assert.IsType<CancelTimer>(command),
             command => Assert.IsType<SetManagedWindows>(command));
         Assert.Equal(AppLifecycleState.NotRunning, StateOf(Assert.IsType<ShellSnapshot>(completed.Snapshot), "netflix"));
@@ -109,22 +110,23 @@ public class OrchestratorLifecycleTests
         Assert.Equal(AppLifecycleState.Starting, StateOf(Assert.IsType<ShellSnapshot>(completed.Snapshot), "netflix"));
         Assert.Collection(
             completed.Commands,
-            command => Assert.Equal(new StartApp(17, "netflix"), command),
-            command => Assert.Equal(new ScheduleTimer(18, 3, "netflix", T0.AddSeconds(30)), command),
-            command => Assert.Equal(new CancelTimer(19, 2), command),
-            command => AssertManaged(command, 20, 2));
+            command => Assert.Equal(new ForgetProcessTree(17, 4321), command),
+            command => Assert.Equal(new StartApp(18, "netflix"), command),
+            command => Assert.Equal(new ScheduleTimer(19, 3, "netflix", T0.AddSeconds(30)), command),
+            command => Assert.Equal(new CancelTimer(20, 2), command),
+            command => AssertManaged(command, 21, 2));
 
         var attached = orchestrator.Handle(new AppWindowAttached("netflix", 0x99, 7));
 
         Assert.Equal(AppLifecycleState.Foreground, StateOf(Assert.IsType<ShellSnapshot>(attached.Snapshot), "netflix"));
         Assert.Collection(
             attached.Commands,
-            command => Assert.Equal(new ActivateWindow(21, 0x99), command),
-            command => Assert.Equal(new UnmuteProcessTree(22, 7), command),
+            command => Assert.Equal(new ActivateWindow(22, 0x99), command),
+            command => Assert.Equal(new UnmuteProcessTree(23, 7), command),
             command => Assert.Equal(
-                new SetInputRouting(23, InputMode.App, AppType.Web, PointerPolicy.Blocked, 4),
+                new SetInputRouting(24, InputMode.App, AppType.Web, PointerPolicy.Blocked, 4),
                 command),
-            command => Assert.Equal(new CancelTimer(24, 3), command),
-            command => AssertManaged(command, 25, 3, (0x99, 7)));
+            command => Assert.Equal(new CancelTimer(25, 3), command),
+            command => AssertManaged(command, 26, 3, (0x99, 7)));
     }
 }

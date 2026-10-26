@@ -22,6 +22,9 @@ internal sealed class AudioRule
     /// <summary>Ustawia regułę korzenia; powtórzenie zastępuje poprzednią wartość.</summary>
     public void Set(int rootPid, bool muted) => _roots[rootPid] = muted;
 
+    /// <summary>Usuwa regułę korzenia; zwraca <c>true</c>, gdy korzeń ją miał.</summary>
+    public bool Remove(int rootPid) => _roots.Remove(rootPid);
+
     /// <summary>Stan reguły korzenia albo <c>null</c>, gdy korzeń nie ma reguły.</summary>
     public bool? IsMuted(int rootPid) => _roots.TryGetValue(rootPid, out var muted) ? muted : null;
 

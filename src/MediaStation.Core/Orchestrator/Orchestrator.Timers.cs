@@ -21,14 +21,14 @@ public sealed partial class Orchestrator
         if (_startTimers.Remove(elapsed.TimerId, out var appId))
         {
             return _appsById.TryGetValue(appId, out var app) && app.State == AppLifecycleState.Starting
-                ? EnterFailed(app, wasForeground: false)
+                ? EnterFailed(app, wasForeground: false, processAlive: true)
                 : OrchestratorResult.None;
         }
 
         if (_stopTimers.Remove(elapsed.TimerId, out var stoppingAppId))
         {
             return _appsById.TryGetValue(stoppingAppId, out var app) && app.State == AppLifecycleState.Stopping
-                ? EnterFailed(app, wasForeground: false)
+                ? EnterFailed(app, wasForeground: false, processAlive: true)
                 : OrchestratorResult.None;
         }
 

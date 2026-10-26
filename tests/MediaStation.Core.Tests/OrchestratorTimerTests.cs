@@ -152,7 +152,16 @@ public class OrchestratorTimerTests
         };
         var result = orchestrator.Handle(message);
 
-        Assert.Empty(result.Commands);
+        // Proces, który naprawdę zginął, zwalnia regułę wyciszenia, ale nie zmienia stanu ani snapshotu.
+        if (late == "processExited")
+        {
+            Assert.IsType<ForgetProcessTree>(Assert.Single(result.Commands));
+        }
+        else
+        {
+            Assert.Empty(result.Commands);
+        }
+
         Assert.Null(result.Snapshot);
         var snapshot = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
         Assert.Equal(failed.Rev + 1, snapshot.Rev);
@@ -185,9 +194,10 @@ public class OrchestratorTimerTests
 
         Assert.Collection(
             stopped.Commands,
-            command => Assert.Equal(new StartApp(20, "netflix"), command),
-            command => Assert.Equal(new ScheduleTimer(21, 4, "netflix", T0.AddSeconds(75)), command),
-            command => Assert.Equal(new CancelTimer(22, 3), command));
+            command => Assert.Equal(new ForgetProcessTree(20, 4321), command),
+            command => Assert.Equal(new StartApp(21, "netflix"), command),
+            command => Assert.Equal(new ScheduleTimer(22, 4, "netflix", T0.AddSeconds(75)), command),
+            command => Assert.Equal(new CancelTimer(23, 3), command));
         var starting = Assert.IsType<ShellSnapshot>(stopped.Snapshot);
         Assert.Equal(AppLifecycleState.Starting, StateOf(starting, "netflix"));
 

@@ -117,9 +117,9 @@ public class CommandRouterTests
     {
         var (router, _, window, input, _, timers, log, audio) = CreateRouter();
 
-        router.Dispatch([new MuteProcessTree(20, 4321), new UnmuteProcessTree(21, 4321)]);
+        router.Dispatch([new MuteProcessTree(20, 4321), new UnmuteProcessTree(21, 4321), new ForgetProcessTree(22, 4321)]);
 
-        Assert.Equal<AudioCommand>([new MuteProcessTree(20, 4321), new UnmuteProcessTree(21, 4321)], audio.Executed);
+        Assert.Equal<AudioCommand>([new MuteProcessTree(20, 4321), new UnmuteProcessTree(21, 4321), new ForgetProcessTree(22, 4321)], audio.Executed);
         Assert.Empty(window.Executed);
         Assert.Empty(input.Executed);
         Assert.Empty(timers.Executed);

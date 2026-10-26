@@ -74,10 +74,16 @@ public sealed partial class Orchestrator
         var app = _appsById[stop.AppId];
         app.Hwnd = null;
 
+        // Stop potwierdzony = proces nie żyje: dopiero teraz reguła wyciszenia może zniknąć (przed StartApp restartu).
+        var forget = ForgetRule(app);
         if (!stop.Restart || AnotherAppIsActive(app))
         {
             app.State = AppLifecycleState.NotRunning;
             var commands = new List<Command>();
+            if (forget is not null)
+            {
+                commands.Add(forget);
+            }
             if (CancelTimeout(_stopTimers, app.AppId) is { } cancel)
             {
                 commands.Add(cancel);
@@ -90,7 +96,14 @@ public sealed partial class Orchestrator
         app.ForegroundTransition = stop.TransitionId;
         app.State = AppLifecycleState.Starting;
         _pendingStarts.Add(cmdId, app.AppId);
-        var restartCommands = new List<Command> { new StartApp(cmdId, app.AppId), ScheduleStartTimeout(app.AppId) };
+        var restartCommands = new List<Command>();
+        if (forget is not null)
+        {
+            restartCommands.Add(forget);
+        }
+
+        restartCommands.Add(new StartApp(cmdId, app.AppId));
+        restartCommands.Add(ScheduleStartTimeout(app.AppId));
         if (CancelTimeout(_stopTimers, app.AppId) is { } stopTimeout)
         {
             restartCommands.Add(stopTimeout);

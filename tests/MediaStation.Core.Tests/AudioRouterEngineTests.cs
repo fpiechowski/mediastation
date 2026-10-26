@@ -372,6 +372,86 @@ public class AudioRouterEngineTests
     }
 
     [Fact]
+    public void Forget_removes_the_rule_and_restores_what_the_engine_muted()
+    {
+        var (engine, backend, log) = Create();
+        var ours = backend.Add("a", pid: 300);
+        engine.Execute(new MuteProcessTree(1, 100));
+
+        var error = engine.Execute(new ForgetProcessTree(2, 100));
+
+        Assert.Null(error);
+        Assert.False(ours.Muted);
+        Assert.False(engine.AnyMuted);
+        Assert.False(engine.HasMutedSessions);
+        var forgotten = Assert.Single(log.Entries, entry => entry.Msg == "audioRuleForgotten");
+        Assert.Equal(100, forgotten.Data!["rootPid"]);
+    }
+
+    [Fact]
+    public void Session_of_a_new_process_with_the_forgotten_pid_is_not_muted()
+    {
+        var (engine, backend, _) = Create();
+        engine.Execute(new MuteProcessTree(1, 100));
+        engine.Execute(new ForgetProcessTree(2, 100));
+        var created = backend.Add("reborn", pid: 300);
+
+        engine.Sweep();
+
+        Assert.False(created.Muted);
+        Assert.Equal(0, created.SetCalls);
+    }
+
+    [Fact]
+    public void Forget_of_an_unknown_root_succeeds_and_leaves_other_rules()
+    {
+        var (engine, backend, _) = Create();
+        var foreign = backend.Add("b", pid: 900);
+        engine.Execute(new MuteProcessTree(1, 900));
+
+        var error = engine.Execute(new ForgetProcessTree(2, 100));
+
+        Assert.Null(error);
+        Assert.True(foreign.Muted);
+    }
+
+    [Fact]
+    public void Forget_with_unavailable_backend_fails_but_drops_the_rule_for_the_next_sweep()
+    {
+        var (engine, backend, log) = Create();
+        var ours = backend.Add("a", pid: 300);
+        engine.Execute(new MuteProcessTree(1, 100));
+        Assert.True(ours.Muted);
+        backend.EnumerateThrows = true;
+
+        var error = engine.Execute(new ForgetProcessTree(2, 100));
+
+        Assert.Equal(ErrorCode.AudioUnavailable, error);
+        Assert.DoesNotContain(log.Entries, entry => entry.Msg == "audioRuleForgotten");
+        Assert.False(engine.AnyMuted);
+
+        backend.EnumerateThrows = false;
+        var reborn = backend.Add("reborn", pid: 300 + 0);
+        var sweep = engine.Sweep();
+
+        Assert.False(sweep.Unavailable);
+        Assert.False(ours.Muted);
+        Assert.False(reborn.Muted);
+        Assert.False(engine.HasMutedSessions);
+    }
+
+    [Fact]
+    public void Forget_with_root_pid_zero_is_ignored_without_failing()
+    {
+        var (engine, _, log) = Create();
+
+        var error = engine.Execute(new ForgetProcessTree(1, 0));
+
+        Assert.Null(error);
+        Assert.Single(log.Entries, entry => entry.Msg == "audioRuleIgnored");
+    }
+
+    [Fact]
     public void Backend_is_created_lazily_and_again_after_a_failure()
     {
         var log = new RecordingLog();

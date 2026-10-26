@@ -23,9 +23,10 @@ public class OrchestratorAttachTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new MinimizeWindow(4, 0x1A2B), command),
-            command => Assert.Equal(new ShowShell(5), command),
-            command => AssertManaged(command, 6, 1, (0x1A2B, 4321)));
+            command => Assert.Equal(new MuteProcessTree(4, 4321), command),
+            command => Assert.Equal(new MinimizeWindow(5, 0x1A2B), command),
+            command => Assert.Equal(new ShowShell(6), command),
+            command => AssertManaged(command, 7, 1, (0x1A2B, 4321)));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(started.Rev + 1, snapshot.Rev);
         Assert.Equal(started.FocusRequest, snapshot.FocusRequest);
@@ -50,10 +51,10 @@ public class OrchestratorAttachTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new ActivateWindow(7, 0x1A2B), command),
-            command => Assert.Equal(new UnmuteProcessTree(8, 4321), command),
+            command => Assert.Equal(new ActivateWindow(8, 0x1A2B), command),
+            command => Assert.Equal(new UnmuteProcessTree(9, 4321), command),
             command => Assert.Equal(
-                new SetInputRouting(9, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2),
+                new SetInputRouting(10, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2),
                 command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(adopted.Rev + 1, snapshot.Rev);
@@ -75,14 +76,16 @@ public class OrchestratorAttachTests
 
         Assert.Collection(
             first.Commands,
-            command => Assert.Equal(new MinimizeWindow(4, 0x1A2B), command),
-            command => Assert.Equal(new ShowShell(5), command),
-            command => AssertManaged(command, 6, 1, (0x1A2B, 4321)));
+            command => Assert.Equal(new MuteProcessTree(4, 4321), command),
+            command => Assert.Equal(new MinimizeWindow(5, 0x1A2B), command),
+            command => Assert.Equal(new ShowShell(6), command),
+            command => AssertManaged(command, 7, 1, (0x1A2B, 4321)));
         Assert.Collection(
             second.Commands,
-            command => Assert.Equal(new MinimizeWindow(7, 0x2B3C), command),
-            command => Assert.Equal(new ShowShell(8), command),
-            command => AssertManaged(command, 9, 2, (0x1A2B, 4321), (0x2B3C, 24)));
+            command => Assert.Equal(new MuteProcessTree(8, 24), command),
+            command => Assert.Equal(new MinimizeWindow(9, 0x2B3C), command),
+            command => Assert.Equal(new ShowShell(10), command),
+            command => AssertManaged(command, 11, 2, (0x1A2B, 4321), (0x2B3C, 24)));
         var snapshot = Assert.IsType<ShellSnapshot>(second.Snapshot);
         Assert.Equal(started.Rev + 2, snapshot.Rev);
         Assert.Equal(new FocusRequest(FocusRequest.DefaultTarget, 1), snapshot.FocusRequest);
@@ -110,7 +113,8 @@ public class OrchestratorAttachTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new MinimizeWindow(expectedMinimizeCmdId, 0x1A2B), command),
+            command => Assert.Equal(new MuteProcessTree(expectedMinimizeCmdId, 4321), command),
+            command => Assert.Equal(new MinimizeWindow(expectedMinimizeCmdId + 1, 0x1A2B), command),
             command => Assert.IsType<SetManagedWindows>(command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(last.Rev + 1, snapshot.Rev);
@@ -134,9 +138,10 @@ public class OrchestratorAttachTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new MinimizeWindow(4, 0x3C4D), command),
-            command => Assert.Equal(new ShowShell(5), command),
-            command => AssertManaged(command, 6, 1, (0x3C4D, 77)));
+            command => Assert.Equal(new MuteProcessTree(4, 77), command),
+            command => Assert.Equal(new MinimizeWindow(5, 0x3C4D), command),
+            command => Assert.Equal(new ShowShell(6), command),
+            command => AssertManaged(command, 7, 1, (0x3C4D, 77)));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(started.Rev + 1, snapshot.Rev);
         Assert.Equal(new FocusRequest(FocusRequest.DefaultTarget, 1), snapshot.FocusRequest);
@@ -158,8 +163,9 @@ public class OrchestratorAttachTests
 
         Assert.Collection(
             adopted.Commands,
-            command => Assert.Equal(new MinimizeWindow(6, 0x1A2B), command),
-            command => AssertManaged(command, 7, 1, (0x1A2B, 4321)));
+            command => Assert.Equal(new MuteProcessTree(6, 4321), command),
+            command => Assert.Equal(new MinimizeWindow(7, 0x1A2B), command),
+            command => AssertManaged(command, 8, 1, (0x1A2B, 4321)));
         var afterAdoption = Assert.IsType<ShellSnapshot>(adopted.Snapshot);
         Assert.Equal(AppLifecycleState.Background, StateOf(afterAdoption, "netflix"));
         Assert.Equal(AppLifecycleState.Starting, StateOf(afterAdoption, "plex"));
@@ -169,13 +175,13 @@ public class OrchestratorAttachTests
 
         Assert.Collection(
             attached.Commands,
-            command => Assert.Equal(new ActivateWindow(8, 0x2B3C), command),
-            command => Assert.Equal(new UnmuteProcessTree(9, 24), command),
+            command => Assert.Equal(new ActivateWindow(9, 0x2B3C), command),
+            command => Assert.Equal(new UnmuteProcessTree(10, 24), command),
             command => Assert.Equal(
-                new SetInputRouting(10, InputMode.App, AppType.Native, PointerPolicy.Allowed, 2),
+                new SetInputRouting(11, InputMode.App, AppType.Native, PointerPolicy.Allowed, 2),
                 command),
-            command => Assert.Equal(new CancelTimer(11, 1), command),
-            command => AssertManaged(command, 12, 2, (0x1A2B, 4321), (0x2B3C, 24)));
+            command => Assert.Equal(new CancelTimer(12, 1), command),
+            command => AssertManaged(command, 13, 2, (0x1A2B, 4321), (0x2B3C, 24)));
         var snapshot = Assert.IsType<ShellSnapshot>(attached.Snapshot);
         Assert.Equal(starting.FocusRequest, snapshot.FocusRequest);
         Assert.Equal(AppLifecycleState.Foreground, StateOf(snapshot, "plex"));

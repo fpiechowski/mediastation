@@ -353,6 +353,19 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Forget_process_tree_command_envelope_serializes_exactly_and_round_trips()
+    {
+        Command forget = new ForgetProcessTree(8, 4321);
+
+        var json = ContractJson.SerializeEnvelope(forget);
+
+        Assert.Equal("""{"v":1,"type":"forgetProcessTree","payload":{"cmdId":8,"rootPid":4321}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<ForgetProcessTree>(back);
+        Assert.Equal(forget, back);
+    }
+
+    [Fact]
     public void Unmute_process_tree_command_envelope_serializes_exactly_and_round_trips()
     {
         Command unmute = new UnmuteProcessTree(7, 4321);
@@ -548,7 +561,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "setManagedWindows", "sendKey", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "muteProcessTree", "unmuteProcessTree", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
+        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "setManagedWindows", "sendKey", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "muteProcessTree", "unmuteProcessTree", "forgetProcessTree", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -579,6 +592,7 @@ public class CoreMessageContractTests
                 "command-completed.schema.json",
                 "command-failed.schema.json",
                 "foreground-changed.schema.json",
+                "forget-process-tree.schema.json",
                 "input-config.schema.json",
                 "launch-app.schema.json",
                 "minimize-window.schema.json",
@@ -742,6 +756,7 @@ public class CoreMessageContractTests
     [InlineData("show-shell.schema.json", "ShowShell", "cmdId")]
     [InlineData("mute-process-tree.schema.json", "MuteProcessTree", "cmdId,rootPid")]
     [InlineData("unmute-process-tree.schema.json", "UnmuteProcessTree", "cmdId,rootPid")]
+    [InlineData("forget-process-tree.schema.json", "ForgetProcessTree", "cmdId,rootPid")]
     public void Launch_path_schemas_have_title_required_fields_and_no_additional_properties(
         string file,
         string title,

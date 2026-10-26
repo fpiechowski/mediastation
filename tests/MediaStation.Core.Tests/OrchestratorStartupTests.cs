@@ -119,12 +119,13 @@ public class OrchestratorStartupTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new MinimizeWindow(23, 0x1A2B), command),
-            command => Assert.Equal(new ShowShell(24), command),
+            command => Assert.Equal(new MuteProcessTree(23, 4321), command),
+            command => Assert.Equal(new MinimizeWindow(24, 0x1A2B), command),
+            command => Assert.Equal(new ShowShell(25), command),
             command => Assert.Equal(
-                new SetInputRouting(25, InputMode.Shell, null, PointerPolicy.Blocked, 5),
+                new SetInputRouting(26, InputMode.Shell, null, PointerPolicy.Blocked, 5),
                 command),
-            command => Assert.Equal(new RenewSession(26, "netflix"), command));
+            command => Assert.Equal(new RenewSession(27, "netflix"), command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(started.Rev + 6, snapshot.Rev);
         Assert.Equal(new FocusRequest(FocusRequest.DefaultTarget, 2), snapshot.FocusRequest);
@@ -194,9 +195,10 @@ public class OrchestratorStartupTests
 
         Assert.Collection(
             attached.Commands,
-            command => Assert.Equal(new MinimizeWindow(6, 0x1A2B), command),
-            command => Assert.Equal(new CancelTimer(7, 1), command),
-            command => AssertManaged(command, 8, 1, (0x1A2B, 4321)));
+            command => Assert.Equal(new MuteProcessTree(6, 4321), command),
+            command => Assert.Equal(new MinimizeWindow(7, 0x1A2B), command),
+            command => Assert.Equal(new CancelTimer(8, 1), command),
+            command => AssertManaged(command, 9, 1, (0x1A2B, 4321)));
         Assert.DoesNotContain(attached.Commands, command => command is ActivateWindow or RenewSession);
         Assert.Equal(
             AppLifecycleState.Background,

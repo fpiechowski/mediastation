@@ -14,7 +14,7 @@ public sealed partial class Orchestrator
     /// w <c>Background</c> i <see cref="MinimizeWindow"/>, a shell zostaje na wierzchu. Okno po starcie daje
     /// <c>Foreground</c>, gdy decyzja o starcie wciąż jest bieżąca: aktywacja okna i routing wejścia według tabeli
     /// AD-8. Gdy w międzyczasie zapadła nowsza decyzja (Home, wybudzenie), okno dostaje kompensację:
-    /// <see cref="MinimizeWindow"/> i <c>Background</c> bez <see cref="ActivateWindow"/> i bez routingu, bo shell
+    /// <see cref="MuteProcessTree"/>, <see cref="MinimizeWindow"/> i <c>Background</c> bez <see cref="ActivateWindow"/> i bez routingu, bo shell
     /// ma zostać na wierzchu (AD-14). Timeout <c>Starting</c> jest wtedy zdejmowany, a zapisane <c>hwnd</c> pozwala
     /// wrócić przez <c>LaunchApp</c>. Poza <c>NotRunning</c> i <c>Starting</c> fakt jest ignorowany: spóźniony attach
     /// po <c>Failed</c> zostaje w DW-4.
@@ -43,7 +43,11 @@ public sealed partial class Orchestrator
         if (app.ForegroundTransition != _transitionId)
         {
             app.State = AppLifecycleState.Background;
-            var compensating = new List<Command> { new MinimizeWindow(NextCmdId(), attached.Hwnd) };
+            var compensating = new List<Command>
+            {
+                new MuteProcessTree(NextCmdId(), attached.RootPid),
+                new MinimizeWindow(NextCmdId(), attached.Hwnd),
+            };
             if (CancelStartTimeout(app.AppId) is { } staleTimer)
             {
                 compensating.Add(staleTimer);
@@ -71,7 +75,7 @@ public sealed partial class Orchestrator
     /// Adopcja żywej aplikacji po restarcie (AD-10): <c>hwnd</c> trafia do stanu, aplikacja ląduje w <c>Background</c>,
     /// a shell zostaje na ekranie głównym. Adopcja nie jest decyzją o pierwszym planie: nie podbija
     /// <c>transitionId</c> ani <c>_focusSeq</c>, nie wysyła routingu wejścia i nie rusza timerów. Kolejność jest ta
-    /// sama co w Home, bez <c>MuteProcessTree</c> (story 3; AD-5/AD-15): najpierw <see cref="MinimizeWindow"/>, potem <see cref="ShowShell"/> — i tylko
+    /// sama co w Home (AD-5/AD-15): najpierw <see cref="MuteProcessTree"/> (zapisuje też sesje wyciszone przez zabity MediaStation w księdze, więc późniejszy <see cref="UnmuteProcessTree"/> je odcisza), potem <see cref="MinimizeWindow"/>, potem <see cref="ShowShell"/> — i tylko
     /// wtedy, gdy inna aplikacja nie jest aktywna, bo sondy są fire-and-forget i odpowiedź hosta może dotrzeć po
     /// wyborze kafelka.
     /// </summary>
@@ -80,7 +84,11 @@ public sealed partial class Orchestrator
         app.Hwnd = hwnd;
         app.RootPid = rootPid;
         app.State = AppLifecycleState.Background;
-        var commands = new List<Command> { new MinimizeWindow(NextCmdId(), hwnd) };
+        var commands = new List<Command>
+        {
+            new MuteProcessTree(NextCmdId(), rootPid),
+            new MinimizeWindow(NextCmdId(), hwnd),
+        };
         if (!AnotherAppIsActive(app))
         {
             commands.Add(new ShowShell(NextCmdId()));

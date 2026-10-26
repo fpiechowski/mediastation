@@ -21,7 +21,7 @@ public sealed partial class Orchestrator
             && _appsById.TryGetValue(appId, out var app)
             && app.State is AppLifecycleState.Starting or AppLifecycleState.Foreground or AppLifecycleState.Background)
         {
-            return EnterFailed(app, wasForeground: app.State == AppLifecycleState.Foreground);
+            return EnterFailed(app, wasForeground: app.State == AppLifecycleState.Foreground, processAlive: true);
         }
 
         return OrchestratorResult.None;
@@ -52,8 +52,16 @@ public sealed partial class Orchestrator
             return OnStopped(pending);
         }
 
+        // Proces z `Failed` (reguła zachowana przy żywym procesie) zginął: reguła znika, stan i widok bez zmian.
+        if (app.State == AppLifecycleState.Failed)
+        {
+            return ForgetRule(app) is { } forget
+                ? new OrchestratorResult([forget], null)
+                : OrchestratorResult.None;
+        }
+
         return app.State is AppLifecycleState.Starting or AppLifecycleState.Foreground or AppLifecycleState.Background
-            ? EnterFailed(app, wasForeground: app.State == AppLifecycleState.Foreground)
+            ? EnterFailed(app, wasForeground: app.State == AppLifecycleState.Foreground, processAlive: false)
             : OrchestratorResult.None;
     }
 
@@ -70,7 +78,7 @@ public sealed partial class Orchestrator
         }
 
         return app.State is AppLifecycleState.Starting or AppLifecycleState.Foreground or AppLifecycleState.Background
-            ? EnterFailed(app, wasForeground: app.State == AppLifecycleState.Foreground)
+            ? EnterFailed(app, wasForeground: app.State == AppLifecycleState.Foreground, processAlive: true)
             : OrchestratorResult.None;
     }
 
@@ -80,17 +88,33 @@ public sealed partial class Orchestrator
     /// Timeout <c>Starting</c> jest anulowany ostatnią komendą batcha, bo zegar nie ma już czego pilnować.
     /// Awaria na pierwszym planie pokazuje shell i oddaje mu wejście (AD-5/AD-15), a fokus z nowym <c>seq</c>
     /// wskazuje kafelek, który padł (AD-16); to także decyzja o pierwszym planie, więc dostaje nowe
-    /// <c>transitionId</c>. Kolejność komend jest istotna: najpierw <see cref="ShowShell"/>, potem routing,
-    /// na końcu timer.
+    /// <c>transitionId</c>. Kolejność komend jest istotna (AD-5): przy żywym procesie najpierw
+    /// <see cref="MuteProcessTree"/> i <see cref="MinimizeWindow"/> (reguła i <c>RootPid</c> zostają do stopu),
+    /// przy martwym <see cref="ForgetProcessTree"/> (i zerowanie <c>RootPid</c>), potem <see cref="ShowShell"/>,
+    /// routing, na końcu timer. <c>ProcessExited</c> w tle zostawia tylko <see cref="ForgetProcessTree"/>.
     /// </summary>
-    private OrchestratorResult EnterFailed(AppState app, bool wasForeground)
+    private OrchestratorResult EnterFailed(AppState app, bool wasForeground, bool processAlive)
     {
+        var hwnd = app.Hwnd;
         app.Hwnd = null;
         app.State = AppLifecycleState.Failed;
         DropPendingStarts(app.AppId);
         DropPendingStops(app.AppId);
 
         var commands = new List<Command>();
+        if (!processAlive)
+        {
+            if (ForgetRule(app) is { } forget)
+            {
+                commands.Add(forget);
+            }
+        }
+        else if (wasForeground && hwnd is { } liveHwnd)
+        {
+            commands.Add(new MuteProcessTree(NextCmdId(), app.RootPid));
+            commands.Add(new MinimizeWindow(NextCmdId(), liveHwnd));
+        }
+
         if (wasForeground)
         {
             NextTransitionId();

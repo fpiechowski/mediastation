@@ -57,6 +57,12 @@ public sealed record MuteProcessTree(long CmdId, int RootPid) : AudioCommand(Cmd
 public sealed record UnmuteProcessTree(long CmdId, int RootPid) : AudioCommand(CmdId);
 
 /// <summary>
+/// AudioRouter zapomina regułę drzewa <see cref="RootPid"/> i odcisza to, co wyciszył. Orchestrator wysyła ją dopiero
+/// po potwierdzonym końcu procesu, żeby nowy proces z tym samym PID nie odziedziczył wyciszenia (AD-5, AD-15).
+/// </summary>
+public sealed record ForgetProcessTree(long CmdId, int RootPid) : AudioCommand(CmdId);
+
+/// <summary>
 /// Baza komend schedulera timerów: Orchestrator planuje i anuluje terminy, a scheduler w Core
 /// publikuje <see cref="TimerElapsed"/> z powrotem do kolejki. <c>cmdId</c> nie ma korelacji —
 /// timer nie jest zadanym efektem, tylko terminem, więc scheduler nie odpowiada <see cref="CommandCompleted"/>.

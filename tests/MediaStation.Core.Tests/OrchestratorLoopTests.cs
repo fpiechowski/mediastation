@@ -514,8 +514,8 @@ public class OrchestratorLoopTests
         Assert.Contains(dispatched, command => command is MinimizeWindow minimize && minimize.Hwnd == 0x1A2B);
         Assert.Contains(dispatched, command => command is ShowShell);
         Assert.Contains(dispatched, command => command is SetInputRouting { Mode: InputMode.Shell });
-        Assert.Equal(new RenewSession(14, "netflix"), Assert.Single(dispatched.OfType<RenewSession>()));
-        Assert.Equal([new RenewSession(14, "netflix")], web.Renewed);
+        Assert.Equal(new RenewSession(15, "netflix"), Assert.Single(dispatched.OfType<RenewSession>()));
+        Assert.Equal([new RenewSession(15, "netflix")], web.Renewed);
         Assert.DoesNotContain(log.Entries, entry => entry.Level >= LogLevel.Warn);
     }
 

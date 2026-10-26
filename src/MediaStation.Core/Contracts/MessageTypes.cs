@@ -29,6 +29,7 @@ public static class MessageTypes
         typeof(ShowShell),
         typeof(MuteProcessTree),
         typeof(UnmuteProcessTree),
+        typeof(ForgetProcessTree),
         typeof(ScheduleTimer),
         typeof(CancelTimer),
         typeof(CommandCompleted),

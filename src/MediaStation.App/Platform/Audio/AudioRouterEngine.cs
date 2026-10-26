@@ -72,6 +72,8 @@ internal sealed class AudioRouterEngine : IDisposable
             case UnmuteProcessTree unmute:
                 (rootPid, muted) = (unmute.RootPid, false);
                 break;
+            case ForgetProcessTree forget:
+                return Forget(forget);
             default:
                 return ErrorCode.Unexpected;
         }
@@ -98,6 +100,36 @@ internal sealed class AudioRouterEngine : IDisposable
             ["rootPid"] = rootPid,
             ["muted"] = muted,
             ["sessions"] = result.SessionsPerRoot.GetValueOrDefault(rootPid),
+        });
+        return null;
+    }
+
+    /// <summary>
+    /// Usuwa regułę korzenia po końcu procesu: kolejny skan odciszy to, co silnik wyciszył, a nowy proces z tym
+    /// samym PID nie dostanie wyciszenia. Brak reguły nie jest błędem.
+    /// </summary>
+    private ErrorCode? Forget(ForgetProcessTree command)
+    {
+        if (command.RootPid <= 0)
+        {
+            _log.Warn(Src, "audioRuleIgnored", new Dictionary<string, object?>
+            {
+                ["cmdId"] = command.CmdId,
+                ["rootPid"] = command.RootPid,
+            });
+            return null;
+        }
+
+        _rule.Remove(command.RootPid);
+        var result = Sweep();
+        if (result.Unavailable)
+        {
+            return ErrorCode.AudioUnavailable;
+        }
+
+        _log.Info(Src, "audioRuleForgotten", new Dictionary<string, object?>
+        {
+            ["rootPid"] = command.RootPid,
         });
         return null;
     }

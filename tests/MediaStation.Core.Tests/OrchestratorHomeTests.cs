@@ -86,9 +86,10 @@ public class OrchestratorHomeTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new MinimizeWindow(7, 0x1A2B), command),
-            command => Assert.Equal(new CancelTimer(8, 1), command),
-            command => AssertManaged(command, 9, 1, (0x1A2B, 4321)));
+            command => Assert.Equal(new MuteProcessTree(7, 4321), command),
+            command => Assert.Equal(new MinimizeWindow(8, 0x1A2B), command),
+            command => Assert.Equal(new CancelTimer(9, 1), command),
+            command => AssertManaged(command, 10, 1, (0x1A2B, 4321)));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(new FocusRequest(FocusRequest.DefaultTarget, 1), snapshot.FocusRequest);
         Assert.Equal(AppLifecycleState.Background, StateOf(snapshot, "netflix"));
@@ -154,10 +155,10 @@ public class OrchestratorHomeTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new ActivateWindow(10, 0x1A2B), command),
-            command => Assert.Equal(new UnmuteProcessTree(11, 4321), command),
+            command => Assert.Equal(new ActivateWindow(11, 0x1A2B), command),
+            command => Assert.Equal(new UnmuteProcessTree(12, 4321), command),
             command => Assert.Equal(
-                new SetInputRouting(12, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2),
+                new SetInputRouting(13, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2),
                 command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(background.Rev + 1, snapshot.Rev);

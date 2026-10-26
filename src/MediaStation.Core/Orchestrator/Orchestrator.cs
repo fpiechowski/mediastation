@@ -132,6 +132,22 @@ public sealed partial class Orchestrator
     private long NextCmdId() => ++_cmdId;
 
     /// <summary>
+    /// <see cref="ForgetProcessTree"/> dla znanego <c>rootPid</c> aplikacji albo <c>null</c>; zeruje <c>RootPid</c>,
+    /// bo reguła przestaje istnieć. Wołać dopiero po potwierdzonym końcu procesu (AD-5, AD-15).
+    /// </summary>
+    private ForgetProcessTree? ForgetRule(AppState app)
+    {
+        if (app.RootPid <= 0)
+        {
+            return null;
+        }
+
+        var forget = new ForgetProcessTree(NextCmdId(), app.RootPid);
+        app.RootPid = 0;
+        return forget;
+    }
+
+    /// <summary>
     /// Kolejny wewnętrzny <c>transitionId</c> decyzji o pierwszym planie. Id nie trafia do kontraktów: rozstrzyga
     /// tylko, która decyzja jest bieżąca (AD-14), a „nowsza” znaczy „większa”.
     /// </summary>
@@ -177,7 +193,11 @@ public sealed partial class Orchestrator
         /// <summary>Uchwyt okna z <see cref="AppWindowAttached"/>; <c>null</c> po zamknięciu, restarcie albo wejściu w <c>Failed</c>.</summary>
         public long? Hwnd { get; set; }
 
-        /// <summary>PID korzenia z <see cref="AppWindowAttached.RootPid"/>; ważny tylko, gdy <see cref="Hwnd"/> jest ustawiony.</summary>
+        /// <summary>
+        /// PID korzenia z <see cref="AppWindowAttached.RootPid"/>; ważny, dopóki nie wysłano
+        /// <see cref="ForgetProcessTree"/> (<see cref="ForgetRule"/> go zeruje), niezależnie od <see cref="Hwnd"/>:
+        /// reguła AudioRoutera żyje do końca procesu, także po wejściu w <c>Failed</c>.
+        /// </summary>
         public int RootPid { get; set; }
 
         /// <summary>
