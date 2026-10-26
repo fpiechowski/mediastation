@@ -15,7 +15,6 @@ covers = ["R8"]
 after = ["1.2"]
 hitl = false
 risk = "medium"
-plan_checkpoint = true
 references = ["architecture-mediastation/architecture-mediastation.md, AD-16 (Eksport schematów działa w przebiegu testów)", "deferred-work.md, DW-28", "../plan-ad8-foreground-gate.md"]
 
 [[entry]]
@@ -40,7 +39,6 @@ covers = ["R3", "R5", "R8"]
 after = [1, 2, "1.1", "1.7", "2.10", "3.5"]
 hitl = false
 risk = "high"
-plan_checkpoint = true
 references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (tabela routingu, wiersz shell; Actions w trybie shell; AppMenu, sprawdzanie Intents)", "architecture-mediastation/architecture-mediastation.md, AD-16", "architecture-mediastation/architecture-mediastation.md, Consistency Conventions (Testy kodu App)", "tickets/epic-foundation-contracts/epic-foundation-contracts-retrospective.md, F11, R4/N3"]
 
 [[entry]]
