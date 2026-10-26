@@ -27,7 +27,7 @@ sources:
 | Użytkownicy | Eliza — codzienna użytkowniczka, nietechniczna. Autor — konfiguruje i naprawia |
 | Form-factor | Jedna powierzchnia: TV Hisense 1920×1080, 10-foot UI, kanapa ~3 m, wieczór, słabe ciepłe światło |
 | Wejście | Pilot G20S Pro przez dongle USB 2.4G (strzałki, OK, Back, Home, przycisk Klawiatura), klawiatura, gamepad. Bez myszy, kursor ukryty. Żyroskop pilota w UI MediaStation tylko w OSK |
-| Model wejścia | InputHub → Actions `{kind: Up\|Down\|Left\|Right\|Ok\|Back\|Home\|AppMenu\|Keyboard, phase: press\|repeat\|long}`; Orchestrator zmienia tryby `shell\|app\|osk` (AD-8) |
+| Model wejścia | InputHub → Actions `{kind: Up\|Down\|Left\|Right\|Ok\|Back\|Home\|Keyboard, phase: press\|repeat\|long}`; Orchestrator zmienia tryby `shell\|app\|osk` (AD-8) |
 | UI system | React w WebView2 (`web/shell`), brak design systemu — tokeny od zera w `DESIGN.md` |
 | Okna / platforma | Stały viewport 1920×1080, bez responsive i breakpointów; title-safe 5%. Shell w WebView2; Netflix w osobnym procesie Edge; OSK jako osobne okno topmost NOACTIVATE (fallback: OSK rysowana przez PageRuntime w stronie — otwarte w architekturze). Weryfikacja wizualna tylko w 1920×1080 |
 | Netflix | Osobny proces Edge (CDP); fokus rysuje PageRuntime, kontrakt ekranów od ServiceDriver (AD-7) |
