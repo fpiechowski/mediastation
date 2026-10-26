@@ -10,7 +10,6 @@ public enum ActionKind
     Ok,
     Back,
     Home,
-    AppMenu,
     Keyboard,
 }
 

@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { Action } from '../../contracts/generated/action';
 import type { ShellSnapshot } from '../../contracts/generated/shell-snapshot';
-import { CATEGORIES, applyAction, applyFocusRequest, initialFocusState, tilesOf, type FocusState } from './focus';
+import {
+  CATEGORIES,
+  applyAction,
+  applyFocusRequest,
+  applySnapshot,
+  initialFocusState,
+  reconcileMenu,
+  tilesOf,
+  type FocusState,
+} from './focus';
 
 type AppTile = ShellSnapshot['apps'][number];
 
@@ -106,8 +115,8 @@ describe('applyAction', () => {
 
   it('OK na notRunning i background wysyła launchApp', () => {
     const list = [tile('a', 'notRunning'), tile('b', 'background')];
-    expect(applyAction(focused('a'), list, action('ok')).intent).toEqual({ appId: 'a' });
-    expect(applyAction(focused('b'), list, action('ok')).intent).toEqual({ appId: 'b' });
+    expect(applyAction(focused('a'), list, action('ok')).intent).toEqual({ type: 'launchApp', appId: 'a' });
+    expect(applyAction(focused('b'), list, action('ok')).intent).toEqual({ type: 'launchApp', appId: 'b' });
   });
 
   it('OK na innym stanie nic nie robi', () => {
@@ -120,7 +129,7 @@ describe('applyAction', () => {
   it('OK long i pozostałe Actions są bez skutku', () => {
     const before = focused('a');
     expect(applyAction(before, apps, action('ok', 'long'))).toEqual({ state: before });
-    for (const kind of ['down', 'back', 'home', 'appMenu', 'keyboard'] as const) {
+    for (const kind of ['down', 'back', 'home', 'keyboard'] as const) {
       expect(applyAction(before, apps, action(kind))).toEqual({ state: before });
     }
   });
@@ -237,7 +246,7 @@ describe('focusRequest i powrót na ostatni kafelek (AD-16)', () => {
   it('powrót z aplikacji (Home, Back) zostawia fokus na ostatnim kafelku', () => {
     let state = press(atFirst(apps), apps, 'right');
     const launch = applyAction(state, apps, action('ok'));
-    expect(launch.intent).toEqual({ appId: 'b' });
+    expect(launch.intent).toEqual({ type: 'launchApp', appId: 'b' });
     state = launch.state;
     const launched = apps.map((app) => (app.appId === 'b' ? { ...app, state: 'foreground' as const } : app));
     state = applyFocusRequest(state, snapshot(launched, { target: 'default', seq: 1 }, 2));
@@ -264,5 +273,89 @@ describe('focusRequest i powrót na ostatni kafelek (AD-16)', () => {
     const state = applyFocusRequest(atFirst(mixed), snapshot(mixed, { target: 'moonlight', seq: 2 }, 2));
     expect(state).toMatchObject({ zone: 'tiles', activeTab: 'game', focusedAppId: 'moonlight', appliedSeq: 2 });
     expect(state.memory).toMatchObject({ video: 'netflix', game: 'moonlight' });
+  });
+});
+
+describe('AppMenu', () => {
+  const act = (state: FocusState, list: AppTile[], kind: Action['kind'], phase: Action['phase'] = 'press') =>
+    applyAction(state, list, action(kind, phase));
+  const open = (_list: AppTile[], id: string): FocusState => ({ ...focused(id), menu: { appId: id, item: 0 } });
+
+  it.each(['background', 'failed'] as const)('długie OK na %s otwiera menu na pozycji 0', (state) => {
+    const result = act(focused('a'), [tile('a', state)], 'ok', 'long');
+    expect(result.state.menu).toEqual({ appId: 'a', item: 0 });
+    expect(result.intent).toBeUndefined();
+  });
+
+  it.each(['notRunning', 'starting', 'stopping', 'foreground'] as const)('długie OK na %s nic nie robi', (state) => {
+    const before = focused('a');
+    expect(act(before, [tile('a', state)], 'ok', 'long')).toEqual({ state: before });
+  });
+
+  it('OK na failed otwiera menu bez Intentu', () => {
+    const result = act(focused('a'), [tile('a', 'failed')], 'ok');
+    expect(result.state.menu).toEqual({ appId: 'a', item: 0 });
+    expect(result.intent).toBeUndefined();
+  });
+
+  it('OK na background wysyła launchApp i nie otwiera menu; na starting nic', () => {
+    const result = act(focused('a'), [tile('a', 'background')], 'ok');
+    expect(result.intent).toEqual({ type: 'launchApp', appId: 'a' });
+    expect(result.state.menu).toBeNull();
+    const before = focused('a');
+    expect(act(before, [tile('a', 'starting')], 'ok')).toEqual({ state: before });
+  });
+
+  it('Up/Down przesuwają pozycję i zostają na krańcu, Left/Right nic', () => {
+    const list = [tile('a', 'failed')];
+    let state = open(list, 'a');
+    state = act(state, list, 'up').state;
+    expect(state.menu?.item).toBe(0);
+    state = act(state, list, 'down').state;
+    expect(state.menu?.item).toBe(1);
+    state = act(state, list, 'down', 'repeat').state;
+    expect(state.menu?.item).toBe(1);
+    expect(act(state, list, 'left')).toEqual({ state });
+    expect(act(state, list, 'right')).toEqual({ state });
+    expect(act(state, list, 'up').state.menu?.item).toBe(0);
+  });
+
+  it('OK na pozycji 0 i 1 wysyła restartApp / closeApp i zamyka menu', () => {
+    const list = [tile('a', 'failed')];
+    const restart = act(open(list, 'a'), list, 'ok');
+    expect(restart.intent).toEqual({ type: 'restartApp', appId: 'a' });
+    expect(restart.state.menu).toBeNull();
+    const close = act({ ...open(list, 'a'), menu: { appId: 'a', item: 1 } }, list, 'ok');
+    expect(close.intent).toEqual({ type: 'closeApp', appId: 'a' });
+    expect(close.state.menu).toBeNull();
+  });
+
+  it('Back zamyka menu, fokus zostaje na tym kafelku; Home też zamyka', () => {
+    const list = [tile('a', 'failed'), tile('b')];
+    for (const kind of ['back', 'home'] as const) {
+      const result = act(open(list, 'a'), list, kind);
+      expect(result.state).toMatchObject({ menu: null, zone: 'tiles', focusedAppId: 'a' });
+      expect(result.intent).toBeUndefined();
+    }
+  });
+
+  it('reconcileMenu zamyka menu przy zmianie stanu, zniknięciu aplikacji i foreground', () => {
+    const state = open([], 'a');
+    expect(reconcileMenu(state, [tile('a', 'failed')])).toBe(state);
+    expect(reconcileMenu(state, [tile('a', 'background')])).toBe(state);
+    for (const next of ['starting', 'stopping', 'notRunning', 'foreground'] as const) {
+      expect(reconcileMenu(state, [tile('a', next)]).menu).toBeNull();
+    }
+    expect(reconcileMenu(state, [tile('b')]).menu).toBeNull();
+    expect(reconcileMenu(state, [tile('a', 'failed'), tile('b', 'foreground')]).menu).toBeNull();
+  });
+
+  it('nowy seq zamyka menu i stosuje fokus; ten sam seq zostawia menu', () => {
+    const list = [tile('a', 'failed'), tile('b')];
+    const state = open(list, 'a');
+    const same = applySnapshot(state, snapshot(list, { target: 'default', seq: 1 }));
+    expect(same.menu).toEqual({ appId: 'a', item: 0 });
+    const next = applySnapshot(state, snapshot(list, { target: 'b', seq: 2 }));
+    expect(next).toMatchObject({ menu: null, focusedAppId: 'b', appliedSeq: 2 });
   });
 });

@@ -1,5 +1,6 @@
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
+using MediaStation.Core.Orchestrator;
 using Microsoft.Extensions.Time.Testing;
 using CoreOrchestrator = MediaStation.Core.Orchestrator.Orchestrator;
 using static MediaStation.Core.Tests.OrchestratorTestSupport;
@@ -248,8 +249,40 @@ public class OrchestratorStopTests
 
         Assert.Empty(result.Commands);
         Assert.Null(result.Snapshot);
+        var ignored = Assert.IsType<IgnoredIntent>(result.IgnoredIntent);
+        Assert.Equal((restart ? "RestartApp" : "CloseApp", "netflix"), (ignored.Intent, ignored.AppId));
+        Assert.Contains("nie pozwala na zatrzymanie", ignored.Reason);
         var next = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
         Assert.Equal(last.Rev + 1, next.Rev);
         Assert.Equal(last.Apps.Select(app => app.State), next.Apps.Select(app => app.State));
+    }
+
+    [Theory]
+    [InlineData(false, "CloseApp")]
+    [InlineData(true, "RestartApp")]
+    public void Close_or_restart_with_unknown_app_id_is_ignored_with_intent(bool restart, string name)
+    {
+        var (orchestrator, _) = Started();
+
+        var result = orchestrator.Handle(restart ? new RestartApp("nope") : new CloseApp("nope"));
+
+        Assert.Empty(result.Commands);
+        Assert.Null(result.Snapshot);
+        Assert.Equal(new IgnoredIntent(name, "nope", "nieznany appId"), result.IgnoredIntent);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Close_or_restart_while_another_app_is_active_is_ignored_with_intent(bool restart)
+    {
+        var (orchestrator, _) = Started();
+        Background(orchestrator, "netflix");
+        Foreground(orchestrator, "plex");
+
+        var result = orchestrator.Handle(restart ? new RestartApp("netflix") : new CloseApp("netflix"));
+
+        var ignored = Assert.IsType<IgnoredIntent>(result.IgnoredIntent);
+        Assert.Equal("inna aplikacja jest aktywna", ignored.Reason);
     }
 }

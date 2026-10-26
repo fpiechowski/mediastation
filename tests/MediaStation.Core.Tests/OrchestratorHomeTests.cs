@@ -181,7 +181,6 @@ public class OrchestratorHomeTests
     [Theory]
     [InlineData(ActionKind.Ok)]
     [InlineData(ActionKind.Back)]
-    [InlineData(ActionKind.AppMenu)]
     public void Action_other_than_home_is_ignored(ActionKind kind)
     {
         var (orchestrator, _) = Started();

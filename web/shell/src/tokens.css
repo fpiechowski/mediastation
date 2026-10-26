@@ -412,3 +412,48 @@ body {
   display: block;
   color: var(--text-2);
 }
+
+/* components.appmenu: scrim na cały ekran i panel 440px nad kafelkiem (indeks kafelka w rzędzie z --appmenu-index). */
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+}
+
+.appmenu {
+  position: absolute;
+  top: calc(var(--apps-top) + 75px);
+  left: calc(var(--gutter) + 52px + var(--appmenu-index, 0) * (var(--tile-width) + var(--tile-gap)));
+  width: 440px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--elevation-lift);
+}
+
+.appmenu__item {
+  height: 56px;
+  padding: 0 28px 0 24px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-radius: 9999px;
+  font-size: 26px;
+  font-weight: 500;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.appmenu__item .material-symbols {
+  font-size: 24px;
+}
+
+/* focus-pill: pozycja w fokusie = odwrócona pigułka. */
+.appmenu__item--focus {
+  background: var(--focus);
+  color: var(--focus-ink);
+}

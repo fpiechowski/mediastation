@@ -20,11 +20,20 @@ public sealed partial class Orchestrator
     /// </summary>
     private OrchestratorResult OnStop(string appId, bool restart)
     {
-        if (!_appsById.TryGetValue(appId, out var app)
-            || app.State is not (AppLifecycleState.Background or AppLifecycleState.Failed)
-            || AnotherAppIsActive(app))
+        var intent = restart ? nameof(RestartApp) : nameof(CloseApp);
+        if (!_appsById.TryGetValue(appId, out var app))
         {
-            return OrchestratorResult.None;
+            return Ignored(intent, appId, "nieznany appId");
+        }
+
+        if (app.State is not (AppLifecycleState.Background or AppLifecycleState.Failed))
+        {
+            return Ignored(intent, appId, $"stan {app.State} nie pozwala na zatrzymanie");
+        }
+
+        if (AnotherAppIsActive(app))
+        {
+            return Ignored(intent, appId, "inna aplikacja jest aktywna");
         }
 
         var cmdId = NextCmdId();

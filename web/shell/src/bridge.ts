@@ -81,7 +81,6 @@ const ACTION_KINDS: Record<Action['kind'], true> = {
   ok: true,
   back: true,
   home: true,
-  appMenu: true,
   keyboard: true,
 };
 const ACTION_PHASES: Record<Action['phase'], true> = { press: true, repeat: true, long: true };

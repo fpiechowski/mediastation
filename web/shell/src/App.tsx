@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ShellSnapshot } from '../../contracts/generated/shell-snapshot';
 import { connectBridge, sendIntent } from './bridge';
 import { ConfigErrorScreen } from './ConfigErrorScreen';
-import { applyAction, applyFocusRequest, initialFocusState, type FocusState } from './focus';
+import { applyAction, applySnapshot, initialFocusState, type FocusState } from './focus';
 import { Placeholder } from './Placeholder';
 
 export function App() {
@@ -18,7 +18,7 @@ export function App() {
       connectBridge(
         (next) => {
           appsRef.current = next.apps;
-          focusRef.current = applyFocusRequest(focusRef.current, next);
+          focusRef.current = applySnapshot(focusRef.current, next);
           setFocus(focusRef.current);
           setSnapshot(next);
         },
@@ -26,7 +26,7 @@ export function App() {
           const result = applyAction(focusRef.current, appsRef.current, action);
           focusRef.current = result.state;
           setFocus(result.state);
-          if (result.intent) sendIntent('launchApp', result.intent);
+          if (result.intent) sendIntent(result.intent.type, { appId: result.intent.appId });
         },
       ),
     [],

@@ -713,6 +713,27 @@ public class OrchestratorLoopTests
         Assert.Single(published);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Stop_intent_outside_background_or_failed_is_logged_as_ignored(bool restart)
+    {
+        var log = new RecordingLog();
+        using var loop = CreateLoop(out var published, out var dispatched, log);
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        var dispatchedBefore = dispatched.Count;
+        loop.Post(restart ? new RestartApp("netflix") : new CloseApp("netflix"));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "intentIgnored"));
+
+        var entry = Assert.Single(log.Entries, entry => entry.Msg == "intentIgnored");
+        Assert.Equal(restart ? "RestartApp" : "CloseApp", entry.Data!["intent"]);
+        Assert.Equal("netflix", entry.Data["appId"]);
+        Assert.Equal(dispatchedBefore, dispatched.Count);
+        Assert.Single(published);
+    }
+
     private static OrchestratorLoop CreateLoop(
         out ConcurrentQueue<ShellSnapshot> published,
         out ConcurrentQueue<Command> dispatched,

@@ -35,7 +35,6 @@ public class OrchestratorActionTests
     [InlineData(ActionKind.Back, ActionPhase.Repeat)]
     [InlineData(ActionKind.Back, ActionPhase.Long)]
     [InlineData(ActionKind.Keyboard, ActionPhase.Press)]
-    [InlineData(ActionKind.AppMenu, ActionPhase.Press)]
     public void Shell_mode_drops_other_actions(ActionKind kind, ActionPhase phase)
     {
         var (orchestrator, _) = Started();

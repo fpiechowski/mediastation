@@ -111,8 +111,8 @@ public sealed record InputGamepad
 /// <summary>Jedno urządzenie wejścia rozpoznane przez Raw Input.</summary>
 /// <param name="Signature">Sygnatura urządzenia, np. <c>VID_1915&amp;PID_1025</c>; unikalna.</param>
 /// <param name="Keys">
-/// Kod VK z hooka LL w formacie <c>0xNN</c> → logiczny klawisz. <c>appMenu</c> jest niedozwolone: AppMenu to
-/// <c>ok</c> z <c>phase: long</c> interpretowane w Shell (AD-8).
+/// Kod VK z hooka LL w formacie <c>0xNN</c> → logiczny klawisz. AppMenu to <c>ok</c> z <c>phase: long</c>
+/// interpretowane w Shell (AD-8), nie osobny klawisz.
 /// </param>
 public sealed record InputDevice(string Signature, ActionSource Source, IReadOnlyDictionary<string, ActionKind> Keys)
 {

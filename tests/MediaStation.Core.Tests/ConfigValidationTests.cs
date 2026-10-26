@@ -777,12 +777,13 @@ public class ConfigValidationTests
     }
 
     [Fact]
-    public void App_menu_is_not_allowed_as_mapping()
+    public void App_menu_is_rejected_as_unknown_enum_value()
     {
         var error = SingleError(input: InputJson(keys: """{ "0x5D": "appMenu" }"""));
+        var unknown = SingleError(input: InputJson(keys: """{ "0x5D": "banana" }"""));
 
         Assert.Equal("$.devices[0].keys['0x5D']", error.Path);
-        Assert.Contains("appMenu", error.Reason);
+        Assert.Equal(unknown, error);
     }
 
     [Theory]
@@ -966,15 +967,17 @@ public class ConfigValidationTests
     }
 
     [Fact]
-    public void Gamepad_mapping_rejects_app_menu()
+    public void Gamepad_mapping_rejects_app_menu_as_unknown_enum_value()
     {
         var error = SingleError(input: """
             { "devices": [], "gamepadHome": ["back", "start"], "gamepad": { "y": "appMenu" } }
             """);
+        var unknown = SingleError(input: """
+            { "devices": [], "gamepadHome": ["back", "start"], "gamepad": { "y": "banana" } }
+            """);
 
-        Assert.Equal(
-            new ConfigError(Input, "$.gamepad.y", "„appMenu” niedozwolone w mapowaniu (AppMenu to długie „ok” w Shell)"),
-            error);
+        Assert.Equal("$.gamepad.y", error.Path);
+        Assert.Equal(unknown, error);
     }
 
     [Fact]

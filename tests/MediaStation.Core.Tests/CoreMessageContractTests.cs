@@ -11,12 +11,12 @@ public class CoreMessageContractTests
     [Fact]
     public void Action_envelope_serializes_exactly_and_round_trips()
     {
-        var action = new Action(ActionKind.AppMenu, ActionPhase.Long, ActionSource.Remote, 123456);
+        var action = new Action(ActionKind.Ok, ActionPhase.Long, ActionSource.Remote, 123456);
 
         var json = ContractJson.SerializeEnvelope(action);
 
         Assert.Equal(
-            """{"v":1,"type":"action","payload":{"kind":"appMenu","phase":"long","source":"remote","tsMono":123456}}""",
+            """{"v":1,"type":"action","payload":{"kind":"ok","phase":"long","source":"remote","tsMono":123456}}""",
             json);
         Assert.Equal(action, ContractJson.DeserializeEnvelope<Action>(json));
     }
@@ -575,7 +575,7 @@ public class CoreMessageContractTests
         Assert.False(schema["additionalProperties"]!.GetValue<bool>());
 
         var properties = schema["properties"]!;
-        AssertNamedEnum(properties["kind"], "ActionKind", ["up", "down", "left", "right", "ok", "back", "home", "appMenu", "keyboard"]);
+        AssertNamedEnum(properties["kind"], "ActionKind", ["up", "down", "left", "right", "ok", "back", "home", "keyboard"]);
         AssertNamedEnum(properties["phase"], "ActionPhase", ["press", "repeat", "long"]);
         AssertNamedEnum(properties["source"], "ActionSource", ["remote", "keyboard", "gamepad"]);
         Assert.Equal("integer", properties["tsMono"]!["type"]!.GetValue<string>());

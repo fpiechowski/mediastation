@@ -1,4 +1,5 @@
 import type { ShellSnapshot } from '../../contracts/generated/shell-snapshot';
+import { AppMenu } from './AppMenu';
 import { CATEGORIES, tabsWithBackground, tilesOf, type FocusState } from './focus';
 import { Tile } from './Tile';
 
@@ -52,9 +53,16 @@ export function Placeholder({ apps, focus }: PlaceholderProps) {
       ) : (
         <ul className="tiles">
           {tiles.map((app) => (
-            <Tile key={app.appId} app={app} focused={focus.zone === 'tiles' && app.appId === focus.focusedAppId} />
+            <Tile key={app.appId} app={app} focused={focus.zone === 'tiles' && focus.menu === null && app.appId === focus.focusedAppId} />
           ))}
         </ul>
+      )}
+      {focus.menu !== null && (
+        <AppMenu
+          title={apps.find((app) => app.appId === focus.menu?.appId)?.title ?? ''}
+          index={Math.max(0, tiles.findIndex((app) => app.appId === focus.menu?.appId))}
+          item={focus.menu.item}
+        />
       )}
     </main>
   );

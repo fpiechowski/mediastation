@@ -67,3 +67,34 @@ describe('fokus po starcie (focusRequest default)', () => {
     expect(html).toMatch(/<li class="tile tile--focused">(?:(?!<li).)*netflix/);
   });
 });
+
+describe('AppMenu', () => {
+  const apps = [app('netflix', 'video', 'failed'), app('plex', 'video', 'notRunning')];
+  const html = (item: number) =>
+    renderToStaticMarkup(
+      <Placeholder
+        apps={apps}
+        focus={{ ...initialFocusState, focusedAppId: 'netflix', menu: { appId: 'netflix', item } }}
+      />,
+    );
+
+  it('rysuje scrim, dwie pozycje i dokładnie jeden fokus (pozycja menu, nie kafelek)', () => {
+    const out = html(0);
+
+    expect(out).toContain('class="scrim"');
+    expect(out).toContain('Uruchom ponownie');
+    expect(out).toContain('Zamknij');
+    expect(out).not.toContain('tile--focused');
+    expect(out.match(/appmenu__item--focus/g)).toHaveLength(1);
+    expect(out).toMatch(/appmenu__item appmenu__item--focus"[^>]*>(?:(?!<li).)*Uruchom ponownie/);
+  });
+
+  it('fokus pozycji 1 stoi na „Zamknij”', () => {
+    expect(html(1)).toMatch(/appmenu__item--focus"[^>]*>(?:(?!<li).)*Zamknij/);
+  });
+
+  it('bez menu nie ma scrimu', () => {
+    const out = renderToStaticMarkup(<Placeholder apps={apps} focus={initialFocusState} />);
+    expect(out).not.toContain('class="scrim"');
+  });
+});

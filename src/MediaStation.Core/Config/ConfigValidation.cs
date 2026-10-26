@@ -394,12 +394,6 @@ public static class ConfigValidation
                     continue;
                 }
 
-                if (kind == ActionKind.AppMenu)
-                {
-                    errors.Add(keyPath, "„appMenu” niedozwolone w mapowaniu (AppMenu to długie „ok” w Shell)");
-                    continue;
-                }
-
                 // Ten sam VK w dwóch urządzeniach musi mieć ten sam kind: połknięcie i kind zapadają po samym VK,
                 // a walidacja broni politykę przed niejednoznacznym mapowaniem.
                 if (kindsByVirtualKey.TryGetValue(virtualKey, out var first))
@@ -503,8 +497,8 @@ public static class ConfigValidation
     }
 
     /// <summary>
-    /// Mapowanie pada (AD-8): <c>appMenu</c> nie ma odpowiednika na padzie, a przycisk kombinacji Home nie może mieć
-    /// własnego mapowania, żeby Home nie dublowało Actions składowych.
+    /// Mapowanie pada (AD-8): przycisk kombinacji Home nie może mieć własnego mapowania, żeby Home nie dublowało
+    /// Actions składowych.
     /// </summary>
     private static void CheckGamepad(InputConfig config, FileErrors errors)
     {
@@ -519,11 +513,7 @@ public static class ConfigValidation
         {
             var name = JsonNamingPolicy.CamelCase.ConvertName(button.ToString());
             var buttonPath = JsonErrorPath.Property(gamepadPath, name);
-            if (kind == ActionKind.AppMenu)
-            {
-                errors.Add(buttonPath, "„appMenu” niedozwolone w mapowaniu (AppMenu to długie „ok” w Shell)");
-            }
-            else if (config.GamepadHome.Contains(button))
+            if (config.GamepadHome.Contains(button))
             {
                 errors.Add(
                     buttonPath,

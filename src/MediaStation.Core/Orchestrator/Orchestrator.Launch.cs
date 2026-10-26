@@ -48,7 +48,11 @@ public sealed partial class Orchestrator
 
     /// <summary>Odrzucenie <see cref="LaunchApp"/>: bez komend i snapshotu, z <see cref="IgnoredIntent"/> do logu pętli.</summary>
     private static OrchestratorResult Ignored(LaunchApp launch, string reason) =>
-        OrchestratorResult.None with { IgnoredIntent = new IgnoredIntent(nameof(LaunchApp), launch.AppId, reason) };
+        Ignored(nameof(LaunchApp), launch.AppId, reason);
+
+    /// <summary>Odrzucenie Intentu o danej nazwie: bez komend i snapshotu, z <see cref="IgnoredIntent"/> do logu pętli.</summary>
+    private static OrchestratorResult Ignored(string intent, string appId, string reason) =>
+        OrchestratorResult.None with { IgnoredIntent = new IgnoredIntent(intent, appId, reason) };
 
     /// <summary>
     /// Powrót z tła: proces żyje, więc wystarczą <see cref="ActivateWindow"/> i routing wejścia aplikacji.
