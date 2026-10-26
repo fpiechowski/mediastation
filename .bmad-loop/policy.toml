@@ -93,7 +93,7 @@ spec_folder = ""
 #   "never" -> the plan stays at `built` for a human to mark.
 mark_done = "auto"           # auto | never
 # When a ticket gets the thorough review: "high-risk" (its risk is high), "always", "never".
-thorough_review = "high-risk"  # never | high-risk | always
+thorough_review = "always"     # never | high-risk | always — always: decyzja inicjatywy wymaga pełnych lenses od risk medium (retro epiki 4, A1)
 
 [adapter]
 name = "claude"              # claude | codex | gemini | copilot | antigravity | opencode-http (alias: opencode) | <custom .bmad-loop/profiles/*.toml>

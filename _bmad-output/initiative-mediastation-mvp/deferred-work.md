@@ -154,7 +154,8 @@ source_spec: `tickets/epic-input/epic-input-retrospective.md`, follow-through A4
 severity: low
 reason: `epic-input` dodała sink i command, nie gałąź, więc rozbicie nie stało się pilne. Wyzwalacz: pierwsza epika, która dodaje gałąź dispatchu (`epic-home-screen`, `epic-osk`) najpierw wydziela grupy handlerów per funkcja i dzieli plik testów.
 owner: epic-home-screen, story 4.2 (refactor otwierający), 2026-10-26
-status: open
+status: done 2026-10-26
+resolution: story 4.2 (`00c2c1d`): handlery Orchestratora w partialach (`Orchestrator.cs` 196 linii), testy podzielone (m.in. `OrchestratorFailureTests.cs`); retro epiki 4, F2/A2.
 
 ### DW-20: Plany ticketów nie zapisują HEAD zamknięcia, a squashe pętli są nazywane `Merge`.
 origin: retro epiki 2 (A6), retro epiki 3 (A5)
@@ -218,7 +219,8 @@ source_spec: `tickets/epic-input/epic-input-retrospective.md`, A10
 severity: low
 reason: Zakres „odroczone znaleziska ze stories 1-9" rozrósł się do przepisania narzędzia, które potem wymagało własnego review, pominiętego. Sweep ma mieć listę ID z ledgera, dzielić się przy przekroczeniu budżetu sesji i nie przepisywać narzędzi bez wpisu w ledgerze. Story 4.10 zastosowała to: lista ID ustalona na starcie była pusta (stories 4.1–4.9 i 4.11 odroczyły 0 znalezisk), kodu nie zmieniono. Wpis zostaje `open` do zamknięcia przez orkiestrator/PO po jego weryfikacji 4.10.
 owner: PO / bmad-loop tooling; zastosowane w zakresie story 4.10 (Refactor sweep z zamkniętą listą ID), 2026-10-26
-status: open
+status: done 2026-10-26
+resolution: zasada zastosowana i zweryfikowana w 4.10 (`2d7cfaa`): lista ID ustalona na starcie, pusta, bez zmian w kodzie i bez przepisywania narzędzi; retro epiki 4, follow-through A10. Zamknięte przez PO.
 
 ### DW-27: `--calibrate-input` filtruje po sygnaturach z `input.json`, więc nowy pilot (inny VID/PID) nie daje żadnego logu.
 origin: retro epiki 3, 2026-10-23 (Q4)
@@ -236,7 +238,8 @@ source_spec: `_bmad-output/plan-ad8-foreground-gate.md`
 severity: medium
 reason: Application Control blokuje świeży niepodpisany `MediaStation.SchemaExport.dll` (0x800711C7, CodeIntegrity 3077/3033), więc `dotnet build` nie odświeża `web/contracts` i publish wymaga `-p:SkipWebBuild=true`, ręcznego `npm run build` w `web/` i ręcznego skopiowania `web/shell/dist` do `publish/shell`. Schemat `set-managed-windows.schema.json` i `generated/set-managed-windows.ts` zostały napisane ręcznie w formacie istniejących plików (pliki nie są w gicie, więc nic nie rozjeżdża się w repo; test `CoreMessageContractTests` sprawdza kształt schematu z kodu). Dotyczy też UM760, jeśli ma tę samą politykę. Rozwiązanie: podpisać narzędzie albo dodać je do reguł Application Control; alternatywnie generować schematy z testów.
 owner: epic-home-screen, story 4.1, 2026-10-26
-status: open
+status: done 2026-10-26
+resolution: story 4.1 (`d7780e4`): eksport schematów w przebiegu testów; odbiór epiki 4 na UM760 (P0.2, P0.3): `dotnet publish` bez ręcznych kroków i czysty `git status` po buildzie.
 
 ### DW-29: `check-home-s10.ps1` nie znajduje okna Edge jako celu (`no target window`), mimo że okno Edge jest otwarte.
 origin: plan `tickets/epic-input/epic-input-um760-acceptance-2.md`, S12 (rerun 1), 2026-10-25
@@ -245,7 +248,8 @@ source_spec: `tickets/epic-input/epic-input-um760-acceptance-2.md`, S12; DW-13, 
 severity: medium
 reason: Na UM760 (HEAD 2bb3c95) powtórka S12 z otwartymi przez użytkownika oknami dała moonlight 4/4 i desktop 4/4, ale edge 4 × `no target window`; shell-hung dał 2 × `browser window` i 2 × `target not foreground`. Przyczyna nie zbadana (acceptance nie diagnozuje); powiązane z DW-13/14/15 (wykrywanie okien Edge po `pid:handle`, `GW_OWNER`). Bez tego nie ma wyniku 16/16 (Done when 3).
 owner: bmad-build (S12 odbioru epiki 3)
-status: open
+status: done 2026-10-26
+resolution: bug 3.13 (`07a5cde`) zmienił wybór celu Edge i kolejność celów; odbiór epiki 3 (`epic-input-um760-acceptance-3.md`, S13, HEAD 08eaade, UM760): dwa uruchomienia 16/16 i 4/4.
 
 ### DW-30: `rawInput` w `--calibrate-input` loguje tylko Home i Back; OK, strzałki nie dają wpisów, a przycisk asystenta głosowego G20S Pro ma tylko usage 0x00CF bez VK.
 origin: plan `tickets/epic-input/epic-input-um760-acceptance-2.md`, S9 i S10, 2026-10-25
@@ -254,7 +258,8 @@ source_spec: `tickets/epic-input/epic-input.md`, Done when 5; `tickets/epic-inpu
 severity: medium
 reason: Trzy przebiegi S9 na UM760 (HEAD 2bb3c95): wpisy tylko Home (vk 0xAC, usage 0x0223) i Back (vk 0xA6, usage 0x0224), oba injected true, `llBeforeRawMs` null; brak OK i strzałek; asystent głosowy: usage 0x00CF, `hasVk` false. Kryterium „≥7 wpisów z hasVk” niespełnione. S10: żaden przycisk z VK nie pasuje na Klawiaturę, więc Source conflict do `bmad-architecture` (wyzwalacz HID zamiast VK, zmiana AD-8). Dodatkowo obserwacja użytkownika: Home w trybie kalibracji (nie połyka klawiszy) otworzył Edge.
 owner: bmad-architecture (Source conflict), bmad-build (wpisy kalibracji)
-status: open
+status: done 2026-10-26
+resolution: bug 3.14 (`c0dabb3`, kryterium zawężone w `120f28f`), AD-8 z wyzwalaczem HID `0x00CF` (`e9fab30`), stories 3.15–3.17 (`5498b5f`, `f4b931b`, `08eaade`); odbiór epiki 3 na UM760 zaakceptowany (`epic-input-um760-acceptance-3.md`).
 
 ### DW-31: Zawieszony shell zasłonięty oknem-duchem `dwm` nie dostaje Home od hooka LL (brak `keyEnter`/`action` w logu aplikacji), więc Home otwiera przeglądarkę.
 origin: spec-deferred 36ef84bc8a59
@@ -270,4 +275,40 @@ location: tools/check-home-s10.ps1 Select-EdgeWindow
 source_spec: `tickets/epic-input/tickets/bug-check-home-s10-home-przy-zawieszonym-shellu-i-cel-edge-nie-d-plan.md`
 severity: low
 reason: `Select-EdgeWindow` nie odróżnia okien tego samego procesu; zawężenie daje `-EdgeTitle`. Skutek: Home wysyłany nad niewłaściwym oknem Edge, wynik nadal mierzy log aplikacji.
+status: open
+
+### DW-33: Stany kafelka `Starting`, `Stopping`, `Foreground` i `Background`, kropka „w tle”, powrót fokusu na ostatni kafelek i długie OK na `Background` nie zostały sprawdzone na żywym shellu.
+origin: odbiór epiki 4 na UM760, 2026-10-26 (`tickets/epic-home-screen/epic-home-screen-um760-acceptance.md`, Poza zakresem i werdykt)
+location: web/shell (kafelek, zakładki, model fokusu, AppMenu); Orchestrator (snapshot z `focusRequest`)
+source_spec: `tickets/epic-home-screen/epic-home-screen.md`, R2, R3, R4, Done when 2, 3, 4
+severity: medium
+reason: Bez hostów jedynym stanem osiągalnym na UM760 był `Failed`; reszta jest pokryta tylko testami na snapshotach testowych (decyzja tracer bulleta epiki 4). Pierwsze prawdziwe okno aplikacji daje dev harness epic-windows-audio (story 5.1). Odbiór tej epiki na UM760 dokłada scenariusze: kafelek w `Starting` i `Foreground` po OK, w `Background` z kropką na zakładce po Home, fokus na ostatnim kafelku po powrocie, AppMenu z długiego OK na `Background`, a w logu `RestartApp` odróżniony od `CloseApp` (po restarcie nowy start aplikacji).
+owner: epic-windows-audio (odbiór całej epiki przez `fp-acceptance`), decyzja PO przy zamknięciu epiki 4, 2026-10-26
+status: open
+
+### DW-34: `tools/inject-power.ps1` liczy wszystkie `snapshotPublished` procesu, więc na aplikacji używanej przed skryptem kończy się fałszywym FAIL.
+origin: odbiór epiki 4 na UM760, 2026-10-26, S18 (pierwszy przebieg)
+location: tools/inject-power.ps1 (sprawdzenie `snapshotPublished: expected 3`, `seq` od 1)
+source_spec: `tickets/epic-home-screen/epic-home-screen-um760-acceptance.md`, S18
+severity: low
+reason: Przy aplikacji działającej od S5 skrypt zobaczył 9 snapshotów (rev 1–7 sprzed wybudzeń) i `seq 1 instead of 2`, choć oba wybudzenia dały poprawne `focusRequest{default}` z rosnącym `seq`; powtórka na świeżo uruchomionej aplikacji przeszła. Naprawa: liczyć snapshoty i `seq` względem ostatniego snapshotu przed pierwszym `powerSignalInjected`, albo odmówić startu z jasnym komunikatem, gdy aplikacja ma historię. Do tego czasu plany odbioru uruchamiają S18 na świeżej aplikacji.
+owner: następna story dotykająca `tools/inject-power.ps1` albo Refactor sweep epic-windows-audio
+status: open
+
+### DW-35: Granica most/okno shella (4.3/4.11) i przyrost `tokens.css` (6 commitów) nie przeszły review na poziomie całej epiki.
+origin: retro epiki 4, 2026-10-26 (F5/A3)
+location: src/MediaStation.App/Shell/ (`ShellBridge`, `ShellOutbox`, `ShellWindow`); web/shell/src/tokens.css
+source_spec: `tickets/epic-home-screen/epic-home-screen-retrospective.md`, F5, A3
+severity: low
+reason: Review szło per ticket; retro nie uruchomiło review diffu `fe0a400..2d7cfaa`. Odbiór na UM760 nie pokazał błędów hosta shella (0× `navigationBlocked`, `newWindowBlocked`, `webViewProcessFailed`), więc ryzyko dotyczy struktury, nie zachowania. Jedno `bmad-review` tych plików przed pierwszą story, która zmienia most albo `tokens.css`.
+owner: epic-windows-audio (story 5.1 dotyka okna shella) albo epic-netflix-dpad, pierwsza z nich
+status: open
+
+### DW-36: `MissingHostPort` odpowiada `CommandFailed{ errorCode: unexpected }`, więc każdy OK na kafelku bez hosta daje `warn commandFailed`, nieodróżnialny od prawdziwej awarii.
+origin: odbiór epiki 4 na UM760, 2026-10-26, S5 (pierwszy przebieg, zmiana planu z `--allow "msg=commandFailed"`)
+location: src/MediaStation.App/Hosts/MissingHostPort.cs:45,59
+source_spec: `tickets/epic-home-screen/epic-home-screen-um760-acceptance.md`, S5
+severity: low
+reason: Brak hosta jest stanem przewidzianym (decyzja tracer bulleta), a `unexpected` znaczy awarię, więc plany odbioru muszą dopuszczać `commandFailed` i tracą czułość na prawdziwe błędy. Rozwiązanie: dedykowany `ErrorCode` (np. `HostMissing`) w AD-4 albo zniknięcie `MissingHostPort` dla typów z prawdziwym hostem; rozstrzyga epic-browserhost przy pierwszym prawdziwym hoście.
+owner: epic-browserhost (pierwszy prawdziwy host)
 status: open
