@@ -1,0 +1,17 @@
+# BrowserHost — entries w kolejności budowy. tickets.py reads it.
+# Kolejność tabel = kolejność budowy; `id` nie jest kolejnością.
+# Epika nie jest jeszcze zaplanowana: tu jest tylko story 1 (spike), na którą czekają epic-windows-audio (5.5) i epic-osk.
+# Planowanie epiki zachowuje ten wpis jako pierwszy, z tym samym `id`.
+# Ścieżki w `references` są względne do folderu inicjatywy.
+
+[[entry]]
+id = 1
+type = "spike"
+title = "Tryb okna przeglądarki i źródło wersji poza CDP"
+description = "Rozstrzyga dwa otwarte pytania specu przed stories WindowManager i OSK (Decision 2026-10-18 w Notes epiki): (1) jedna flaga trybu okna Edge dla Netflixa spośród `--app`, `--start-fullscreen` i `--kiosk`, mierzona na Edge na UM760 z flagami z AD-1: minimalizacja i przywrócenie bez `SW_HIDE`, pełny ekran bez ramki i paska, zachowanie `f`/`Escape` playera, brak paska adresu, wpływ na DRM i jakość (1080p, PlayReady); (2) źródło wersji przeglądarki spoza CDP, bieżącej przed startem i poprzedniej w `profiles\\<appId>\\` (kandydaci: `FileVersion` binarki, `Last Version` w `user-data-dir`). Wynik wraca do AD-1 i AD-13 w spine przez `bmad-architecture`."
+verify = "Plan spike'a zawiera wybraną flagę z pomiarami dla każdej z trzech (minimalizacja i przywrócenie, pełny ekran, `f`/`Escape`, jakość i DRM) oraz źródło wersji z odczytem na bieżącej maszynie; AD-1 i AD-13 w architekturze mają rozstrzygnięcie zamiast otwartego pytania."
+covers = []
+after = []
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-1, AD-13 (Aktualizacja przeglądarki i dostępność CDP), Deferred (otwarte pytania)", "spec-mediastation/spec-mediastation.md, Open Questions (tryb okna, źródło wersji)", "research-browser-control-for-streaming-services/digests/spike-um760.md, claims S1, S8"]

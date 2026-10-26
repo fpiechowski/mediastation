@@ -1,0 +1,90 @@
+# Windows & audio focus — entries w kolejności budowy. tickets.py reads it.
+# Kolejność tabel = kolejność budowy; `id` nie jest kolejnością.
+# Lane Core: tracer 1 → AudioRouter 2 → sekwencja 3 → ForegroundChanged 4. Lane harnessu: 1 → 5 (też po 6.1).
+# 6 (jeden właściciel okien) po 4 i 5; 7 Refactor sweep na końcu.
+# Decyzje przecinające kilka stories (dev harness, polityka ForegroundChanged, pierwsze pokazanie shella, dług) są w Notes epiki.
+# Ścieżki w `references` są względne do folderu inicjatywy.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Tracer bullet: Home przywraca shell nad oknem Edge z dev harnessu"
+description = "Najcieńsza ścieżka przez warstwy epiki. Dev harness w `Hosts/DevHarness` (włączany `MEDIASTATION_DEV_HARNESS=1`, Decision w Notes epiki) obsługuje typ `web`: `StartApp` uruchamia `msedge.exe` albo `chrome.exe` według `browser` z `apps.json` z `--user-data-dir=profiles\\<appId> --no-first-run --no-default-browser-check --autoplay-policy=no-user-gesture-required` i adresem z `MEDIASTATION_HARNESS_URL` (domyślnie `about:blank`), bez portu CDP; znajduje widoczne okno najwyższego poziomu drzewa procesów (`GA_ROOT`, klasa `Chrome_WidgetWin_1`) i raportuje `AppWindowAttached{ appId, hwnd, rootPid }`, `StopApp` zamyka drzewo (najpierw `WM_CLOSE`, po limicie kill) i raportuje `ProcessExited`, `ProbeExisting` podpina żywy proces przeglądarki z `--user-data-dir=profiles\\<appId>` i raportuje `AppWindowAttached`, inaczej milczy, a `RenewSession` milczy zawsze. Harness nigdy sam nie wynosi okna (AD-14). Prawdziwy WindowManager w `Platform/Window` zastępuje `LogWindowManagerPort`: kolejka i własny wątek z pętlą komunikatów (story 4 rejestruje na nim WinEvent), `ActivateWindow` (restore, gdy zminimalizowane, potem foreground z odblokowaniem: symulowany Alt ze znacznikiem przez helper 3.7, fallback `AttachThreadInput`), `MinimizeWindow` (minimalizacja bez aktywacji, nigdy `SW_HIDE`), `ShowShell` (to samo dla uchwytu shella, który App wpisuje po utworzeniu okna; operacje na oknie shella przez `ShowWindowAsync` i asynchroniczne `SetWindowPos`, żeby zawieszony UI nie blokował). Każda komenda kończy się `CommandCompleted` albo `CommandFailed` z nowym `ErrorCode` (`WindowNotFound`, `ForegroundDenied`) i wpisem `windowCommand{ type, cmdId, hwnd, result }` (nowe kody w `ErrorCode`, schematy i typy TS odświeżone wg AD-16); Orchestrator loguje porażkę i nie zmienia stanu. Decyzje (wybór odblokowania, mapowanie komendy na wywołania, okno drzewa procesów) leżą poza typami Win32 i mają testy przez linkowane źródła App."
+verify = "`dotnet test` przechodzi z testami: `MinimizeWindow` nigdy nie daje `SW_HIDE`, nieznany albo martwy `hwnd` daje `CommandFailed{ WindowNotFound }`, odmowa foreground po obu metodach odblokowania daje `ForegroundDenied`, wybór okna drzewa pomija okna z właścicielem i niewidoczne. Na bieżącej maszynie z `MEDIASTATION_DEV_HARNESS=1` i sample `apps.json`: OK na kafelku `web` otwiera okno Edge na pierwszym planie (log `appWindowAttached` z `rootPid` i `windowCommand ActivateWindow completed`), a cztery kolejne Home dają za każdym razem shell na pierwszym planie i okno Edge z `IsIconic` i `IsWindowVisible` prawdziwymi (`windowCommand MinimizeWindow` i `ShowShell` `completed`); bez zmiennej OK daje jak dotąd `startWithoutHost`."
+covers = ["R1", "R2", "R8"]
+after = ["2.3", "2.10", "3.7", "4.3"]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-5, AD-14, AD-15", "architecture-mediastation/architecture-mediastation.md, AD-8 (znacznik `dwExtraInfo`, bramka foreground i `SetManagedWindows`)", "research-browser-control-for-streaming-services/digests/spike-um760.md, claims S8, S10"]
+
+[[entry]]
+id = 2
+type = "story"
+title = "AudioRouter: wyciszenie drzewa procesów od rootPid i nowe sesje audio"
+description = "Najmniej pewna część epiki (Decision w Notes epiki). Core dostaje komendy `MuteProcessTree{ cmdId, rootPid }` i `UnmuteProcessTree{ cmdId, rootPid }` i port AudioRoutera; Orchestrator wysyła je na dwóch głównych ścieżkach: Home z aplikacją na pierwszym planie (`MuteProcessTree` przed `MinimizeWindow`) i aktywacja (`UnmuteProcessTree` po `ActivateWindow`); pozostałe ścieżki dokłada story 3. AudioRouter w `Platform/Audio` na własnym wątku trzyma regułę (zbiór wyciszonych i odciszonych korzeni), wylicza sesje audio na wszystkich aktywnych urządzeniach odtwarzania, przypisuje sesję do drzewa po łańcuchu rodziców PID od `rootPid` (sesja Edge i Chrome jest w procesie potomnym, S9), ustawia mute przez `ISimpleAudioVolume`, a gdy sesja go nie udostępnia (E_NOINTERFACE na 26300, S9), przez `IChannelAudioVolume` (wszystkie kanały na 0 i z powrotem na zapamiętane wartości). Rejestruje powiadomienie o nowej sesji na każdym urządzeniu i nowym urządzeniu i stosuje do niej bieżącą regułę drzewa w ciągu ok. 1 s (R6). Odpowiada `CommandCompleted` albo `CommandFailed{ AudioUnavailable }` i loguje `audioRuleApplied{ rootPid, muted, sessions }` oraz `audioSessionMuted{ rootPid, pid }`. Nowe komendy i `AudioUnavailable` trafiają do `MessageTypes` i do generowanych schematów (AD-16). Dopasowanie drzewa i reguła leżą poza typami COM i mają testy."
+verify = "`dotnet test` przechodzi z testami: sesja w procesie potomnym `rootPid` jest w drzewie, sesja obcego procesu nie, fallback na `IChannelAudioVolume` przy braku `ISimpleAudioVolume` przywraca poprzednie poziomy kanałów, nowa sesja w wyciszonym drzewie dostaje mute, w odciszonym nie; Home daje `MuteProcessTree` przed `MinimizeWindow`, aktywacja `UnmuteProcessTree` po `ActivateWindow`. Na bieżącej maszynie z dev harnessem i stroną grającą dźwięk (`MEDIASTATION_HARNESS_URL`, plik w `tools/fixtures/`): Home daje `audioRuleApplied muted:true` dla `rootPid` Edge, OK na kafelku `muted:false`, a zabicie procesu usługi audio Edge (potomny `msedge.exe --type=utility` z usługą audio), który Edge odtwarza w tym samym drzewie z nową sesją, daje w wyciszonym Edge `audioSessionMuted` w ciągu ok. 1 s; strona to `tools/fixtures/harness-audio.html` (zapętlony ton)."
+covers = ["R5", "R6", "R7"] # R7: tylko Home i aktywacja; pozostałe ścieżki daje story 3
+after = [1]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-5 (Audio), AD-15", "research-browser-control-for-streaming-services/digests/spike-um760.md, claim S9"]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Sekwencja AD-5 na wszystkich ścieżkach Orchestratora"
+description = "Domyka R7 po story 2: każda ścieżka Orchestratora wysyła komendy w kolejności AD-5. Opuszczenie (`MuteProcessTree` → `MinimizeWindow`, potem `ShowShell` i routing `shell`) dotyczy Home, wybudzenia (`SystemResumed`) i `Failed` aplikacji z pierwszego planu przy żywym procesie; aktywacja (`ActivateWindow` → `UnmuteProcessTree`) dotyczy startu z `NotRunning` po `AppWindowAttached` i powrotu z `Background`. Aplikacja adoptowana przez `ProbeExisting`, w tym przeglądarka bez CDP (AD-13), oraz okno spóźnione po Home w `Starting` (kompensacja z AD-14) dostają `MuteProcessTree` i `MinimizeWindow`. `CloseApp`, `RestartApp` i `ProcessExited` usuwają regułę drzewa z AudioRoutera (`ForgetProcessTree{ cmdId, rootPid }`), żeby nie wyciszała nowego procesu z tym samym PID. Wyniki komend okiennych i audio ze starego `transitionId` są ignorowane; krok `pause` dla `web` dokłada epic-netflix-dpad przed `mute`. `ForgetProcessTree` trafia do `MessageTypes` i generowanych schematów (AD-16)."
+verify = "`dotnet test` przechodzi z testami kolejności komend dla każdej ścieżki: Home, wybudzenie, `Failed` z pierwszego planu, start i powrót z `Background`, adopcja, spóźnione okno po Home w `Starting`, zamknięcie i restart (`ForgetProcessTree`), oraz z testem, że `CommandCompleted` starego `transitionId` nie zmienia stanu. Na bieżącej maszynie z dev harnessem restart MediaStation przy żywym Edge daje w logu adopcję, `audioRuleApplied muted:true` i `windowCommand MinimizeWindow completed`, a shell zostaje na pierwszym planie."
+covers = ["R7"]
+after = [2]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-5, AD-10 (adopcja, wybudzenie), AD-13 (`AppWindowAttached` nie czeka na CDP), AD-14"]
+
+[[entry]]
+id = 4
+type = "story"
+title = "ForegroundChanged z WinEvent i właściciel okna w logu"
+description = "WindowManager rejestruje na swoim wątku z pętlą komunikatów (story 1) `SetWinEventHook(EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT)` i raportuje każdą zmianę jako `ForegroundChanged{ hwnd }` z oknem najwyższego poziomu (`GA_ROOT`), także po własnej komendzie. Orchestrator rozpoznaje właściciela okna czystą funkcją w Core (shell; aplikacja po `hwnd`, a gdy to nie pasuje, po `rootPid` jak w bramce AD-8; obce) i loguje `foregroundChanged{ hwnd, owner: shell|app|foreign, appId }`, bez zmiany trybu, stanu aplikacji i dźwięku (Decision w Notes epiki, AD-8). Wpis zastępuje dzisiejszy log gałęzi `ForegroundChanged` w `OrchestratorLoop.cs`, więc jedno zdarzenie daje jeden wpis."
+verify = "`dotnet test` przechodzi z testami rozpoznania właściciela (shell, aplikacja po `hwnd`, po `rootPid`, obce, `hwnd` 0) i z testem, że `ForegroundChanged` nie zmienia trybu, stanu ani komend. Na bieżącej maszynie z dev harnessem: Alt+Tab z shella na zminimalizowane okno Edge daje jeden `foregroundChanged owner:app` z `appId` i stan bez zmian, Alt+Tab na Notatnik daje `owner:foreign`, a Home wraca na shell z `owner:shell`."
+covers = ["R3"]
+after = [1, 3]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-15 (`ForegroundChanged`, Alt+Tab [ASSUMPTION]), AD-8 (`mode` nie zmienia się przy przełączeniu okna; dopasowanie po `hwnd` i `rootPid`)"]
+
+[[entry]]
+id = 5
+type = "story"
+title = "Edge i Chrome w trybie okna z 6.1 i Moonlight borderless: przywrócenie shella 16/16"
+description = "Dev harness uruchamia przeglądarki z flagą trybu okna ustaloną w 6.1 i obsługuje typ `moonlight`: `Moonlight.exe` ze ścieżki w `MEDIASTATION_HARNESS_MOONLIGHT` z `stream <host> <app> --display-mode borderless --mute-on-focus-loss` według wpisu `apps.json` (AD-5, S11), z `AppWindowAttached`, `ProcessExited` i `ProbeExisting` (podpięcie żywego `Moonlight.exe`) jak dla `web`. Jeśli wybrany tryb okna nie daje się zminimalizować bez `SW_HIDE`, story wraca do 6.1 z `Source conflict:`. `tools/check-home-s10.ps1` dostaje przebieg przywracania: po każdym Home shell ma być na pierwszym planie, a okno celu zminimalizowane i widoczne, przy celach Edge, Chrome i Moonlight uruchomionych przez harness oraz pulpicie; skrypt dostaje tryb wstrzykniętego Home (`SendInput` `VK_HOME` bez znacznika, mapowany na `home` dla `*` w sample `input.json`), więc przebieg nie wymaga osoby, a fizyczny pilot zostaje w odbiorze; przy okazji naprawia wybór celu (DW-13, DW-14, DW-15, DW-29, DW-32: okna z `GW_OWNER`, wiele procesów `msedge`, okno Edge innego profilu, `no target window`), bo cel bierze z `rootPid` i `hwnd` z logu `appWindowAttached`."
+verify = "`tools/check-home-s10.ps1 -SelfTest` przechodzi z nowymi przypadkami wyboru celu z `appWindowAttached`; na bieżącej maszynie przebieg przywracania z harnessem i wstrzykniętym Home daje 4/4 dla Edge, 4/4 dla Chrome i 4/4 dla pulpitu (shell na pierwszym planie, cel `IsIconic` i widoczny, żadne nowe okno przeglądarki), a Moonlight 4/4, gdy w LAN jest host Sunshine/Apollo; bez hosta Moonlight jest `nie dotyczy` z powodem w planie, a 16/16 sprawdza odbiór epiki na UM760. `dotnet test` przechodzi."
+covers = ["R1", "R2", "R8"]
+after = [1, "6.1"]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-1 (flaga trybu okna), AD-5 (Moonlight), AD-15", "research-browser-control-for-streaming-services/digests/spike-um760.md, claims S10, S11", "deferred-work.md, DW-13, DW-14, DW-15, DW-29, DW-32"]
+
+[[entry]]
+id = 6
+type = "story"
+title = "Jeden właściciel okien: reguła buildu poza Platform/Window"
+description = "R4 jako reguła kompilacji w App, na wzór `BannedSymbols.txt` w Core (`Microsoft.CodeAnalysis.BannedApiAnalyzers`, RS0030): wywołania zmieniające widoczność, Z-order i foreground (m.in. `SetForegroundWindow`, `ShowWindow`, `ShowWindowAsync`, `SetWindowPos`, `BringWindowToTop`, `AttachThreadInput`, `Window.Activate`, `Window.Topmost`, `WindowState` po starcie) są zakazane poza `Platform/Window`; jedynym wyjątkiem jest pierwsze `window.Show()` shella w composition root (Assumption w Notes epiki), oznaczone z uzasadnieniem. `ShellWindow` i dev harness nie mają żadnego takiego wywołania. Reguła obejmuje cały kod okienny epiki, dlatego idzie po stories 4 i 5."
+verify = "`dotnet build` przechodzi bez ostrzeżeń RS0030 w App; dodanie `SetForegroundWindow` albo `Window.Activate()` w `Hosts/DevHarness` albo `Shell` daje błąd kompilacji (sprawdzone i cofnięte, opis w planie); `dotnet test` przechodzi."
+covers = ["R4"]
+after = [4, 5]
+hitl = false
+risk = "low"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-14 (hosty nie wynoszą okna), AD-15 (WindowManager jedynym kodem)"]
+
+[[entry]]
+id = 7
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup po epice, zakres ustalany na starcie wyłącznie z pozycji odroczonych w planach stories 1–6 i findings ich review, jako zamknięta lista z ID (DW-26); scope wypchnięty z innej story to nowa story, nie sweep."
+verify = "Każda pozycja z zamkniętej listy w planie jest zrobiona albo ma powód odrzucenia; `dotnet test` i `npm test` w `web/` przechodzą bez zmiany zachowania."
+covers = []
+after = [1, 2, 3, 4, 5, 6]
+hitl = false
+risk = "low"
+references = ["deferred-work.md, DW-26"]
