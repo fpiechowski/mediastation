@@ -7,7 +7,7 @@ paradigm: 'hexagonal (ports & adapters) z jednowątkowym actor core (Orchestrato
 scope: 'MediaStation MVP: pełnoekranowy shell TV na Windows 11 (UM760), sterowanie Netflixem w Edge przez CDP, wejście z pilota/klawiatury/gamepada, audio focus, Moonlight, aplikacje natywne, „Do oceny”'
 status: final
 created: '2026-10-16'
-updated: '2026-10-25'
+updated: '2026-10-26'
 binds: [brief-mediastation, forge-filmweb-rating-prompt, ux-mediastation]
 sources:
   - ../brief-mediastation/brief-mediastation.md
@@ -192,7 +192,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
     - **`input.json`:** urządzenie ma opcjonalną sekcję `hid` obok `keys`: `"hid": { "0x000C:0x00CF": "keyboard" }`. Klucz to `<usagePage>:<usage>` w hex z `0x`, wartość wyłącznie `keyboard`. Walidacja odrzuca: sekcję `hid` na urządzeniu innym niż `remote` (w tym `*`), inną wartość niż `keyboard`, usage `0x0223`/`0x0224`, stronę inną niż `0x000C`, zdublowany klucz oraz drugi klucz `hid` z tą samą Action w obrębie urządzenia. Brak sekcji = brak wyzwalacza HID; sample zawiera wpis `0x000C:0x00CF` dla `VID_1915&PID_1025`.
     - **`source`:** zawsze `remote`. Raport Consumer niesie ścieżkę urządzenia, więc dowodem jest sam raport z podpisanego urządzenia `remote`; korelacja czasowa z VK (okno 50 ms) nie dotyczy tej ścieżki i nie zmienia się dla Home/Back.
     - **Połykanie:** brak. Nie ma VK do połknięcia, Raw Input z `RIDEV_INPUTSINK` niczego nie połyka, a system nie reaguje na usage `0x00CF`. Bramka foreground działa jak dla innych klawiszy: Action tylko przy oknie naszym lub zarządzanym; nad obcym oknem raport jest ignorowany bez Action.
-    - **Jedno naciśnięcie:** Action na przejściu „brak → usage” raportu z niezerowym usage; kolejne raporty tego samego usage bez raportu zwolnienia (usage 0) są ignorowane. `Keyboard` nie ma `repeat` ani `long`. Czy G20S Pro wysyła raport zwolnienia, nie jest zmierzone [ASSUMPTION]; jeśli nie wysyła, rozstrzyga wtedy zwykły czas trzymania, ustalony w odbiorze UM760.
+    - **Jedno naciśnięcie:** Action na przejściu „brak → usage” raportu z niezerowym usage; kolejne raporty tego samego usage bez raportu zwolnienia (usage 0) są ignorowane. `Keyboard` nie ma `repeat` ani `long`. G20S Pro wysyła raport zwolnienia po `0x00CF` (zmierzone na UM760, 2026-10-26, HEAD 08eaade, S10 odbioru epiki 3: dwa wciśnięcia w odstępie ok. 4 s dały dwie Action), więc reguła debounce nie obowiązuje; `MaxRepeatHoldMs` (60 s) zostaje tylko siatką na zgubione zwolnienie.
     - Nie dodaje to rejestracji Raw Input: `0x0C/0x01` już działa, a klawiatura nadal jest niezarejestrowana w procesie hooka.
   - InputHub nie rejestruje Raw Input klawiatury (`0x01/0x06`, `RIDEV_INPUTSINK`) w procesie z `WH_KEYBOARD_LL`; pozostawia Raw Input HID Consumer (`0x0C/0x01`) dla korelacji Home/Back. Przeniesienie `WM_INPUT` na inny wątek tego procesu nie spełnia tego warunku. Raportu HID nie używamy jako wyzwalacza Action, poza `Keyboard` z sekcji `hid` (reguła wyżej).
   - `source: remote` wymaga sygnału przypisanego do pilota; dla wstrzykniętego Home/Back korelacja musi łączyć sygnaturę urządzenia, czas i właściwą parę HID Consumer usage → VK (`0x0223` → `VK_BROWSER_HOME`, `0x0224` → `VK_BROWSER_BACK`). Sam VK albo inny raport Consumer nie dowodzi źródła. Bez Raw Input klawiatury zwykłe klawisze pilota (m.in. D-pad i OK) mogą mieć `source: keyboard`, choć nadal dają jedną Action według VK. Nie wolno deklarować ich jako `remote` na podstawie samego mapowania `input.json`. Wyjątek Home nad obcym oknem wymaga potwierdzonego `source: remote`; jeśli fizyczny Home nie spełni tego warunku, wariant nie spełnia AD-8.
@@ -509,7 +509,7 @@ flowchart TB
 
 **Otwarte pytania z miejscem rozstrzygnięcia:**
 - **Tryb okna przeglądarki** (`--app` / `--start-fullscreen` / `--kiosk`): pierwsza story epiki BrowserHost, przed stories WindowManager i OSK.
-- **Przycisk Klawiatura na G20S Pro (dongle USB 2.4G):** rozstrzygnięty 2026-10-25 w AD-8: przycisk asystenta głosowego (usage `0x00CF`) przez wyzwalacz `hid`. Pozostaje pomiar raportu zwolnienia na UM760. Bluetooth nie jest wymagany.
+- **Przycisk Klawiatura na G20S Pro (dongle USB 2.4G):** rozstrzygnięty 2026-10-25 w AD-8: przycisk asystenta głosowego (usage `0x00CF`) przez wyzwalacz `hid`. Raport zwolnienia zmierzony na UM760 2026-10-26 (AD-8). Bluetooth nie jest wymagany.
 - **OSK nad pełnoekranowym Plexem i polskie znaki przez `SendInput` w Plexie i UI Moonlighta:** story „OSK w Plexie i UI Moonlighta” w epice Moonlight & native.
 - **Nakładka nad pełnoekranowym Edge:** pierwsza story epiki OSK.
 - **Hook LL i fizyczny pilot na UM760:** po zmianie AD-8 odbiór całej `epic-input` przez `fp-acceptance` sprawdza `down` przy shellu na wierzchu oraz Home/Back z G20S Pro; dotychczasowe przebiegi potwierdziły tylko wejście syntetyczne.
