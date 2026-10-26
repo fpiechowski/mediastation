@@ -1,6 +1,6 @@
 # Home screen — entries w kolejności budowy. tickets.py reads it.
 # Kolejność tabel = kolejność budowy; `id` nie jest kolejnością.
-# Lane Core: 1 i 2 równolegle, potem tracer 3. Lane web: 3 → 4 → 5 → 6, 4 → 7, 5 + 7 → 8; 9 równolegle po 3; 10 na końcu.
+# Lane Core: 1 i 2 równolegle, potem tracer 3. Lane web: 3 → 4 → 5 → 6, 4 → 7, 5 + 7 → 8, 5 → 9; 10 na końcu.
 # Decyzje przecinające kilka stories (AppMenu w Shell, linia Background bez tytułu, ikony w config/icons/, przypisanie długu) są w Notes epiki.
 # Ścieżki w `references` są względne do folderu inicjatywy.
 
@@ -107,7 +107,7 @@ title = "Nagłówek Home, title-safe i ekran błędu konfiguracji"
 description = "Shell dostaje nagłówek wg `DESIGN.md`: logo i „MediaStation”, avatar z powitaniem według pory dnia („Dobry wieczór, Eliza”), zegar oraz miejsce w layoucie na przycisk aktualizacji (sam przycisk: epic-deploy-resilience); cała treść z fokusem mieści się w title-safe 5% (96px/54px), a kursor jest ukryty w bezruchu. Ekran błędu konfiguracji pokazuje, że na ekranie nie zmieściły się kolejne błędy, zamiast ucinać listę bez informacji (F17)."
 verify = "`npm test` przechodzi z testami powitania dla granic pory dnia i wskaźnika liczby niewidocznych błędów; na bieżącej maszynie w 1920×1080 nagłówek i kafelki mieszczą się w title-safe, a `apps.json` z dziesięcioma błędami daje ekran z widocznym wskaźnikiem pozostałych."
 covers = ["R6", "R7"]
-after = [3, "1.4"]
+after = [5, "1.4"]
 hitl = false
 risk = "low"
 references = ["ux-mediastation/DESIGN.md, Layout & Spacing, Components (config-error)", "ux-mediastation/EXPERIENCE.md, Voice and Tone", "tickets/epic-foundation-contracts/epic-foundation-contracts-retrospective.md, F17"]
