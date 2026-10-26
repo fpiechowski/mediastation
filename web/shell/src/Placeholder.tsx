@@ -1,20 +1,10 @@
+import type { CSSProperties } from 'react';
 import type { ShellSnapshot } from '../../contracts/generated/shell-snapshot';
 import { AppMenu } from './AppMenu';
 import { CATEGORIES, tabsWithBackground, tilesOf, type FocusState } from './focus';
+import { Header } from './Header';
+import { rowOffset } from './layout';
 import { Tile } from './Tile';
-
-/** Logo placeholder (DESIGN.md → components.logo): zaokrąglony ekran + play w currentColor, wordmark obok. */
-export function Brand() {
-  return (
-    <div className="brand">
-      <svg viewBox="0 0 48 48" aria-hidden="true">
-        <rect x="2" y="8" width="44" height="32" rx="9" fill="none" stroke="currentColor" strokeWidth="3.2" />
-        <path d="M20 17.5v13l11-6.5z" fill="currentColor" />
-      </svg>
-      <b>MediaStation</b>
-    </div>
-  );
-}
 
 type AppTile = ShellSnapshot['apps'][number];
 
@@ -30,9 +20,17 @@ interface PlaceholderProps {
 export function Placeholder({ apps, focus }: PlaceholderProps) {
   const tiles = tilesOf(apps, focus.activeTab);
   const running = tabsWithBackground(apps);
+  // Kafelek w fokusie (także pod otwartym menu) po skali musi mieścić się w title-safe; w strefie zakładek rząd stoi w spoczynku.
+  const anchorId = focus.menu?.appId ?? (focus.zone === 'tiles' ? focus.focusedAppId : null);
+  const anchorIndex = tiles.findIndex((app) => app.appId === anchorId);
+  const offset = anchorIndex < 0 ? 0 : rowOffset(anchorIndex, tiles.length);
   return (
-    <main className="screen placeholder" aria-label="MediaStation">
-      <Brand />
+    <main
+      className="screen placeholder"
+      aria-label="MediaStation"
+      style={{ '--row-offset': `${offset}px` } as CSSProperties}
+    >
+      <Header />
       <ul className="tabs">
         {CATEGORIES.map((category) => {
           const active = category === focus.activeTab;

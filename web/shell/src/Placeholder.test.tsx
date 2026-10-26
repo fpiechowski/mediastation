@@ -98,3 +98,23 @@ describe('AppMenu', () => {
     expect(out).not.toContain('class="scrim"');
   });
 });
+
+describe('przesunięcie rzędu w title-safe', () => {
+  const apps = [app('a', 'video', 'notRunning'), app('b', 'video', 'notRunning'), app('c', 'video', 'notRunning')];
+  const offsetOf = (focus: Parameters<typeof Placeholder>[0]['focus']) =>
+    renderToStaticMarkup(<Placeholder apps={apps} focus={focus} />).match(/--row-offset:(-?\d+)px/)?.[1];
+
+  it('ostatni kafelek w fokusie przesuwa rząd w lewo, a pierwszy w prawo', () => {
+    expect(Number(offsetOf({ ...initialFocusState, focusedAppId: 'c' }))).toBeLessThan(0);
+    expect(Number(offsetOf({ ...initialFocusState, focusedAppId: 'a' }))).toBeGreaterThan(0);
+  });
+
+  it('fokus na zakładkach zostawia rząd w spoczynku', () => {
+    expect(offsetOf({ ...initialFocusState, zone: 'tabs', focusedAppId: null })).toBe('0');
+  });
+
+  it('otwarte menu trzyma przesunięcie kafelka, z którego wyszło', () => {
+    const open = { ...initialFocusState, focusedAppId: 'c', menu: { appId: 'c', item: 0 } };
+    expect(offsetOf(open)).toBe(offsetOf({ ...initialFocusState, focusedAppId: 'c' }));
+  });
+});

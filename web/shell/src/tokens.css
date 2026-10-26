@@ -16,6 +16,9 @@
   --surface: #1e2024;
   --surface-2: #26292e;
   --line: #33363c;
+  --avatar-from: #e8a87c;
+  --avatar-to: #c77d9b;
+  --avatar-ink: #1a1214;
   --focus: #ffffff;
   --focus-ink: #0f1012;
 
@@ -24,6 +27,10 @@
   --wordmark-size: 32px;
   --wordmark-weight: 600;
   --wordmark-tracking: -0.01em;
+  --clock-size: 32px;
+  --clock-weight: 500;
+  --greeting-size: 28px;
+  --greeting-weight: 400;
   --card-title-size: 34px;
   --card-title-weight: 600;
   --card-title-line: 1.15;
@@ -68,6 +75,10 @@
   /* components.logo */
   --logo-size: 48px;
   --logo-gap: 18px;
+
+  /* components.avatar + nagłówek */
+  --avatar-size: 48px;
+  --header-separator-gap: 56px;
 }
 
 *,
@@ -157,10 +168,69 @@ body {
   letter-spacing: var(--wordmark-tracking);
 }
 
-.placeholder .brand {
+/* Nagłówek Home: pas 48px na bar-top; lewa grupa od guttera, prawa (przycisk aktualizacji + zegar) zakotwiczona na guttera. */
+.header {
   position: absolute;
   top: var(--bar-top);
   left: var(--gutter);
+  right: var(--gutter);
+  height: var(--logo-size);
+  display: flex;
+  align-items: center;
+}
+
+.header__separator {
+  width: 2px;
+  height: var(--avatar-size);
+  margin: 0 var(--header-separator-gap);
+  background: var(--line);
+}
+
+.header__welcome {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.avatar {
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: linear-gradient(140deg, var(--avatar-from), var(--avatar-to));
+  color: var(--avatar-ink);
+  font-size: 24px;
+  font-weight: 650;
+}
+
+.greeting {
+  font-size: var(--greeting-size);
+  font-weight: var(--greeting-weight);
+  color: var(--text-2);
+}
+
+.header__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+/* Miejsce na przycisk aktualizacji (epic-deploy-resilience): [przycisk] 36px [zegar], rośnie w lewo; pusty, dopóki brak przycisku. */
+.header__update-slot:empty {
+  display: none;
+}
+
+.header__update-slot:not(:empty) {
+  margin-right: var(--space-5);
+}
+
+.clock {
+  font-size: var(--clock-size);
+  font-weight: var(--clock-weight);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
 }
 
 /* components.tab: aktywna bez fokusu = surface-2, fokus = focus-pill (tło focus, bez skali). */
@@ -235,11 +305,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Rząd kafelków 544×306 (DESIGN.md → Tile): wiersz 3 kafelków wychodzi poza title-safe, dopasowanie to story 4.9. */
+/* Rząd kafelków 544×306 (DESIGN.md → Tile); --row-offset (layout.ts → rowOffset) trzyma kafelek w fokusie w title-safe. */
 .tiles {
   position: absolute;
   top: var(--apps-top);
-  left: var(--gutter);
+  left: calc(var(--gutter) + var(--row-offset, 0px));
+  transition: left var(--focus-duration) ease-out;
   display: flex;
   gap: var(--tile-gap);
   list-style: none;
@@ -368,7 +439,6 @@ body {
   left: var(--gutter);
   right: var(--gutter);
   bottom: var(--title-safe-y);
-  overflow: hidden;
 }
 
 .config-error h1 {
@@ -398,6 +468,21 @@ body {
   gap: var(--space-4);
 }
 
+/* Plik i ścieżka w jednej linii (ucięte wielokropkiem), powód max 2 linie: 5 błędów + wskaźnik mieści się w title-safe. */
+.config-error__where {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.config-error__more {
+  margin-top: var(--space-4);
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+  color: var(--text-2);
+}
+
 .config-error__file {
   color: var(--text);
   font-weight: 600;
@@ -409,7 +494,10 @@ body {
 }
 
 .config-error__reason {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   color: var(--text-2);
 }
 
@@ -423,7 +511,7 @@ body {
 .appmenu {
   position: absolute;
   top: calc(var(--apps-top) + 75px);
-  left: calc(var(--gutter) + 52px + var(--appmenu-index, 0) * (var(--tile-width) + var(--tile-gap)));
+  left: calc(var(--gutter) + var(--row-offset, 0px) + 52px + var(--appmenu-index, 0) * (var(--tile-width) + var(--tile-gap)));
   width: 440px;
   padding: 16px;
   display: flex;
