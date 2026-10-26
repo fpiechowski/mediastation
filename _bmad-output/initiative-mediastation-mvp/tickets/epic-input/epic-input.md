@@ -1,5 +1,6 @@
 ---
 type: epic
+status: done
 title: "Remote, keyboard & gamepad input"
 parent: initiative-mediastation-mvp
 covers: [CAP-3]
@@ -86,3 +87,4 @@ Każde wejście dociera do Core jako jedna Action, a Home nie zależy od wątku 
 - Decision: nowy zakres to stories 3.15 (config `hid`), 3.16 (polityka i hub) i 3.17 (kalibracja), jeden lane za 3.14: 3.15 → 3.16 → 3.17; 3.17 czeka na 3.16, bo jej check używa wpisu `hid`, który musi dawać Action, i bo obie zmieniają InputHub/politykę (2026-10-25).
 - Decision: bez drugiego Refactor sweep; sweep 3.10 zamknął pierwotne stories, a poprawki 3.12–3.14 też poszły bez niego. Tracerem tych stories jest 3.15 (config, od którego zależą pozostałe); wynik widoczny: sample `input.json` z wpisem `hid` przechodzi walidację (2026-10-25).
 - Decision: raport zwolnienia (usage 0) po `0x00CF` jest w architekturze `[ASSUMPTION]`; story nie czekają na pomiar, a wynik i ewentualną regułę debounce zapisuje odbiór UM760 (2026-10-25).
+- Decision: epika zaakceptowana przez użytkownika na UM760 (2026-10-26, HEAD 08eaade, `epic-input-um760-acceptance-3.md`) i zamknięta: wszystkie stories done, Done when 1–5 pokryte przebiegiem 3 (S1–S9, S11, S13 pass; S7, S12, S14 potwierdzone; S15 nie dotyczy; S16 pass). Zawężenie zatwierdzone przez użytkownika: zapis wyboru przycisku do `input.json` przez CLI nie był scenariuszem odbioru, bo `KeyboardButtonMapping` nie jest podpięty do `--calibrate-input`; to zostaje poza epiką. Pomiar S10: G20S Pro wysyła raport zwolnienia po `0x00CF`, więc reguła debounce jest niepotrzebna; `[ASSUMPTION]` w AD-8 do zamknięcia w architekturze (2026-10-26).
