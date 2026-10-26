@@ -125,4 +125,10 @@ public enum ErrorCode
 
     /// <summary>Suma kontrolna pobranej paczki nie zgadza się z plikiem <c>.sha256</c> (AD-17).</summary>
     UpdateChecksumMismatch,
+
+    /// <summary>Uchwyt okna komendy okienkowej jest nieznany albo okno już nie istnieje (AD-4, AD-15).</summary>
+    WindowNotFound,
+
+    /// <summary>System odmówił przeniesienia okna na pierwszy plan mimo odblokowania foregroundu (AD-4, AD-15).</summary>
+    ForegroundDenied,
 }

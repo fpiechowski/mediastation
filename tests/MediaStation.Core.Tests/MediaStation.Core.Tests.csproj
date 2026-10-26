@@ -44,6 +44,11 @@
     <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSourcesAttachment.cs" Link="App\PowerSourcesAttachment.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\WakeSignalGate.cs" Link="App\WakeSignalGate.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Window\LogWindowManagerPort.cs" Link="App\LogWindowManagerPort.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Window\WindowInfo.cs" Link="App\WindowInfo.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Window\IWindowApi.cs" Link="App\IWindowApi.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Window\WindowTreePicker.cs" Link="App\WindowTreePicker.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Window\WindowCommandExecutor.cs" Link="App\WindowCommandExecutor.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Hosts\DevHarness\HarnessBrowser.cs" Link="App\HarnessBrowser.cs" />
     <Compile Include="..\..\src\MediaStation.App\Shell\ShellMessageGate.cs" Link="App\ShellMessageGate.cs" />
     <Compile Include="..\..\src\MediaStation.App\Shell\ShellNavigationPolicy.cs" Link="App\ShellNavigationPolicy.cs" />
     <Compile Include="..\..\src\MediaStation.App\Shell\ShellOutbox.cs" Link="App\ShellOutbox.cs" />

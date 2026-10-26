@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using MediaStation.App.Config;
 using MediaStation.App.Diagnostics;
 using MediaStation.App.Hosts;
+using MediaStation.App.Hosts.DevHarness;
 using MediaStation.App.Logging;
 using MediaStation.App.Orchestrator;
 using MediaStation.App.Platform.Input;
@@ -232,7 +233,7 @@ public static class CompositionRoot
         // Adaptery „brak hosta” odpowiadają w kolejce pętli, a pętla powstaje po routerze, więc delegat czyta ją leniwie.
         var hosts = new Dictionary<AppType, IAppHostPort>
         {
-            [AppType.Web] = new MissingHostPort(log, message => postsTo?.Post(message)),
+            [AppType.Web] = CreateWebHost(log, config, message => postsTo?.Post(message)),
             [AppType.Moonlight] = new MissingHostPort(log, message => postsTo?.Post(message)),
             [AppType.Native] = new MissingHostPort(log, message => postsTo?.Post(message)),
         };
@@ -256,10 +257,15 @@ public static class CompositionRoot
         // nie woła Win32 i Home nie czeka na SendInput. Pompa powstaje przed routerem, a startuje przed pętlą.
         var keyInjection = new KeyInjectionPump(KeyInjector.TrySendKey, log);
 
+        // Prawdziwy WindowManager na własnym wątku (AD-15); uchwyt shella znamy po `window.Show()`.
+        var windowManager = new Win32WindowManagerPort(log, message => postsTo?.Post(message));
+        windowManager.SetShellHandle(shellHwnd);
+        windowManager.Start();
+
         var router = new CommandRouter(
             appTypes,
             hosts,
-            new LogWindowManagerPort(log),
+            windowManager,
             new InputHubRoutingPort(routing, log, managedWindows),
             keyInjection,
             timers,
@@ -287,7 +293,8 @@ public static class CompositionRoot
             notifications,
             reporter,
             timers,
-            loop).Dispose();
+            loop,
+            windowManager).Dispose();
 
         try
         {
@@ -329,6 +336,37 @@ public static class CompositionRoot
             // Padnięty InputHub nie może zabić startu: aplikacja żyje bez pilota i klawiatury.
             log.Error(LogActionSink.Src, "inputHubStartFailed", ex);
         }
+    }
+
+    /// <summary>
+    /// Host aplikacji web: z <c>MEDIASTATION_DEV_HARNESS=1</c> dev harness (Edge/Chrome z osobnym profilem, bez CDP),
+    /// w przeciwnym razie adapter „brak hosta” jak dotąd.
+    /// </summary>
+    private static IAppHostPort CreateWebHost(ILog log, LoadedConfig config, Action<IOrchestratorMessage> post)
+    {
+        if (!HarnessBrowser.IsEnabled(Environment.GetEnvironmentVariable(HarnessBrowser.EnvVarName)))
+        {
+            return new MissingHostPort(log, post);
+        }
+
+        var webApps = new Dictionary<string, WebApp>(StringComparer.Ordinal);
+        foreach (var entry in config.Apps.Apps)
+        {
+            if (entry is WebApp web)
+            {
+                webApps.Add(web.Id, web);
+            }
+        }
+
+        log.Warn(Src, "devHarnessEnabled", new Dictionary<string, object?> { ["apps"] = webApps.Count });
+        return new DevHarnessWebHostPort(
+            log,
+            post,
+            webApps,
+            new Win32WindowApi(),
+            Win32ProcessSnapshot.ParentMap,
+            ProcessCommandLines.Browsers,
+            Path.Combine(DataRoot, "profiles"));
     }
 
     private static void AttachLifecycleLogging(Application app, ILog log, DispatcherExceptionLog dispatcherExceptions)

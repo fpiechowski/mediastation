@@ -16,6 +16,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
     <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.363" PrivateAssets="all" />
+    <PackageReference Include="System.Management" Version="10.0.14" />
   </ItemGroup>
 
   <ItemGroup>
@@ -49,10 +50,7 @@
   </PropertyGroup>
 
   <Target Name="BuildWeb" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipWebBuild)' != 'true'">
-    <MSBuild Projects="$(MediaStationCoreTestsProject)"
-             Targets="Build"
-             Properties="Configuration=$(Configuration)"
-             RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishReadyToRun;PublishSingleFile;_IsPublishing;TargetFramework" />
+    <MSBuild Projects="$(MediaStationCoreTestsProject)" Targets="Build" Properties="Configuration=$(Configuration)" RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishReadyToRun;PublishSingleFile;_IsPublishing;TargetFramework" />
 
     <!-- Zero pasujących testów albo zablokowany host testów = niezerowy kod (MTP: 8) = błąd buildu, bez fallbacku na stare typy. -->
     <Exec Command="dotnet test --project &quot;$(MediaStationCoreTestsProject)&quot; --no-build --no-restore -c $(Configuration) --filter Category=SchemaExport" />
@@ -67,14 +65,10 @@
 
     <ItemGroup Condition="'$(MediaStationShellFromDevServer)' != 'true'">
       <_MediaStationShellFile Include="$(MediaStationShellDist)**\*" />
-      <Content Include="@(_MediaStationShellFile)"
-               Link="shell\%(RecursiveDir)%(Filename)%(Extension)"
-               CopyToOutputDirectory="PreserveNewest"
-               CopyToPublishDirectory="PreserveNewest" />
+      <Content Include="@(_MediaStationShellFile)" Link="shell\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
 
-    <Error Condition="'$(MediaStationShellFromDevServer)' != 'true' and !Exists('$(MediaStationShellDist)index.html')"
-           Text="Build web nie wyprodukował $(MediaStationShellDist)index.html." />
+    <Error Condition="'$(MediaStationShellFromDevServer)' != 'true' and !Exists('$(MediaStationShellDist)index.html')" Text="Build web nie wyprodukował $(MediaStationShellDist)index.html." />
   </Target>
 
 </Project>

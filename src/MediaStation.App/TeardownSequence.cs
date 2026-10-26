@@ -5,7 +5,7 @@ namespace MediaStation.App;
 
 /// <summary>
 /// Kolejność zwalniania adapterów przy wyjściu z aplikacji (DW-5): hub wejścia, pompa Actions, pompa wstrzyknięć,
-/// adapter power, scheduler timerów i pętla Orchestratora. Composition root zna tę kolejność, ale typ jest wolny od
+/// WindowManager, adapter power, scheduler timerów i pętla Orchestratora. Composition root zna tę kolejność, ale typ jest wolny od
 /// WPF/Win32, więc testy Core linkują go tak jak <c>UiHang.cs</c> i <c>ClipCursorGate.cs</c>.
 /// </summary>
 /// <remarks>
@@ -23,6 +23,7 @@ internal sealed class TeardownSequence : IDisposable
     private readonly IDisposable? _reporter;
     private readonly IDisposable _timers;
     private readonly IDisposable _loop;
+    private readonly IDisposable? _windowManager;
 
     /// <summary>
     /// Sloty opcjonalne (<c>null</c>) odpowiadają adapterom, których start padł albo jeszcze się nie odbył; pola
@@ -35,7 +36,8 @@ internal sealed class TeardownSequence : IDisposable
         IDisposable? notifications,
         IDisposable? reporter,
         IDisposable timers,
-        IDisposable loop)
+        IDisposable loop,
+        IDisposable? windowManager = null)
     {
         ArgumentNullException.ThrowIfNull(keyInjection);
         ArgumentNullException.ThrowIfNull(timers);
@@ -48,6 +50,7 @@ internal sealed class TeardownSequence : IDisposable
         _reporter = reporter;
         _timers = timers;
         _loop = loop;
+        _windowManager = windowManager;
     }
 
     /// <summary>
@@ -63,6 +66,7 @@ internal sealed class TeardownSequence : IDisposable
         Release(_inputHub, ref first);
         Release(_actionPump, ref first);
         Release(_keyInjection, ref first);
+        Release(_windowManager, ref first);
         Release(_notifications, ref first);
         Release(_reporter, ref first);
         Release(_timers, ref first);

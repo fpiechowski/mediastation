@@ -659,7 +659,7 @@ public class CoreMessageContractTests
         AssertNamedEnum(
             schema["properties"]!["errorCode"],
             "ErrorCode",
-            ["unexpected", "portInUse", "profileInUse", "cdpUnavailable", "updateDownloadFailed", "updateChecksumMismatch"]);
+            ["unexpected", "portInUse", "profileInUse", "cdpUnavailable", "updateDownloadFailed", "updateChecksumMismatch", "windowNotFound", "foregroundDenied"]);
     }
 
     [Fact]
