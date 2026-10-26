@@ -117,7 +117,7 @@ public class OrchestratorTimerTests
         var (orchestrator, _) = Started(time);
         Background(orchestrator, "netflix");
         orchestrator.Handle(new CloseApp("netflix"));
-        var stopped = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new CommandCompleted(13)).Snapshot);
+        var stopped = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new CommandCompleted(15)).Snapshot);
         Assert.Equal(AppLifecycleState.NotRunning, StateOf(stopped, "netflix"));
 
         time.Advance(TimeSpan.FromSeconds(45));
@@ -146,8 +146,8 @@ public class OrchestratorTimerTests
 
         IOrchestratorMessage message = late switch
         {
-            "completed" => new CommandCompleted(12),
-            "failed" => new CommandFailed(12, ErrorCode.Unexpected),
+            "completed" => new CommandCompleted(15),
+            "failed" => new CommandFailed(15, ErrorCode.Unexpected),
             _ => new ProcessExited("netflix"),
         };
         var result = orchestrator.Handle(message);
@@ -175,19 +175,19 @@ public class OrchestratorTimerTests
 
         Assert.Collection(
             restart.Commands,
-            command => Assert.Equal(new StopApp(16, "netflix"), command),
-            command => Assert.Equal(new ScheduleTimer(17, 3, "netflix", T0.AddSeconds(90)), command));
+            command => Assert.Equal(new StopApp(18, "netflix"), command),
+            command => Assert.Equal(new ScheduleTimer(19, 3, "netflix", T0.AddSeconds(90)), command));
         Assert.Equal(
             AppLifecycleState.Stopping,
             StateOf(Assert.IsType<ShellSnapshot>(restart.Snapshot), "netflix"));
 
-        var stopped = orchestrator.Handle(new CommandCompleted(16));
+        var stopped = orchestrator.Handle(new CommandCompleted(18));
 
         Assert.Collection(
             stopped.Commands,
-            command => Assert.Equal(new StartApp(18, "netflix"), command),
-            command => Assert.Equal(new ScheduleTimer(19, 4, "netflix", T0.AddSeconds(75)), command),
-            command => Assert.Equal(new CancelTimer(20, 3), command));
+            command => Assert.Equal(new StartApp(20, "netflix"), command),
+            command => Assert.Equal(new ScheduleTimer(21, 4, "netflix", T0.AddSeconds(75)), command),
+            command => Assert.Equal(new CancelTimer(22, 3), command));
         var starting = Assert.IsType<ShellSnapshot>(stopped.Snapshot);
         Assert.Equal(AppLifecycleState.Starting, StateOf(starting, "netflix"));
 

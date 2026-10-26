@@ -340,6 +340,43 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Mute_process_tree_command_envelope_serializes_exactly_and_round_trips()
+    {
+        Command mute = new MuteProcessTree(6, 4321);
+
+        var json = ContractJson.SerializeEnvelope(mute);
+
+        Assert.Equal("""{"v":1,"type":"muteProcessTree","payload":{"cmdId":6,"rootPid":4321}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<MuteProcessTree>(back);
+        Assert.Equal(mute, back);
+    }
+
+    [Fact]
+    public void Unmute_process_tree_command_envelope_serializes_exactly_and_round_trips()
+    {
+        Command unmute = new UnmuteProcessTree(7, 4321);
+
+        var json = ContractJson.SerializeEnvelope(unmute);
+
+        Assert.Equal("""{"v":1,"type":"unmuteProcessTree","payload":{"cmdId":7,"rootPid":4321}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<UnmuteProcessTree>(back);
+        Assert.Equal(unmute, back);
+    }
+
+    [Fact]
+    public void Audio_unavailable_command_failed_serializes_as_camel_case()
+    {
+        Event failed = new CommandFailed(8, ErrorCode.AudioUnavailable);
+
+        var json = ContractJson.SerializeEnvelope(failed);
+
+        Assert.Equal("""{"v":1,"type":"commandFailed","payload":{"cmdId":8,"errorCode":"audioUnavailable"}}""", json);
+        Assert.Equal(failed, ContractJson.DeserializeEnvelope<Event>(json));
+    }
+
+    [Fact]
     public void Schedule_timer_command_envelope_serializes_with_cmd_id_first_and_round_trips()
     {
         var due = new DateTimeOffset(2026, 10, 22, 12, 0, 30, TimeSpan.Zero);
@@ -511,7 +548,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "setManagedWindows", "sendKey", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
+        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "setManagedWindows", "sendKey", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "muteProcessTree", "unmuteProcessTree", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -545,6 +582,7 @@ public class CoreMessageContractTests
                 "input-config.schema.json",
                 "launch-app.schema.json",
                 "minimize-window.schema.json",
+                "mute-process-tree.schema.json",
                 "orchestrator-started.schema.json",
                 "probe-existing.schema.json",
                 "process-exited.schema.json",
@@ -561,6 +599,7 @@ public class CoreMessageContractTests
                 "stop-app.schema.json",
                 "system-resumed.schema.json",
                 "timer-elapsed.schema.json",
+                "unmute-process-tree.schema.json",
             ],
             files);
     }
@@ -659,7 +698,7 @@ public class CoreMessageContractTests
         AssertNamedEnum(
             schema["properties"]!["errorCode"],
             "ErrorCode",
-            ["unexpected", "portInUse", "profileInUse", "cdpUnavailable", "updateDownloadFailed", "updateChecksumMismatch", "windowNotFound", "foregroundDenied"]);
+            ["unexpected", "portInUse", "profileInUse", "cdpUnavailable", "updateDownloadFailed", "updateChecksumMismatch", "windowNotFound", "foregroundDenied", "audioUnavailable"]);
     }
 
     [Fact]
@@ -701,6 +740,8 @@ public class CoreMessageContractTests
     [InlineData("activate-window.schema.json", "ActivateWindow", "cmdId,hwnd")]
     [InlineData("minimize-window.schema.json", "MinimizeWindow", "cmdId,hwnd")]
     [InlineData("show-shell.schema.json", "ShowShell", "cmdId")]
+    [InlineData("mute-process-tree.schema.json", "MuteProcessTree", "cmdId,rootPid")]
+    [InlineData("unmute-process-tree.schema.json", "UnmuteProcessTree", "cmdId,rootPid")]
     public void Launch_path_schemas_have_title_required_fields_and_no_additional_properties(
         string file,
         string title,

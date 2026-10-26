@@ -9,7 +9,7 @@ namespace MediaStation.App.Orchestrator;
 /// <summary>
 /// Jedno wyjście Orchestratora do wykonawców (decyzja epiki): <see cref="StartApp"/>, <see cref="StopApp"/>,
 /// <see cref="ProbeExisting"/> i <see cref="RenewSession"/> trafiają do hosta wybranego po <see cref="AppType"/>
-/// z mapy <c>appId → AppType</c> z configu, komendy okienkowe do <see cref="IWindowManagerPort"/>, komendy timerów
+/// z mapy <c>appId → AppType</c> z configu, komendy okienkowe do <see cref="IWindowManagerPort"/>, komendy audio do <see cref="IAudioRouterPort"/>, komendy timerów
 /// do <see cref="ITimerPort"/>, <see cref="SendKey"/> do <see cref="IKeyInjectionPort"/>, a <see cref="SetInputRouting"/>
 /// do <see cref="IInputRoutingPort"/>. Komenda bez portu i komenda dla nieznanej aplikacji kończą się wpisem
 /// <c>warn</c>, nigdy wyjątkiem.
@@ -21,6 +21,7 @@ public sealed class CommandRouter
     private readonly IReadOnlyDictionary<string, AppType> _appTypes;
     private readonly IReadOnlyDictionary<AppType, IAppHostPort> _hosts;
     private readonly IWindowManagerPort _windowManager;
+    private readonly IAudioRouterPort _audioRouter;
     private readonly IInputRoutingPort _inputRouting;
     private readonly IKeyInjectionPort _keyInjection;
     private readonly ITimerPort _timers;
@@ -30,6 +31,7 @@ public sealed class CommandRouter
         IReadOnlyDictionary<string, AppType> appTypes,
         IReadOnlyDictionary<AppType, IAppHostPort> hosts,
         IWindowManagerPort windowManager,
+        IAudioRouterPort audioRouter,
         IInputRoutingPort inputRouting,
         IKeyInjectionPort keyInjection,
         ITimerPort timers,
@@ -38,6 +40,7 @@ public sealed class CommandRouter
         ArgumentNullException.ThrowIfNull(appTypes);
         ArgumentNullException.ThrowIfNull(hosts);
         ArgumentNullException.ThrowIfNull(windowManager);
+        ArgumentNullException.ThrowIfNull(audioRouter);
         ArgumentNullException.ThrowIfNull(inputRouting);
         ArgumentNullException.ThrowIfNull(keyInjection);
         ArgumentNullException.ThrowIfNull(timers);
@@ -46,6 +49,7 @@ public sealed class CommandRouter
         _appTypes = appTypes;
         _hosts = hosts;
         _windowManager = windowManager;
+        _audioRouter = audioRouter;
         _inputRouting = inputRouting;
         _keyInjection = keyInjection;
         _timers = timers;
@@ -91,6 +95,9 @@ public sealed class CommandRouter
                     break;
                 case WindowCommand window:
                     _windowManager.Execute(window);
+                    break;
+                case AudioCommand audio:
+                    _audioRouter.Execute(audio);
                     break;
                 case TimerCommand timer:
                     _timers.Execute(timer);

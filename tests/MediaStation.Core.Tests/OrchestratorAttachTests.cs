@@ -51,8 +51,9 @@ public class OrchestratorAttachTests
         Assert.Collection(
             result.Commands,
             command => Assert.Equal(new ActivateWindow(7, 0x1A2B), command),
+            command => Assert.Equal(new UnmuteProcessTree(8, 4321), command),
             command => Assert.Equal(
-                new SetInputRouting(8, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2),
+                new SetInputRouting(9, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2),
                 command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(adopted.Rev + 1, snapshot.Rev);
@@ -103,7 +104,7 @@ public class OrchestratorAttachTests
         var last = other == "foreground"
             ? Foreground(orchestrator, "plex")
             : Assert.IsType<ShellSnapshot>(orchestrator.Handle(new LaunchApp("plex")).Snapshot);
-        var expectedMinimizeCmdId = other == "foreground" ? 10L : 6L;
+        var expectedMinimizeCmdId = other == "foreground" ? 11L : 6L;
 
         var result = orchestrator.Handle(new AppWindowAttached("netflix", 0x1A2B, 4321));
 
@@ -169,11 +170,12 @@ public class OrchestratorAttachTests
         Assert.Collection(
             attached.Commands,
             command => Assert.Equal(new ActivateWindow(8, 0x2B3C), command),
+            command => Assert.Equal(new UnmuteProcessTree(9, 24), command),
             command => Assert.Equal(
-                new SetInputRouting(9, InputMode.App, AppType.Native, PointerPolicy.Allowed, 2),
+                new SetInputRouting(10, InputMode.App, AppType.Native, PointerPolicy.Allowed, 2),
                 command),
-            command => Assert.Equal(new CancelTimer(10, 1), command),
-            command => AssertManaged(command, 11, 2, (0x1A2B, 4321), (0x2B3C, 24)));
+            command => Assert.Equal(new CancelTimer(11, 1), command),
+            command => AssertManaged(command, 12, 2, (0x1A2B, 4321), (0x2B3C, 24)));
         var snapshot = Assert.IsType<ShellSnapshot>(attached.Snapshot);
         Assert.Equal(starting.FocusRequest, snapshot.FocusRequest);
         Assert.Equal(AppLifecycleState.Foreground, StateOf(snapshot, "plex"));

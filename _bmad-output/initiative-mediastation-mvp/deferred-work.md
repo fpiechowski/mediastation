@@ -312,3 +312,11 @@ severity: low
 reason: Brak hosta jest stanem przewidzianym (decyzja tracer bulleta), a `unexpected` znaczy awarię, więc plany odbioru muszą dopuszczać `commandFailed` i tracą czułość na prawdziwe błędy. Rozwiązanie: dedykowany `ErrorCode` (np. `HostMissing`) w AD-4 albo zniknięcie `MissingHostPort` dla typów z prawdziwym hostem; rozstrzyga epic-browserhost przy pierwszym prawdziwym hoście.
 owner: epic-browserhost (pierwszy prawdziwy host)
 status: open
+
+### DW-37: Sessions muted by a MediaStation instance that crashed or was killed stay muted after restart, because the engine ledger is empty and Unmute only restores what it muted.
+origin: spec-deferred 0b621765860a
+location: src/MediaStation.App/Platform/Audio/AudioRouterEngine.cs
+source_spec: `tickets/epic-windows-audio/tickets/story-audiorouter-wyciszenie-drzewa-procesow-od-rootpid-i-nowe-ses-plan.md`
+severity: medium
+reason: ISimpleAudioVolume mute persists for the life of the browser session; after supervised restart and adoption, UnmuteProcessTree finds no ledger entries. Settle by deciding in story 3 whether an explicit Unmute forces unmute of in-tree sessions outside the ledger.
+status: open

@@ -175,6 +175,7 @@ public class OrchestratorLoopTests
             },
             hosts,
             new LogWindowManagerPort(log),
+            new FakeAudioRouter(),
             new InputHubRoutingPort(new InputRoutingState(), log),
             new FakeKeyInjection(),
             timers,
@@ -229,6 +230,7 @@ public class OrchestratorLoopTests
             new Dictionary<string, AppType>(StringComparer.Ordinal) { ["netflix"] = AppType.Web },
             hosts,
             new LogWindowManagerPort(log),
+            new FakeAudioRouter(),
             new InputHubRoutingPort(new InputRoutingState(), log),
             new FakeKeyInjection(),
             timers,
@@ -272,6 +274,7 @@ public class OrchestratorLoopTests
             new Dictionary<string, AppType>(StringComparer.Ordinal) { ["netflix"] = AppType.Web },
             hosts,
             new LogWindowManagerPort(log),
+            new FakeAudioRouter(),
             new InputHubRoutingPort(new InputRoutingState(), log),
             new FakeKeyInjection(),
             timers,
@@ -327,6 +330,7 @@ public class OrchestratorLoopTests
             new Dictionary<string, AppType>(StringComparer.Ordinal) { ["netflix"] = AppType.Web },
             hosts,
             new LogWindowManagerPort(log),
+            new FakeAudioRouter(),
             new InputHubRoutingPort(new InputRoutingState(), log),
             new FakeKeyInjection(),
             timers,
@@ -401,6 +405,7 @@ public class OrchestratorLoopTests
             },
             hosts,
             new LogWindowManagerPort(log),
+            new FakeAudioRouter(),
             new InputHubRoutingPort(new InputRoutingState(), log),
             new FakeKeyInjection(),
             timers,
@@ -473,6 +478,7 @@ public class OrchestratorLoopTests
             },
             hosts,
             new LogWindowManagerPort(log),
+            new FakeAudioRouter(),
             new InputHubRoutingPort(new InputRoutingState(), log),
             new FakeKeyInjection(),
             timers,
@@ -508,8 +514,8 @@ public class OrchestratorLoopTests
         Assert.Contains(dispatched, command => command is MinimizeWindow minimize && minimize.Hwnd == 0x1A2B);
         Assert.Contains(dispatched, command => command is ShowShell);
         Assert.Contains(dispatched, command => command is SetInputRouting { Mode: InputMode.Shell });
-        Assert.Equal(new RenewSession(13, "netflix"), Assert.Single(dispatched.OfType<RenewSession>()));
-        Assert.Equal([new RenewSession(13, "netflix")], web.Renewed);
+        Assert.Equal(new RenewSession(14, "netflix"), Assert.Single(dispatched.OfType<RenewSession>()));
+        Assert.Equal([new RenewSession(14, "netflix")], web.Renewed);
         Assert.DoesNotContain(log.Entries, entry => entry.Level >= LogLevel.Warn);
     }
 
@@ -538,6 +544,7 @@ public class OrchestratorLoopTests
             new Dictionary<string, AppType>(StringComparer.Ordinal) { ["netflix"] = AppType.Web },
             hosts,
             new LogWindowManagerPort(log),
+            new FakeAudioRouter(),
             new InputHubRoutingPort(routing, log),
             new FakeKeyInjection(),
             timers,
@@ -785,6 +792,13 @@ public class OrchestratorLoopTests
             }
 
             Thread.Sleep(10);
+        }
+    }
+
+    private sealed class FakeAudioRouter : IAudioRouterPort
+    {
+        public void Execute(AudioCommand command)
+        {
         }
     }
 

@@ -43,6 +43,11 @@
     <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSignalRouter.cs" Link="App\PowerSignalRouter.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSourcesAttachment.cs" Link="App\PowerSourcesAttachment.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\WakeSignalGate.cs" Link="App\WakeSignalGate.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Audio\AudioRouterEngine.cs" Link="App\AudioRouterEngine.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Audio\AudioRule.cs" Link="App\AudioRule.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Audio\AudioSweepSchedule.cs" Link="App\AudioSweepSchedule.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Audio\IAudioSessionBackend.cs" Link="App\IAudioSessionBackend.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Audio\ProcessTreeMatcher.cs" Link="App\ProcessTreeMatcher.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Window\LogWindowManagerPort.cs" Link="App\LogWindowManagerPort.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Window\WindowInfo.cs" Link="App\WindowInfo.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Window\IWindowApi.cs" Link="App\IWindowApi.cs" />

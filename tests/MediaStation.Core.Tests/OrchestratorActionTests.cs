@@ -127,7 +127,7 @@ public class OrchestratorActionTests
 
         var result = orchestrator.Handle(home);
 
-        Assert.Equal(3, result.Commands.Count);
+        Assert.Equal(4, result.Commands.Count);
         Assert.NotNull(result.Snapshot);
         Assert.Equal([home], result.Actions);
     }

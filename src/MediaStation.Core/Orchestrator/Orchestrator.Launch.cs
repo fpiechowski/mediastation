@@ -55,7 +55,7 @@ public sealed partial class Orchestrator
         OrchestratorResult.None with { IgnoredIntent = new IgnoredIntent(intent, appId, reason) };
 
     /// <summary>
-    /// Powrót z tła: proces żyje, więc wystarczą <see cref="ActivateWindow"/> i routing wejścia aplikacji.
+    /// Powrót z tła: proces żyje, więc wystarczą <see cref="ActivateWindow"/>, <see cref="UnmuteProcessTree"/> i routing wejścia aplikacji.
     /// Guard niezmiennika jednej aplikacji na pierwszym planie stoi w <see cref="OnLaunchApp"/>. Powrót jest
     /// nową decyzją o pierwszym planie, więc podbija <c>transitionId</c> i zapisuje je w aplikacji.
     /// </summary>
@@ -64,7 +64,8 @@ public sealed partial class Orchestrator
         app.ForegroundTransition = NextTransitionId();
         app.State = AppLifecycleState.Foreground;
         var activate = new ActivateWindow(NextCmdId(), hwnd);
+        var unmute = new UnmuteProcessTree(NextCmdId(), app.RootPid);
         var routing = Route(InputMode.App, app.Type, app.Pointer);
-        return new OrchestratorResult([activate, routing], Snapshot());
+        return new OrchestratorResult([activate, unmute, routing], Snapshot());
     }
 }

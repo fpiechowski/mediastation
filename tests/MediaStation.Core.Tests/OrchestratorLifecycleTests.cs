@@ -58,6 +58,7 @@ public class OrchestratorLifecycleTests
         Assert.Equal(AppLifecycleState.Background, StateOf(background, "netflix"));
         Assert.Collection(
             home.Commands,
+            command => Assert.IsType<MuteProcessTree>(command),
             command => Assert.IsType<MinimizeWindow>(command),
             command => Assert.IsType<ShowShell>(command),
             command => Assert.IsType<SetInputRouting>(command));
@@ -65,6 +66,7 @@ public class OrchestratorLifecycleTests
         var resumed = orchestrator.Handle(new LaunchApp("netflix"));
         Assert.Equal(AppLifecycleState.Foreground, StateOf(Assert.IsType<ShellSnapshot>(resumed.Snapshot), "netflix"));
         Assert.IsType<ActivateWindow>(resumed.Commands[0]);
+        Assert.IsType<UnmuteProcessTree>(resumed.Commands[1]);
 
         orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 3));
         Assert.Equal(
@@ -107,21 +109,22 @@ public class OrchestratorLifecycleTests
         Assert.Equal(AppLifecycleState.Starting, StateOf(Assert.IsType<ShellSnapshot>(completed.Snapshot), "netflix"));
         Assert.Collection(
             completed.Commands,
-            command => Assert.Equal(new StartApp(15, "netflix"), command),
-            command => Assert.Equal(new ScheduleTimer(16, 3, "netflix", T0.AddSeconds(30)), command),
-            command => Assert.Equal(new CancelTimer(17, 2), command),
-            command => AssertManaged(command, 18, 2));
+            command => Assert.Equal(new StartApp(17, "netflix"), command),
+            command => Assert.Equal(new ScheduleTimer(18, 3, "netflix", T0.AddSeconds(30)), command),
+            command => Assert.Equal(new CancelTimer(19, 2), command),
+            command => AssertManaged(command, 20, 2));
 
         var attached = orchestrator.Handle(new AppWindowAttached("netflix", 0x99, 7));
 
         Assert.Equal(AppLifecycleState.Foreground, StateOf(Assert.IsType<ShellSnapshot>(attached.Snapshot), "netflix"));
         Assert.Collection(
             attached.Commands,
-            command => Assert.Equal(new ActivateWindow(19, 0x99), command),
+            command => Assert.Equal(new ActivateWindow(21, 0x99), command),
+            command => Assert.Equal(new UnmuteProcessTree(22, 7), command),
             command => Assert.Equal(
-                new SetInputRouting(20, InputMode.App, AppType.Web, PointerPolicy.Blocked, 4),
+                new SetInputRouting(23, InputMode.App, AppType.Web, PointerPolicy.Blocked, 4),
                 command),
-            command => Assert.Equal(new CancelTimer(21, 3), command),
-            command => AssertManaged(command, 22, 3, (0x99, 7)));
+            command => Assert.Equal(new CancelTimer(24, 3), command),
+            command => AssertManaged(command, 25, 3, (0x99, 7)));
     }
 }

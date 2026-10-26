@@ -27,6 +27,8 @@ public static class MessageTypes
         typeof(ActivateWindow),
         typeof(MinimizeWindow),
         typeof(ShowShell),
+        typeof(MuteProcessTree),
+        typeof(UnmuteProcessTree),
         typeof(ScheduleTimer),
         typeof(CancelTimer),
         typeof(CommandCompleted),

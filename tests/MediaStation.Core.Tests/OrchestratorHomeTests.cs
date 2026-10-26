@@ -21,10 +21,11 @@ public class OrchestratorHomeTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new MinimizeWindow(10, 0x1A2B), command),
-            command => Assert.Equal(new ShowShell(11), command),
+            command => Assert.Equal(new MuteProcessTree(11, 4321), command),
+            command => Assert.Equal(new MinimizeWindow(12, 0x1A2B), command),
+            command => Assert.Equal(new ShowShell(13), command),
             command => Assert.Equal(
-                new SetInputRouting(12, InputMode.Shell, null, PointerPolicy.Blocked, 3),
+                new SetInputRouting(14, InputMode.Shell, null, PointerPolicy.Blocked, 3),
                 command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(foreground.Rev + 1, snapshot.Rev);
@@ -154,8 +155,9 @@ public class OrchestratorHomeTests
         Assert.Collection(
             result.Commands,
             command => Assert.Equal(new ActivateWindow(10, 0x1A2B), command),
+            command => Assert.Equal(new UnmuteProcessTree(11, 4321), command),
             command => Assert.Equal(
-                new SetInputRouting(11, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2),
+                new SetInputRouting(12, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2),
                 command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(background.Rev + 1, snapshot.Rev);

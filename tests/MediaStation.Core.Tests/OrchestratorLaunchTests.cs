@@ -124,11 +124,12 @@ public class OrchestratorLaunchTests
         Assert.Collection(
             result.Commands,
             command => Assert.Equal(new ActivateWindow(6, 0x1A2B), command),
+            command => Assert.Equal(new UnmuteProcessTree(7, 4321), command),
             command => Assert.Equal(
-                new SetInputRouting(7, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2),
+                new SetInputRouting(8, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2),
                 command),
-            command => Assert.Equal(new CancelTimer(8, 1), command),
-            command => AssertManaged(command, 9, 1, (0x1A2B, 4321)));
+            command => Assert.Equal(new CancelTimer(9, 1), command),
+            command => AssertManaged(command, 10, 1, (0x1A2B, 4321)));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(started.Rev + 2, snapshot.Rev);
         Assert.Equal(started.FocusRequest, snapshot.FocusRequest);
@@ -146,11 +147,12 @@ public class OrchestratorLaunchTests
         Assert.Collection(
             result.Commands,
             command => Assert.Equal(new ActivateWindow(6, 42), command),
+            command => Assert.Equal(new UnmuteProcessTree(7, 24), command),
             command => Assert.Equal(
-                new SetInputRouting(7, InputMode.App, AppType.Native, PointerPolicy.Allowed, 2),
+                new SetInputRouting(8, InputMode.App, AppType.Native, PointerPolicy.Allowed, 2),
                 command),
-            command => Assert.Equal(new CancelTimer(8, 1), command),
-            command => AssertManaged(command, 9, 1, (42, 24)));
+            command => Assert.Equal(new CancelTimer(9, 1), command),
+            command => AssertManaged(command, 10, 1, (42, 24)));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(AppLifecycleState.Foreground, StateOf(snapshot, "plex"));
     }
@@ -167,9 +169,10 @@ public class OrchestratorLaunchTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new ActivateWindow(13, 0x1A2B), command),
+            command => Assert.Equal(new ActivateWindow(15, 0x1A2B), command),
+            command => Assert.Equal(new UnmuteProcessTree(16, 4321), command),
             command => Assert.Equal(
-                new SetInputRouting(14, InputMode.App, AppType.Web, PointerPolicy.Blocked, 4),
+                new SetInputRouting(17, InputMode.App, AppType.Web, PointerPolicy.Blocked, 4),
                 command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(background.Rev + 1, snapshot.Rev);

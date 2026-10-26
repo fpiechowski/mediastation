@@ -131,4 +131,7 @@ public enum ErrorCode
 
     /// <summary>System odmówił przeniesienia okna na pierwszy plan mimo odblokowania foregroundu (AD-4, AD-15).</summary>
     ForegroundDenied,
+
+    /// <summary>Usługa audio systemu jest niedostępna (enumeracja urządzeń rzuca); stan reguły AudioRoutera zostaje (AD-4, AD-15).</summary>
+    AudioUnavailable,
 }

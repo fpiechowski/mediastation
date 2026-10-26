@@ -15,7 +15,7 @@ public class CommandRouterTests
     [Fact]
     public void Start_app_goes_to_host_of_its_app_type()
     {
-        var (router, hosts, _, _, _, _, _) = CreateRouter();
+        var (router, hosts, _, _, _, _, _, _) = CreateRouter();
 
         router.Dispatch([new StartApp(1, "netflix"), new StartApp(2, "plex"), new StartApp(3, "moonlight-pc")]);
 
@@ -27,7 +27,7 @@ public class CommandRouterTests
     [Fact]
     public void Stop_app_goes_to_host_of_its_app_type()
     {
-        var (router, hosts, _, _, _, _, _) = CreateRouter();
+        var (router, hosts, _, _, _, _, _, _) = CreateRouter();
 
         router.Dispatch([new StopApp(1, "netflix"), new StopApp(2, "plex"), new StopApp(3, "moonlight-pc")]);
 
@@ -39,7 +39,7 @@ public class CommandRouterTests
     [Fact]
     public void Probe_existing_goes_to_host_of_its_app_type()
     {
-        var (router, hosts, _, _, _, _, _) = CreateRouter();
+        var (router, hosts, _, _, _, _, _, _) = CreateRouter();
 
         router.Dispatch([
             new ProbeExisting(1, "netflix"),
@@ -55,7 +55,7 @@ public class CommandRouterTests
     [Fact]
     public void Probe_existing_for_unknown_app_logs_warn_without_throwing()
     {
-        var (router, hosts, _, _, _, _, log) = CreateRouter();
+        var (router, hosts, _, _, _, _, log, _) = CreateRouter();
 
         var exception = Record.Exception(() => router.Dispatch([new ProbeExisting(13, "nope")]));
 
@@ -71,7 +71,7 @@ public class CommandRouterTests
     [Fact]
     public void Renew_session_goes_to_host_of_its_app_type()
     {
-        var (router, hosts, _, _, _, _, _) = CreateRouter();
+        var (router, hosts, _, _, _, _, _, _) = CreateRouter();
 
         router.Dispatch([
             new RenewSession(1, "netflix"),
@@ -87,7 +87,7 @@ public class CommandRouterTests
     [Fact]
     public void Renew_session_for_unknown_app_logs_warn_without_throwing()
     {
-        var (router, hosts, _, _, _, _, log) = CreateRouter();
+        var (router, hosts, _, _, _, _, log, _) = CreateRouter();
 
         var exception = Record.Exception(() => router.Dispatch([new RenewSession(14, "nope")]));
 
@@ -103,7 +103,7 @@ public class CommandRouterTests
     [Fact]
     public void Window_commands_go_to_window_manager()
     {
-        var (router, _, window, _, _, _, _) = CreateRouter();
+        var (router, _, window, _, _, _, _, _) = CreateRouter();
 
         router.Dispatch([new ActivateWindow(4, 6699), new MinimizeWindow(5, 6699), new ShowShell(6)]);
 
@@ -113,9 +113,23 @@ public class CommandRouterTests
     }
 
     [Fact]
+    public void Audio_commands_go_to_audio_router_only()
+    {
+        var (router, _, window, input, _, timers, log, audio) = CreateRouter();
+
+        router.Dispatch([new MuteProcessTree(20, 4321), new UnmuteProcessTree(21, 4321)]);
+
+        Assert.Equal<AudioCommand>([new MuteProcessTree(20, 4321), new UnmuteProcessTree(21, 4321)], audio.Executed);
+        Assert.Empty(window.Executed);
+        Assert.Empty(input.Executed);
+        Assert.Empty(timers.Executed);
+        Assert.Empty(log.Entries);
+    }
+
+    [Fact]
     public void Input_routing_goes_to_input_port()
     {
-        var (router, _, _, input, _, _, _) = CreateRouter();
+        var (router, _, _, input, _, _, _, _) = CreateRouter();
         var routing = new SetInputRouting(7, InputMode.App, AppType.Web, PointerPolicy.Blocked, 2);
 
         router.Dispatch([routing]);
@@ -126,7 +140,7 @@ public class CommandRouterTests
     [Fact]
     public void Managed_windows_go_to_input_port()
     {
-        var (router, _, window, input, _, _, _) = CreateRouter();
+        var (router, _, window, input, _, _, _, _) = CreateRouter();
         var managed = new SetManagedWindows(8, null, [new ManagedWindow(6699, 4321)], 3);
 
         router.Dispatch([managed]);
@@ -139,7 +153,7 @@ public class CommandRouterTests
     [Fact]
     public void Send_key_goes_to_key_injection_port()
     {
-        var (router, _, window, input, keyInjection, timers, log) = CreateRouter();
+        var (router, _, window, input, keyInjection, timers, log, _) = CreateRouter();
         var command = new SendKey(15, 172);
 
         router.Dispatch([command]);
@@ -154,7 +168,7 @@ public class CommandRouterTests
     [Fact]
     public void Timer_commands_go_to_timer_port()
     {
-        var (router, _, _, _, _, timers, _) = CreateRouter();
+        var (router, _, _, _, _, timers, _, _) = CreateRouter();
         var schedule = new ScheduleTimer(13, 42, "netflix", new DateTimeOffset(2026, 10, 22, 12, 0, 30, TimeSpan.Zero));
         var cancel = new CancelTimer(14, 42);
 
@@ -166,7 +180,7 @@ public class CommandRouterTests
     [Fact]
     public void Start_app_for_unknown_app_logs_warn_without_throwing()
     {
-        var (router, hosts, _, _, _, _, log) = CreateRouter();
+        var (router, hosts, _, _, _, _, log, _) = CreateRouter();
 
         router.Dispatch([new StartApp(8, "nope")]);
 
@@ -187,6 +201,7 @@ public class CommandRouterTests
             new Dictionary<string, AppType> { ["netflix"] = AppType.Web, ["plex"] = AppType.Native },
             new Dictionary<AppType, IAppHostPort> { [AppType.Web] = web },
             new FakeWindowManager(),
+            new FakeAudioRouter(),
             new FakeInputRouting(),
             new FakeKeyInjection(),
             new FakeTimerPort(),
@@ -206,7 +221,7 @@ public class CommandRouterTests
     [Fact]
     public void Stop_app_for_unknown_app_logs_warn_without_throwing()
     {
-        var (router, hosts, _, _, _, _, log) = CreateRouter();
+        var (router, hosts, _, _, _, _, log, _) = CreateRouter();
 
         router.Dispatch([new StopApp(11, "nope")]);
 
@@ -227,6 +242,7 @@ public class CommandRouterTests
             new Dictionary<string, AppType> { ["netflix"] = AppType.Web, ["plex"] = AppType.Native },
             new Dictionary<AppType, IAppHostPort> { [AppType.Web] = web },
             new FakeWindowManager(),
+            new FakeAudioRouter(),
             new FakeInputRouting(),
             new FakeKeyInjection(),
             new FakeTimerPort(),
@@ -246,7 +262,7 @@ public class CommandRouterTests
     [Fact]
     public void Command_without_port_logs_warn_without_throwing()
     {
-        var (router, hosts, window, input, _, _, log) = CreateRouter();
+        var (router, hosts, window, input, _, _, log, _) = CreateRouter();
 
         var exception = Record.Exception(() => router.Dispatch([new UnknownCommand(10)]));
 
@@ -261,7 +277,7 @@ public class CommandRouterTests
         Assert.Equal(nameof(UnknownCommand), entry.Data["type"]);
     }
 
-    private static (CommandRouter Router, Dictionary<AppType, FakeHost> Hosts, FakeWindowManager Window, FakeInputRouting Input, FakeKeyInjection KeyInjection, FakeTimerPort Timers, RecordingLog Log) CreateRouter()
+    private static (CommandRouter Router, Dictionary<AppType, FakeHost> Hosts, FakeWindowManager Window, FakeInputRouting Input, FakeKeyInjection KeyInjection, FakeTimerPort Timers, RecordingLog Log, FakeAudioRouter Audio) CreateRouter()
     {
         var hosts = new Dictionary<AppType, FakeHost>
         {
@@ -270,6 +286,7 @@ public class CommandRouterTests
             [AppType.Native] = new FakeHost(),
         };
         var window = new FakeWindowManager();
+        var audio = new FakeAudioRouter();
         var input = new FakeInputRouting();
         var keyInjection = new FakeKeyInjection();
         var timers = new FakeTimerPort();
@@ -283,11 +300,12 @@ public class CommandRouterTests
             },
             hosts.ToDictionary(entry => entry.Key, entry => (IAppHostPort)entry.Value),
             window,
+            audio,
             input,
             keyInjection,
             timers,
             log);
-        return (router, hosts, window, input, keyInjection, timers, log);
+        return (router, hosts, window, input, keyInjection, timers, log, audio);
     }
 
     private sealed record UnknownCommand(long CmdId) : Command(CmdId);
@@ -316,6 +334,13 @@ public class CommandRouterTests
         public List<WindowCommand> Executed { get; } = [];
 
         public void Execute(WindowCommand command) => Executed.Add(command);
+    }
+
+    private sealed class FakeAudioRouter : IAudioRouterPort
+    {
+        public List<AudioCommand> Executed { get; } = [];
+
+        public void Execute(AudioCommand command) => Executed.Add(command);
     }
 
     private sealed class FakeInputRouting : IInputRoutingPort

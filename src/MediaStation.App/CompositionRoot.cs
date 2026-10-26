@@ -9,6 +9,7 @@ using MediaStation.App.Hosts;
 using MediaStation.App.Hosts.DevHarness;
 using MediaStation.App.Logging;
 using MediaStation.App.Orchestrator;
+using MediaStation.App.Platform.Audio;
 using MediaStation.App.Platform.Input;
 using MediaStation.App.Platform.System;
 using MediaStation.App.Platform.Window;
@@ -262,10 +263,15 @@ public static class CompositionRoot
         windowManager.SetShellHandle(shellHwnd);
         windowManager.Start();
 
+        // AudioRouter na własnym wątku MTA (AD-14, AD-15): wycisza drzewo procesów od `rootPid` z komendy.
+        var audioRouter = new Win32AudioRouterPort(log, message => postsTo?.Post(message));
+        audioRouter.Start();
+
         var router = new CommandRouter(
             appTypes,
             hosts,
             windowManager,
+            audioRouter,
             new InputHubRoutingPort(routing, log, managedWindows),
             keyInjection,
             timers,
@@ -294,7 +300,8 @@ public static class CompositionRoot
             reporter,
             timers,
             loop,
-            windowManager).Dispose();
+            windowManager,
+            audioRouter).Dispose();
 
         try
         {

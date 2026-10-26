@@ -54,8 +54,9 @@ public sealed partial class Orchestrator
 
         app.State = AppLifecycleState.Foreground;
         var activate = new ActivateWindow(NextCmdId(), attached.Hwnd);
+        var unmute = new UnmuteProcessTree(NextCmdId(), attached.RootPid);
         var routing = Route(InputMode.App, app.Type, app.Pointer);
-        var commands = new List<Command> { activate, routing };
+        var commands = new List<Command> { activate, unmute, routing };
 
         // Okno zdążyło przed deadlinem: timeout `Starting` traci znaczenie, a scheduler dostaje jawne anulowanie.
         if (CancelStartTimeout(app.AppId) is { } cancel)
@@ -70,7 +71,7 @@ public sealed partial class Orchestrator
     /// Adopcja żywej aplikacji po restarcie (AD-10): <c>hwnd</c> trafia do stanu, aplikacja ląduje w <c>Background</c>,
     /// a shell zostaje na ekranie głównym. Adopcja nie jest decyzją o pierwszym planie: nie podbija
     /// <c>transitionId</c> ani <c>_focusSeq</c>, nie wysyła routingu wejścia i nie rusza timerów. Kolejność jest ta
-    /// sama co w Home (AD-5/AD-15): najpierw <see cref="MinimizeWindow"/>, potem <see cref="ShowShell"/> — i tylko
+    /// sama co w Home, bez <c>MuteProcessTree</c> (story 3; AD-5/AD-15): najpierw <see cref="MinimizeWindow"/>, potem <see cref="ShowShell"/> — i tylko
     /// wtedy, gdy inna aplikacja nie jest aktywna, bo sondy są fire-and-forget i odpowiedź hosta może dotrzeć po
     /// wyborze kafelka.
     /// </summary>

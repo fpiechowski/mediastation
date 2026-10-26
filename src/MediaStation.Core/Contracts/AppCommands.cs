@@ -45,6 +45,18 @@ public sealed record MinimizeWindow(long CmdId, long Hwnd) : WindowCommand(CmdId
 public sealed record ShowShell(long CmdId) : WindowCommand(CmdId);
 
 /// <summary>
+/// Baza komend AudioRoutera, jedynego kodu wyciszającego sesje audio aplikacji (AD-15). Działa wyłącznie na
+/// <c>rootPid</c> z komendy: drzewo procesów aplikacji ustala AudioRouter po łańcuchu PID.
+/// </summary>
+public abstract record AudioCommand(long CmdId) : Command(CmdId);
+
+/// <summary>AudioRouter wycisza wszystkie sesje audio drzewa procesów od <see cref="RootPid"/>, także nowe.</summary>
+public sealed record MuteProcessTree(long CmdId, int RootPid) : AudioCommand(CmdId);
+
+/// <summary>AudioRouter odcisza sesje audio drzewa procesów od <see cref="RootPid"/>, także nowe.</summary>
+public sealed record UnmuteProcessTree(long CmdId, int RootPid) : AudioCommand(CmdId);
+
+/// <summary>
 /// Baza komend schedulera timerów: Orchestrator planuje i anuluje terminy, a scheduler w Core
 /// publikuje <see cref="TimerElapsed"/> z powrotem do kolejki. <c>cmdId</c> nie ma korelacji —
 /// timer nie jest zadanym efektem, tylko terminem, więc scheduler nie odpowiada <see cref="CommandCompleted"/>.

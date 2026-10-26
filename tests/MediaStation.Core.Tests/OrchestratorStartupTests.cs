@@ -119,12 +119,12 @@ public class OrchestratorStartupTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new MinimizeWindow(20, 0x1A2B), command),
-            command => Assert.Equal(new ShowShell(21), command),
+            command => Assert.Equal(new MinimizeWindow(23, 0x1A2B), command),
+            command => Assert.Equal(new ShowShell(24), command),
             command => Assert.Equal(
-                new SetInputRouting(22, InputMode.Shell, null, PointerPolicy.Blocked, 5),
+                new SetInputRouting(25, InputMode.Shell, null, PointerPolicy.Blocked, 5),
                 command),
-            command => Assert.Equal(new RenewSession(23, "netflix"), command));
+            command => Assert.Equal(new RenewSession(26, "netflix"), command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(started.Rev + 6, snapshot.Rev);
         Assert.Equal(new FocusRequest(FocusRequest.DefaultTarget, 2), snapshot.FocusRequest);
@@ -146,7 +146,7 @@ public class OrchestratorStartupTests
 
         var result = orchestrator.Handle(new SystemResumed("PBT_APMRESUMEAUTOMATIC"));
 
-        Assert.Equal(new RenewSession(22, "netflix"), Assert.Single(result.Commands));
+        Assert.Equal(new RenewSession(26, "netflix"), Assert.Single(result.Commands));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(new FocusRequest(FocusRequest.DefaultTarget, 2), snapshot.FocusRequest);
         Assert.Equal(AppLifecycleState.Background, StateOf(snapshot, "netflix"));
@@ -169,8 +169,8 @@ public class OrchestratorStartupTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new RenewSession(23, "netflix"), command),
-            command => Assert.Equal(new RenewSession(24, "plex-web"), command));
+            command => Assert.Equal(new RenewSession(27, "netflix"), command),
+            command => Assert.Equal(new RenewSession(28, "plex-web"), command));
     }
 
     /// <summary>

@@ -33,7 +33,7 @@ public sealed partial class Orchestrator
 
     /// <summary>
     /// Home z pierwszego planu: aplikacja schodzi do <c>Background</c>, shell wraca na wierzch, a InputHub
-    /// dostaje tryb <c>shell</c>. Kolejność komend jest istotna (AD-5/AD-15): najpierw minimalizacja,
+    /// dostaje tryb <c>shell</c>. Kolejność komend jest istotna (AD-5/AD-15): najpierw <see cref="MuteProcessTree"/>, potem minimalizacja,
     /// potem <see cref="ShowShell"/>, na końcu routing. Fokusu nie zmieniamy — UI sam wraca na ostatni kafelek.
     /// Home w trakcie <c>Starting</c> pokazuje od razu tylko shell: aplikacja zostaje <c>Starting</c> bez fokusu,
     /// bez routingu i bez anulowania timeoutu, a okno, które pojawi się później, dostanie kompensację w
@@ -59,10 +59,11 @@ public sealed partial class Orchestrator
             }
 
             app.State = AppLifecycleState.Background;
+            var mute = new MuteProcessTree(NextCmdId(), app.RootPid);
             var minimize = new MinimizeWindow(NextCmdId(), hwnd);
             var showShell = new ShowShell(NextCmdId());
             var routing = Route(InputMode.Shell, null, PointerPolicy.Blocked);
-            return new OrchestratorResult([minimize, showShell, routing], Snapshot());
+            return new OrchestratorResult([mute, minimize, showShell, routing], Snapshot());
         }
 
         if (!_apps.Exists(candidate => candidate.State == AppLifecycleState.Starting))

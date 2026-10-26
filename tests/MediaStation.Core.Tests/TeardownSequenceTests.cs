@@ -17,7 +17,7 @@ public class TeardownSequenceTests
         sequence.Dispose();
 
         Assert.Equal(
-            ["inputHub", "actionPump", "keyInjection", "windowManager", "notifications", "reporter", "timers", "loop"],
+            ["inputHub", "actionPump", "keyInjection", "windowManager", "audioRouter", "notifications", "reporter", "timers", "loop"],
             order);
     }
 
@@ -33,7 +33,7 @@ public class TeardownSequenceTests
         // Ta sama instancja wyjątku, a nie opakowanie; reszta adapterów i tak zwolniona.
         Assert.Same(failure, thrown);
         Assert.Equal(
-            ["inputHub", "actionPump", "keyInjection", "windowManager", "notifications", "reporter", "timers", "loop"],
+            ["inputHub", "actionPump", "keyInjection", "windowManager", "audioRouter", "notifications", "reporter", "timers", "loop"],
             order);
     }
 
@@ -50,7 +50,7 @@ public class TeardownSequenceTests
         // Dawna siatka `try/finally` przepuściłaby ostatni wyjątek; macierz Intent wymaga pierwszego.
         Assert.Same(first, thrown);
         Assert.Equal(
-            ["inputHub", "actionPump", "keyInjection", "windowManager", "notifications", "reporter", "timers", "loop"],
+            ["inputHub", "actionPump", "keyInjection", "windowManager", "audioRouter", "notifications", "reporter", "timers", "loop"],
             order);
     }
 
@@ -65,7 +65,22 @@ public class TeardownSequenceTests
 
         Assert.Same(failure, thrown);
         Assert.Equal(
-            ["inputHub", "actionPump", "keyInjection", "windowManager", "notifications", "reporter", "timers", "loop"],
+            ["inputHub", "actionPump", "keyInjection", "windowManager", "audioRouter", "notifications", "reporter", "timers", "loop"],
+            order);
+    }
+
+    [Fact]
+    public void Dispose_keeps_releasing_after_the_audio_router_throws()
+    {
+        var order = new List<string>();
+        var failure = new InvalidOperationException("audioRouter padł");
+        var sequence = Sequence(order, failed: ("audioRouter", failure));
+
+        var thrown = Assert.Throws<InvalidOperationException>(() => sequence.Dispose());
+
+        Assert.Same(failure, thrown);
+        Assert.Equal(
+            ["inputHub", "actionPump", "keyInjection", "windowManager", "audioRouter", "notifications", "reporter", "timers", "loop"],
             order);
     }
 
@@ -99,7 +114,8 @@ public class TeardownSequenceTests
             reporter: new Recorder("reporter", order, Failure("reporter", failed, alsoFailed)),
             timers: new Recorder("timers", order, Failure("timers", failed, alsoFailed)),
             loop: new Recorder("loop", order, Failure("loop", failed, alsoFailed)),
-            windowManager: new Recorder("windowManager", order, Failure("windowManager", failed, alsoFailed)));
+            windowManager: new Recorder("windowManager", order, Failure("windowManager", failed, alsoFailed)),
+            audioRouter: new Recorder("audioRouter", order, Failure("audioRouter", failed, alsoFailed)));
 
     private static Exception? Failure(
         string name,

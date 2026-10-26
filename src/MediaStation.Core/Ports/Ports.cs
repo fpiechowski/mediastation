@@ -47,6 +47,16 @@ public interface IWindowManagerPort
 }
 
 /// <summary>
+/// Port AudioRoutera (AD-15): jedyny kod wyciszający sesje audio drzewa procesów aplikacji. Wykonawca odpowiada
+/// <see cref="CommandCompleted"/> albo <see cref="CommandFailed"/> i nie przepuszcza wyjątku przez granicę portu (AD-4).
+/// </summary>
+public interface IAudioRouterPort
+{
+    /// <summary>Wycisza albo odcisza drzewo procesów od <c>rootPid</c> komendy; nie blokuje się na COM i nie rzuca.</summary>
+    void Execute(AudioCommand command);
+}
+
+/// <summary>
 /// Port routingu wejścia (AD-8): InputHub dostaje nową lokalną kopię trybu i decyduje według niej,
 /// bez czekania na Orchestrator. Wykonawca nie przepuszcza wyjątku przez granicę portu (AD-4).
 /// </summary>

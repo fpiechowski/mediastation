@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>MediaStation harness audio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; background: #101418; color: #e6edf3; font: 24px/1.4 system-ui, sans-serif; }
+  body { display: grid; place-items: center; text-align: center; }
+  small { display: block; opacity: .6; font-size: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <div id="status">start po pierwszym renderze...</div>
+  <small>Zapętlony ton 440 Hz (WebAudio) dla fixture AudioRoutera. Wymaga --autoplay-policy=no-user-gesture-required (harness ją dodaje).</small>
+</main>
+<script>
+  // Zapętlony ton WebAudio: start po pierwszym renderze, a co 2 s kontrola, czy kontekst gra. Po zabiciu
+  // procesu audio przeglądarki (msedge.exe --type=utility) kontekst jest odtwarzany i powstaje nowa sesja audio.
+  let context = null;
+  let oscillator = null;
+  let starts = 0;
+  const status = document.getElementById('status');
+
+  function render() {
+    status.textContent = 'ton ' + (context ? context.state : 'brak') + ', starty: ' + starts;
+  }
+
+  function startTone() {
+    try {
+      if (oscillator) { oscillator.stop(); oscillator.disconnect(); }
+      if (context) { context.close(); }
+    } catch (e) { /* kontekst mógł już zginąć razem z procesem audio */ }
+    context = new AudioContext();
+    const gain = context.createGain();
+    gain.gain.value = 0.05;
+    oscillator = context.createOscillator();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 440;
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    context.resume();
+    starts += 1;
+    render();
+  }
+
+  function heartbeat() {
+    if (!context || context.state !== 'running') { startTone(); } else { render(); }
+  }
+
+  // Dwie klatki: ton startuje po pierwszym renderze strony. Okno zasłonięte nie dostaje klatek, więc po 1,5 s
+  // start następuje i bez nich.
+  let begun = false;
+  function begin() {
+    if (begun) { return; }
+    begun = true;
+    startTone();
+    setInterval(heartbeat, 2000);
+  }
+  requestAnimationFrame(() => requestAnimationFrame(begin));
+  setTimeout(begin, 1500);
+</script>
+</body>
+</html>

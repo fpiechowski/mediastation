@@ -47,7 +47,7 @@ public sealed partial class Orchestrator
     /// powstaje przed komendami, bo wybudzenie zastępuje każdą wcześniejszą decyzję o pierwszym planie —
     /// okno startujące w trakcie wybudzenia trafi w kompensację z <see cref="OnAppWindowAttached"/>,
     /// a timeout <c>Starting</c> biegnie dalej. Aplikacja z <c>Foreground</c> schodzi do <c>Background</c>
-    /// w kolejności Home (AD-5/AD-15): <see cref="MinimizeWindow"/>, <see cref="ShowShell"/>, routing <c>shell</c>.
+    /// w kolejności Home bez wyciszenia (mute na tych ścieżkach to story 3; AD-5/AD-15): <see cref="MinimizeWindow"/>, <see cref="ShowShell"/>, routing <c>shell</c>.
     /// Na końcu każda aplikacja webowa w <c>Foreground</c> albo <c>Background</c> dostaje fire-and-forget
     /// <see cref="RenewSession"/> w kolejności <c>apps.json</c>: po schowaniu shell ma wrócić na wierzch,
     /// a zminimalizowana przeglądarka nadal potrzebuje świeżej sesji CDP. Gdy nic nie jest w <c>Foreground</c>,
