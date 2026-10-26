@@ -9,6 +9,7 @@
   --text-2: #c4c7cc;
   --text-3: #9aa0a6;
   --surface: #1e2024;
+  --surface-2: #26292e;
   --line: #33363c;
   --focus: #ffffff;
   --focus-ink: #0f1012;
@@ -34,12 +35,20 @@
   --gutter: 112px;
   --title-safe-y: 54px;
   --bar-top: 56px;
+  --tabs-top: 172px;
   --apps-top: 292px;
   --tile-gap: 48px;
   --tile-radius: 22px;
   --tile-width: 320px;
   --tile-height: 200px;
   --elevation-lift: 0 28px 56px rgba(0, 0, 0, 0.6), 0 10px 20px rgba(0, 0, 0, 0.45);
+
+  /* components.tab */
+  --tab-size: 30px;
+  --tab-weight: 500;
+  --tab-height: 64px;
+  --tab-padding-x: 32px;
+  --tab-gap: 12px;
 
   /* components.logo */
   --logo-size: 48px;
@@ -137,6 +146,48 @@ body {
   position: absolute;
   top: var(--bar-top);
   left: var(--gutter);
+}
+
+/* components.tab: aktywna bez fokusu = surface-2, fokus = focus-pill (tło focus, bez skali). */
+.tabs {
+  position: absolute;
+  top: var(--tabs-top);
+  left: var(--gutter);
+  display: flex;
+  gap: var(--tab-gap);
+  list-style: none;
+}
+
+.tab {
+  height: var(--tab-height);
+  padding: 0 var(--tab-padding-x);
+  display: flex;
+  align-items: center;
+  border-radius: calc(var(--tab-height) / 2);
+  font-size: var(--tab-size);
+  font-weight: var(--tab-weight);
+  color: var(--text-3);
+}
+
+.tab--active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.tab--focused {
+  background: var(--focus);
+  color: var(--focus-ink);
+}
+
+/* components.empty-state: jedno zdanie w pasie kafelków, niefokusowalne. */
+.empty-state {
+  position: absolute;
+  top: var(--apps-top);
+  left: var(--gutter);
+  font-size: var(--body-size);
+  font-weight: var(--body-weight);
+  line-height: var(--body-line);
+  color: var(--text-2);
 }
 
 /* Rząd kafelków (DESIGN.md → components.focus-ring): fokus to biały obrys 5px, skala 1.08 i cień. */

@@ -5,22 +5,54 @@ import type { LaunchApp } from '../../contracts/generated/launch-app';
 import type { ShellSnapshot } from '../../contracts/generated/shell-snapshot';
 
 type AppTile = ShellSnapshot['apps'][number];
+type AppCategory = AppTile['category'];
+
+/** Zakładki zawsze w tej kolejności i zawsze trzy (kategorie to zamknięty enum, AD-11). */
+export const CATEGORIES: readonly AppCategory[] = ['video', 'audio', 'game'];
+
+/** Kafelki kategorii w kolejności snapshotu. */
+export function tilesOf(apps: readonly AppTile[], category: AppCategory): AppTile[] {
+  return apps.filter((app) => app.category === category);
+}
 
 export interface FocusState {
-  /** `appId` kafelka w fokusie albo `null`, dopóki żaden `focusRequest` go nie ustawił. */
+  /** Gdzie stoi fokus: w rzędzie zakładek albo na kafelkach aktywnej zakładki. */
+  zone: 'tabs' | 'tiles';
+  /** Aktywna zakładka (aktywuje się, gdy dostaje fokus). */
+  activeTab: AppCategory;
+  /** `appId` kafelka w fokusie; tylko w strefie `tiles`, w `tabs` (i do pierwszego `focusRequest`) `null`. */
   focusedAppId: string | null;
+  /** `appId` ostatnio sfokusowanego kafelka każdej zakładki (nigdy indeks). */
+  memory: Partial<Record<AppCategory, string>>;
   /** `seq` ostatnio zastosowanego `focusRequest`; każdy `seq` stosujemy dokładnie raz. */
   appliedSeq: number | null;
 }
 
-export const initialFocusState: FocusState = { focusedAppId: null, appliedSeq: null };
+export const initialFocusState: FocusState = {
+  zone: 'tiles',
+  activeTab: 'video',
+  focusedAppId: null,
+  memory: {},
+  appliedSeq: null,
+};
 
 /** Cel `focusRequest.target` oznaczający pierwszy kafelek (FocusRequest.DefaultTarget w Core). */
 const DEFAULT_TARGET = 'default';
 
+/** Ustawia fokus na kafelku: strefa `tiles`, zakładka kafelka i pamięć tej zakładki. */
+function focusTile(state: FocusState, tile: AppTile): FocusState {
+  return {
+    ...state,
+    zone: 'tiles',
+    activeTab: tile.category,
+    focusedAppId: tile.appId,
+    memory: { ...state.memory, [tile.category]: tile.appId },
+  };
+}
+
 /**
- * Stosuje `focusRequest` ze snapshotu raz na `seq`: `default` → pierwszy kafelek, `<appId>` → ten kafelek.
- * Nieznany `appId` zostawia fokus bez zmian (a `seq` i tak jest zużyty).
+ * Stosuje `focusRequest` ze snapshotu raz na `seq`: `default` → pierwszy kafelek Video, `<appId>` → ten kafelek
+ * i jego zakładka. Nieznany `appId` zostawia fokus bez zmian (a `seq` i tak jest zużyty).
  */
 export function applyFocusRequest(state: FocusState, snapshot: ShellSnapshot): FocusState {
   const request = snapshot.focusRequest;
@@ -28,10 +60,10 @@ export function applyFocusRequest(state: FocusState, snapshot: ShellSnapshot): F
 
   const target =
     request.target === DEFAULT_TARGET
-      ? snapshot.apps[0]?.appId
-      : snapshot.apps.find((app) => app.appId === request.target)?.appId;
+      ? tilesOf(snapshot.apps, 'video')[0]
+      : snapshot.apps.find((app) => app.appId === request.target);
 
-  return { focusedAppId: target ?? state.focusedAppId, appliedSeq: request.seq };
+  return { ...(target ? focusTile(state, target) : state), appliedSeq: request.seq };
 }
 
 export interface ActionResult {
@@ -40,24 +72,37 @@ export interface ActionResult {
 }
 
 /**
- * Obsługa Action z mostu: Left/Right przesuwają fokus po pozycji `appId` w bieżącej liście (na krańcu zostaje),
- * OK (`press`) na kafelku `notRunning`/`background` daje Intent `launchApp`. Pozostałe Actions są bez skutku.
+ * Obsługa Action z mostu. Strefa `tiles`: Left/Right po `appId` w obrębie aktywnej zakładki (na krańcu zostaje),
+ * Up → `tabs`, OK (`press`) na kafelku `notRunning`/`background` daje Intent `launchApp`.
+ * Strefa `tabs`: Left/Right zmieniają aktywną zakładkę (na krańcu zostaje), Down → zapamiętany kafelek
+ * zakładki (pierwszy, gdy brak pamięci; nic, gdy zakładka pusta). Pozostałe Actions są bez skutku.
  */
 export function applyAction(state: FocusState, apps: readonly AppTile[], action: Action): ActionResult {
+  const tiles = tilesOf(apps, state.activeTab);
   switch (action.kind) {
     case 'left':
     case 'right': {
-      const index = apps.findIndex((app) => app.appId === state.focusedAppId);
-      if (index < 0) {
-        const first = apps[0];
-        return first ? { state: { ...state, focusedAppId: first.appId } } : { state };
+      const step = action.kind === 'left' ? -1 : 1;
+      if (state.zone === 'tabs') {
+        const next = CATEGORIES[CATEGORIES.indexOf(state.activeTab) + step];
+        return next ? { state: { ...state, activeTab: next } } : { state };
       }
-      const next = apps[action.kind === 'left' ? index - 1 : index + 1];
-      return next ? { state: { ...state, focusedAppId: next.appId } } : { state };
+      const index = tiles.findIndex((app) => app.appId === state.focusedAppId);
+      const next = index < 0 ? tiles[0] : tiles[index + step];
+      return next ? { state: focusTile(state, next) } : { state };
+    }
+    case 'up': {
+      if (state.zone !== 'tiles') return { state };
+      return { state: { ...state, zone: 'tabs', focusedAppId: null } };
+    }
+    case 'down': {
+      if (state.zone !== 'tabs') return { state };
+      const target = tiles.find((app) => app.appId === state.memory[state.activeTab]) ?? tiles[0];
+      return target ? { state: focusTile(state, target) } : { state };
     }
     case 'ok': {
-      if (action.phase !== 'press') return { state };
-      const focused = apps.find((app) => app.appId === state.focusedAppId);
+      if (action.phase !== 'press' || state.zone !== 'tiles') return { state };
+      const focused = tiles.find((app) => app.appId === state.focusedAppId);
       if (focused && (focused.state === 'notRunning' || focused.state === 'background')) {
         return { state, intent: { appId: focused.appId } };
       }

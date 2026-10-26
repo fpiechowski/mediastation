@@ -39,7 +39,7 @@ export function App() {
 
   switch (snapshot.screen) {
     case 'placeholder':
-      return <Placeholder apps={snapshot.apps} focusedAppId={focus.focusedAppId} />;
+      return <Placeholder apps={snapshot.apps} focus={focus} />;
     case 'configError':
       return <ConfigErrorScreen errors={snapshot.configErrors} />;
     default: {
