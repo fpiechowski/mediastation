@@ -66,7 +66,7 @@ flowchart LR
   O -- Command --> ST
   O -- Command --> UP
   O -- "SetInputRouting" --> IH
-  O -- "ViewModel snapshot" --> SH
+  O -- "ViewModel snapshot<br/>Action (tryb shell)" --> SH
   AH <-. "CDP ws://127.0.0.1 / bridge" .-> PB["Page bundle<br/>PageRuntime + ServiceDriver"]
 ```
 
@@ -182,10 +182,10 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 
 ### AD-8: Wejście = Actions, routing z lokalną kopią trybu
 
-- **Binds:** InputHub, Orchestrator, Shell UI, OSK, PageRuntime
-- **Prevents:** dwie ścieżki D-pada w webie; hook czekający na Orchestrator (Windows usuwa hook po `LowLevelHooksTimeout`); zawieszone klawisze; podwójne Actions; pętla własnych `SendInput`; UI czytający surowe klawisze; powtórzenie zaobserwowanego na UM760 milczenia hooka przy rejestracji Raw Input klawiatury w tym samym procesie; przycisk Klawiatura bez żadnego przycisku pilota z VK; podwójna Action Home/Back przez mapowanie ich usage HID obok VK
+- **Binds:** InputHub, Orchestrator, ShellBridge, Shell UI, OSK, PageRuntime
+- **Prevents:** dwie ścieżki D-pada w webie; dwa źródła stanu AppMenu (Shell i Orchestrator) i AppMenu, którego Home nie zamyka; hook czekający na Orchestrator (Windows usuwa hook po `LowLevelHooksTimeout`); zawieszone klawisze; podwójne Actions; pętla własnych `SendInput`; UI czytający surowe klawisze; powtórzenie zaobserwowanego na UM760 milczenia hooka przy rejestracji Raw Input klawiatury w tym samym procesie; przycisk Klawiatura bez żadnego przycisku pilota z VK; podwójna Action Home/Back przez mapowanie ich usage HID obok VK
 - **Rule:**
-  - InputHub zamienia źródła na **Actions** `{ kind: Up|Down|Left|Right|Ok|Back|Home|AppMenu|Keyboard, phase: press|repeat|long, source, tsMono }`. `Keyboard` daje przycisk pilota z `input.json` (wybrany w `--calibrate-input`) i klawisz konfigurowalny dla klawiatury i pada.
+  - InputHub zamienia źródła na **Actions** `{ kind: Up|Down|Left|Right|Ok|Back|Home|Keyboard, phase: press|repeat|long, source, tsMono }`. Nie ma `kind` dla AppMenu: AppMenu otwiera Shell z OK (reguła AppMenu niżej), więc `ActionKind.AppMenu` znika z kontraktu, a `"appMenu"` w `input.json` jest odrzucane jak każda nieznana wartość enumu. `Keyboard` daje przycisk pilota z `input.json` (wybrany w `--calibrate-input`) i klawisz konfigurowalny dla klawiatury i pada.
   - **Jedno naciśnięcie daje jedną Action.** Wyzwalaczem jest VK z hooka LL, a Raw Input służy tylko do identyfikacji urządzenia. Jedyny wyjątek to wyzwalacz HID usage dla `Keyboard` (reguła niżej). Autorepeat systemu nie daje kolejnej Action.
   - **Wyzwalacz HID usage dla `Keyboard` [decyzja 2026-10-25, bug 3.14].** Przycisk pilota bez VK może wyzwolić Action `Keyboard` raportem HID Consumer. Na G20S Pro jest to przycisk asystenta głosowego: strona `0x0C`, usage `0x00CF`, bez VK, a Windows nie robi z nim nic (S9, 2026-10-25).
     - **Zakres:** tylko `Keyboard`, tylko urządzenie `source: remote`, tylko strona `0x0C`. Home, Back, OK i strzałki zostają na VK; usage `0x0223` i `0x0224` nie mogą być mapowane, bo ich VK daje już Action i powstałyby dwie.
@@ -214,17 +214,25 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 
     | Tryb / typ aktywnej aplikacji | D-pad, OK | Back | Home | Keyboard | Mysz/żyroskop |
     | --- | --- | --- | --- | --- | --- |
-    | `shell` (ekran główny) | połykane → Action do Shell | połykane → Action | połykane | połykane → OSK, gdy Shell zgłosił `textFocus{active:true}`; inaczej nic | przechodzi; `pointer` (domyślnie `blocked`) tylko ukrywa kursor w bezruchu |
+    | `shell` (ekran główny) | połykane → Action do Shell | połykane → Action do Shell | połykane → Orchestrator, potem Action do Shell | połykane → OSK, gdy Shell zgłosił `textFocus{active:true}`; inaczej nic | przechodzi; `pointer` (domyślnie `blocked`) tylko ukrywa kursor w bezruchu |
     | `osk` | połykane → OSK | połykane → OSK (zamyka rząd wariantów, a gdy go nie ma, OSK) | połykane → zamyka OSK i pokazuje ekran główny | połykane → zamyka OSK | dozwolona, kursor ograniczony do okna OSK (`ClipCursor`); kliknięcie poza OSK połykane |
     | `app` + `web` | połykane → `action` do strony | połykane → `back` do strony | połykane | połykane → OSK, gdy strona zgłosiła `textFocus{active:true}`; inaczej nic | przechodzi; `pointer` (domyślnie `blocked`) tylko ukrywa kursor w bezruchu |
     | `app` + `moonlight` / `native` | przechodzą do aplikacji (bez Actions) | połykane → polityka `back` (`home` \| `key:<VK>`) | połykane | połykane → OSK | przechodzi; `pointer` (domyślnie `allowed`) = kursor widoczny |
 
-  - `AppMenu` istnieje tylko w trybie `shell`. Wyzwalacze:
-    - long-press OK (`phase: long`) na kafelku aplikacji w stanie `Background` albo `Failed`;
-    - OK (`press`) na kafelku w stanie `Failed`. AppMenu otwiera się wtedy z fokusem na „Uruchom ponownie”.
-  - Long-press OK na kafelku `NotRunning` nic nie robi. OK na kafelku `Starting` jest ignorowane.
+  - **Actions w trybie `shell`.** Orchestrator przekazuje do Shell komunikatem `action` (AD-16) strzałki (`press`, `repeat`), Ok (`press`, `long`), Back i Home. O przekazaniu D-pada, OK i Back decyduje tryb Orchestratora w chwili obsługi Action. Shell nie dostaje ich w trybach `app` i `osk`.
+    - Przekazanie nie jest Commandem (bez `cmdId`, bez `CommandCompleted`): wynik kroku Orchestratora niesie osobną listę Actions dla Shell obok snapshotu, a pętla publikuje najpierw snapshot tego kroku, potem te Actions (kolejność dostarczenia w AD-16).
+    - Home Orchestrator najpierw obsługuje jak w każdym trybie (przejście z nowym `transitionId`, AD-14), a potem **zawsze** przekazuje go do Shell, także gdy obsługa nic nie zmieniła. W Shell Home tylko zamyka nakładki (AppMenu) i nie przenosi fokusu. Home na ekranie głównym zachowuje skutek z AD-14: aplikacja w `Starting` nie wyjdzie na wierzch. Zamknięcie AppMenu bez skutków ubocznych daje Back.
+  - W pozostałych trybach Orchestrator obsługuje dziś tylko Home: przekazanie `action` i `back` do strony dokłada epika BrowserHost/Netflix, a OSK epic-osk. `Keyboard` nie trafia do Shell i Orchestrator go ignoruje, dopóki epic-osk nie doda bramki `textFocus` (AD-9, DW-17). InputHub emituje `Keyboard` w każdym wierszu tabeli i sam go nie bramkuje.
+  - **AppMenu** istnieje tylko w trybie `shell` i należy do Shell:
+    - stan otwarcia (które `appId`, fokus w menu) to efemeryczny stan nawigacji Shell (AD-16), nie stan sesji;
+    - wyzwalacze rozstrzyga Shell z otrzymanej Action i `state` kafelka ze snapshotu: long-press OK (`phase: long`) na kafelku `Background` albo `Failed`; OK (`press`) na kafelku `Failed`, z fokusem na „Uruchom ponownie”;
+    - long-press OK na kafelku `NotRunning`, `Starting` albo `Stopping` nic nie robi, a OK na kafelku `Starting` jest ignorowane;
+    - Back zamyka menu z fokusem na kafelku, Home zamyka menu i zostawia ekran główny;
+    - Shell sam zamyka menu, bez Intentu, gdy jego aplikacja w snapshocie wyjdzie z `Background` i `Failed`, gdy przyjdzie nowe `focusRequest.seq` (najpierw zamknięcie, potem fokus) albo gdy którakolwiek aplikacja jest `Foreground`;
+    - do Orchestratora idą tylko Intents `RestartApp` i `CloseApp` z pozycji menu. Intentu otwierającego AppMenu nie ma;
+    - Shell decyduje na podstawie ostatniego snapshotu, a Orchestrator i tak sprawdza każdy Intent wobec własnego stanu (AD-3): `LaunchApp` tylko z `NotRunning` albo `Background`, `RestartApp` i `CloseApp` tylko z `Background` albo `Failed`, zawsze pod warunkiem, że inna aplikacja nie jest aktywna. Inny Intent jest ignorowany z wpisem `intentIgnored` w logu.
+  - Shell działa wyłącznie na Actions: kliknięcie i ruch wskaźnika (mysz, żyroskop) nie przenoszą fokusu, nie otwierają AppMenu i nie wysyłają Intents.
   - Gamepad w Moonlight jest przepuszczany w całości: D-pad i OK nie dają Actions, a kombinacja Home z pada daje `home` w każdym trybie. Home z pada to konfigurowalna kombinacja.
-  - InputHub emituje `Keyboard` w każdym wierszu tabeli i sam go nie bramkuje; bramkowanie `textFocus` należy do Orchestratora (AD-9) i dokłada je epic-osk razem z OSK. Dziś Orchestrator ignoruje Actions inne niż `Home`, więc zachowanie odpowiada tabeli.
   - Shell UI i OSK konsumują **wyłącznie** Actions z core.
 
 **Notes — spike 3.11 (2026-10-24):**
@@ -272,11 +280,14 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 
 ### AD-11: Rejestr aplikacji i konfiguracja w danych
 
-- **Binds:** Config, AppHosts, Shell UI, Store, logi
-- **Prevents:** tabela „serwis → przeglądarka” w kodzie; rozjechane identyfikatory aplikacji; kolizje portów; dwa schematy jednego pliku
+- **Binds:** Config, AppHosts, Shell UI, Shell host (`ShellWindow`), Store, logi
+- **Prevents:** tabela „serwis → przeglądarka” w kodzie; rozjechane identyfikatory aplikacji; kolizje portów; dwa schematy jednego pliku; plik z `config/icons/` wykonany w origin shella i przepuszczony przez guard mostu
 - **Rule:**
   - Konfiguracja to trzy pliki w `config/`. Ich schematy to rekordy w Core, a nieznane pola są odrzucane.
     - `apps.json` zawiera wpisy `{ id, type: web|moonlight|native, category: video|audio|game, title, icon, back, pointer, … }`:
+      - `title` i `icon` są wymagane; walidacja odrzuca wartość pustą albo złożoną z samych spacji. `icon` to sama nazwa pliku w `config/icons/` (np. `netflix.png`), bez separatorów ścieżki i bez `..`;
+      - brak pliku ikony na dysku nie jest błędem konfiguracji: App sprawdza go przy ładowaniu konfiguracji, loguje `warn` `appIconMissing{ appId, icon }` i podaje Core wpis z `icon: null`. Core nie dotyka dysku (AD-3), a każdy snapshot (także z `ShellSnapshotFactory`) bierze `icon` z tych samych załadowanych wpisów. Shell przy `null` i przy błędzie ładowania obrazka pokazuje kafelek z samym tytułem;
+      - **ikony podaje host drugim mapowaniem virtual host** `icons.mediastation.example` → `config/icons/` (`SetVirtualHostNameToFolderMapping`, `DenyCors`: `<img>` działa, `fetch` nie), w Debug i w Release. Shell składa URL `https://icons.mediastation.example/<encodeURIComponent(icon)>`. Origin ikon nie jest origin shella: most odrzuca z niego wiadomości, a nawigacja na niego jest blokowana (AD-16). Plików z `config/icons/` nie wolno podawać w origin shella;
       - `category` wyznacza zakładkę ekranu głównego, a kolejność wpisów w pliku jest kolejnością kafelków w zakładce. Zakładka bez wpisów (w MVP `audio`) pokazuje empty state;
       - domyślne polityki: `web` → Back przez stronę (AD-7), `pointer: blocked` (podpowiedź kursora, bez połykania, AD-8); `moonlight` → `back: key:Escape`, `pointer: allowed`; `native` → `back: home`, `pointer: allowed`;
       - `web`: `{ service, browser: edge|chrome, cdpPort }`, czyli tabela „serwis → przeglądarka” żyje tutaj;
@@ -332,8 +343,8 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
   - **Środowiska:** Debug ładuje shell z Vite dev servera w WebView2, a Release z plików lokalnych. Jedna maszyna docelowa (UM760). Maszyna deweloperska służy do buildu i testów bez Netflixa.
   - **Hotfix drivera:** page bundle jest czytany z dysku przy każdym wstrzyknięciu. Hotfix = podmiana pliku w `page/` bieżącej wersji + „uruchom ponownie” z pilota. Następna aktualizacja go nadpisuje, więc poprawka musi trafić też do repo.
   - **Testy:**
-    - Core: xunit (polityki i Orchestrator na fake'ach portów z `FakeTimeProvider`);
-    - drivery: vitest na zapisanych fixture'ach DOM Netflixa;
+    - Core: xunit (polityki i Orchestrator na fake'ach portów z `FakeTimeProvider`), plus źródła App bez WPF i Win32 linkowane do `MediaStation.Core.Tests` (Consistency Conventions);
+    - web: Vitest to jedyny runner testów web, jedno `npm test` w `web/` dla `web/shell` i page bundle (drivery na zapisanych fixture'ach DOM Netflixa, CAP-8). Testy `web/shell` sprawdzają czystą logikę bez DOM (model fokusu, zakładki, wyzwalacze AppMenu, mapowanie stanu na chip i linię kafelka) na snapshotach testowych, więc Shell trzyma tę logikę poza komponentami React. Środowisko DOM (jsdom, Testing Library) nie wchodzi do Stack w tej epice;
     - zgodność kontraktów zapewniają typy generowane (AD-16).
   - **Logi:**
     - JSON Lines, UTC, rotacja dzienna, w `%LOCALAPPDATA%\MediaStation\logs`;
@@ -377,14 +388,35 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 
 ### AD-16: Jedno źródło kontraktów Shell ↔ Core i page ↔ host
 
-- **Binds:** Core, Shell UI (React), PageRuntime, BrowserHost
-- **Prevents:** ręcznie pisane, rozjechane typy TS i C#; fokus UI zależny od indeksów, które się przesuwają
+- **Binds:** Core, Shell UI (React), ShellBridge, ShellWindow, PageRuntime, BrowserHost, build web
+- **Prevents:** ręcznie pisane, rozjechane typy TS i C#; fokus UI zależny od indeksów, które się przesuwają; zdublowana, zaległa albo oceniona na starym snapshotcie Action w Shell; Intent wstrzyknięty z obcej strony albo Command/Event przyjęty od Shell; kontrakty nieodświeżane na maszynie z Application Control
 - **Rule:**
   - View-model, Intents, protokół strony i schematy konfiguracji to rekordy w Core.
   - JSON Schema eksportuje `System.Text.Json` (`JsonSchemaExporter`), a typy TS generuje `json-schema-to-typescript` w buildzie web. Ręczna edycja wygenerowanych typów jest zakazana.
+  - **Eksport schematów działa w przebiegu testów** (DW-28):
+    - eksportuje test w `MediaStation.Core.Tests` z kategorią `SchemaExport` (`ContractJson.ExportSchemas()` do `web/contracts/schema`, zapis tylko przy zmianie, usuwanie nieaktualnych schematów). Nie ma osobnego exe ani dll eksportera: `tools/MediaStation.SchemaExport` znika z repo i z `MediaStation.slnx`. „Osobny” znaczy: poza obrazami, które weryfikacja i tak uruchamia (`dotnet test`);
+    - target `BuildWeb` w App buduje `MediaStation.Core.Tests` zadaniem `<MSBuild>` w tym samym przebiegu MSBuild, potem uruchamia `dotnet test … --no-build --no-restore -c $(Configuration) --filter Category=SchemaExport`, a na końcu npm tylko z generowaniem TS i buildem Vite. **`BuildWeb` nigdy nie uruchamia budującego `dotnet build` ani `dotnet test` jako osobnego procesu** (wyścig o `bin/obj` przy buildzie solucji);
+    - samodzielne `npm run contracts` (i `npm run build`) w `web/` robi eksport z budowaniem (`dotnet test` z filtrem), a potem generowanie; skrypt eksportu i skrypt generowania są osobne, żeby `BuildWeb` wołał tylko drugi;
+    - zero testów pasujących do filtra albo zablokowany host testów kończy build błędem, bez cichego fallbacku na stare typy. Host testów też jest świeżym niepodpisanym exe, a blokada zależy od skrótu pliku, więc to zmniejsza ryzyko, ale go nie usuwa. Podpisywanie i reguły Application Control nie są częścią buildu.
   - Serializacja: camelCase, enumy jako stringi, jawne `null`.
-  - Most UI ↔ core to WebView2 `postMessage` z kopertą `{ v, type, payload }`. Core wysyła **pełny snapshot** z monotonicznym `rev`, a UI odrzuca snapshot ze starszym `rev`.
-  - UI jest właścicielem tylko efemerycznego stanu nawigacji (fokus, scroll, aktywna zakładka), kluczowanego stabilnymi id (`appId`, klucz „Do oceny”, `category`), nigdy indeksami.
+  - Most UI ↔ core to WebView2 `postMessage` z kopertą `{ v, type, payload }`:
+
+    | Kierunek | `type` | `payload` | Dostarczanie |
+    | --- | --- | --- | --- |
+    | Core → Shell | `snapshot` | pełny view-model z monotonicznym `rev` | latest-wins (AD-14); UI odrzuca snapshot ze starszym `rev` |
+    | Core → Shell | `action` | rekord `Action` (AD-8), bez `rev` | poza snapshotem, w kolejności, **najwyżej raz**; tylko w trybie `shell` |
+    | Shell → Core | `ready` | `null` | odpowiedź: najnowszy snapshot |
+    | Shell → Core | `launchApp`, `restartApp`, `closeApp` | Intent `{ appId }` | do kolejki Orchestratora |
+
+  - **Dostarczanie Core → Shell:** snapshot i `action` idą jedną kolejką FIFO na wątku UI. Przed wysłaniem każdej `action` most wysyła oczekujący snapshot, więc Shell zawsze ocenia Action na stanie z kroku, który ją przekazał, albo nowszym. Most nie buforuje Actions: `action` przed pierwszym `ready`, po nawigacji strony shella albo starsza (wg `tsMono`) niż próg mostu (ok. 1 s, stała w `ShellBridge`) jest odrzucana z wpisem `shellActionDropped`, więc zawieszony UI nie odtwarza po odwieszeniu zaległych strzałek i OK. Logika kolejki i walidacji leży poza typami WebView2, żeby dało się ją linkować do testów (Consistency Conventions).
+  - **Kierunek Shell → Core** to jawna lista typów z tabeli (`ready` plus Intents), a nie wyszukanie w `MessageTypes`: do kolejki Orchestratora trafiają wyłącznie rekordy `Intent`. `snapshot`, `action` i każdy inny `type` od Shell, inne `v` albo nieczytelny payload most odrzuca i loguje `bridgeMessageRejected`. Kolejne Intents (np. `InstallUpdate`, AD-17) dopisuje do tej listy epika, która je wprowadza.
+  - Typy payloadów obu kierunków w TS pochodzą z `web/contracts/generated` (`Action`, `ShellSnapshot`, Intents); ręcznie napisana jest tylko generyczna koperta `{ v, type, payload }` w `web/shell/src/bridge.ts`.
+  - **Bezpieczeństwo mostu:**
+    - most przyjmuje wiadomości tylko wtedy, gdy `e.Source` ma origin shella (Release `https://shell.mediastation.example`, Debug origin Vite dev servera); inne odrzuca z `bridgeMessageRejected`;
+    - WebView2 anuluje każdą nawigację głównej ramki i ramek poza origin shella (`NavigationStarting`, `FrameNavigationStarting`, wpis `navigationBlocked`) i każde nowe okno (`NewWindowRequested`, wpis `newWindowBlocked`). Anulowanej nawigacji (`OperationCanceled`) nie loguje jako `navigationFailed`;
+    - `index.html` shella ma CSP co najmniej `script-src 'self'; img-src 'self' https://icons.mediastation.example; frame-src 'none'; object-src 'none'`. Debug dokłada tylko to, czego wymaga Vite dev server (jego origin i `ws:` dla HMR).
+  - View-model aplikacji niesie `{ appId, category, state, title, icon, type: web|moonlight|native }` (`icon` może być `null`, AD-11). Shell z `type` wybiera chip i linię stanu `Background`: `web` → „Wstrzymane”, `moonlight` i `native` → „Wyciszony” (DESIGN.md, Stany kafelka).
+  - UI jest właścicielem tylko efemerycznego stanu nawigacji (fokus, scroll, aktywna zakładka, pamięć fokusu per zakładka, otwarte AppMenu z jego `appId` i fokusem), kluczowanego stabilnymi id (`appId`, klucz „Do oceny”, `category`), nigdy indeksami. Ten stan nie wraca do Core; po restarcie UI zaczyna od `focusRequest`.
   - Snapshot niesie `focusRequest { target: default|<appId>, seq }`. UI stosuje każde nowe `seq` dokładnie raz, potem fokus znów należy do UI. `default` = zakładka Video, pierwszy kafelek (zimny start, restart, wybudzenie). `<appId>` = kafelek tej aplikacji (`Failed` z pierwszego planu, AD-10).
   - View-model niesie `category` każdej aplikacji, więc Shell sam grupuje kafelki w zakładki i liczy wskaźnik „działa w tle” per zakładka.
 
@@ -414,6 +446,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 | Pliki | `%LOCALAPPDATA%\MediaStation\{config,data,profiles\<appId>,logs}`; każdy plik w `data/` ma `schemaVersion` i zapis atomowy |
 | Błędy | `CommandFailed{cmdId, errorCode}` z enumem `ErrorCode` w Core; o stanie `Failed` decyduje Orchestrator |
 | Interop Win32 | tylko w `Platform/*`, przez CsWin32; C# i JS ze spike'u to referencja zachowania, nie kod do skopiowania bez przeglądu |
+| Testy kodu App | Nie ma osobnego projektu testów App. Źródła `MediaStation.App` bez WPF, WebView2 i Win32 są linkowane (`<Compile Include="…" Link="App\…" />`) do `tests/MediaStation.Core.Tests/MediaStation.Core.Tests.csproj` (19 plików na 2026-10-26). Logikę, którą chcemy testować, wydziela się z typów WPF/WebView2/Win32 do osobnego pliku (np. walidacja wiadomości `ShellBridge` od `CoreWebView2`) |
 
 ## Stack
 
@@ -429,7 +462,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 | Vite | 8.3.4 |
 | TypeScript | 6.0.3 (7.x dopiero, gdy typescript-eslint go obsłuży) |
 | esbuild (page bundle IIFE) | 0.28.2 |
-| vitest | 5.0.5 |
+| Vitest (jedyny runner testów web: `web/shell` i page bundle, `npm test` w `web/`) | 5.0.5 |
 | json-schema-to-typescript | 16.0.0 |
 | Microsoft Edge (Netflix) / Chrome | stable, kanał evergreen (155 w spike'u) |
 | Moonlight-qt | 6.2.0 |
@@ -452,7 +485,7 @@ mediastation/
     shell/                      # React + Vite → zasoby Shell
     page/runtime/               # PageRuntime
     page/drivers/netflix/       # ServiceDriver + manifest.json + fixtures/
-  tests/MediaStation.Core.Tests/
+  tests/MediaStation.Core.Tests/  # xunit Core + linkowane źródła App + eksport schematów (AD-16)
   tools/install.ps1
   .github/workflows/release.yml # release na tagu v<semver> (AD-13, AD-17)
   spike/                        # zamrożona referencja, nie budowana
