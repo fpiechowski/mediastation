@@ -1,0 +1,125 @@
+# Home screen — entries w kolejności budowy. tickets.py reads it.
+# Kolejność tabel = kolejność budowy; `id` nie jest kolejnością.
+# Lane Core: 1 i 2 równolegle, potem tracer 3. Lane web: 3 → 4 → 5 → 6, 4 → 7, 5 + 7 → 8; 9 równolegle po 3; 10 na końcu.
+# Decyzje przecinające kilka stories (AppMenu w Shell, linia Background bez tytułu, ikony w config/icons/, przypisanie długu) są w Notes epiki.
+# Ścieżki w `references` są względne do folderu inicjatywy.
+
+[[entry]]
+id = 1
+type = "story"
+title = "Generowanie kontraktów działa przy Application Control"
+description = "Sprawia, że eksport JSON Schema z rekordów Core i generowanie typów TS w `web/contracts` działają na maszynie z Application Control bez ręcznych kroków (DW-28): dziś świeży niepodpisany `MediaStation.SchemaExport.dll` jest blokowany (0x800711C7), więc `dotnet build` nie odświeża schematów, a publish wymaga `-p:SkipWebBuild=true`, ręcznego `npm run build` i kopiowania `web/shell/dist`. Sposób (np. eksport z przebiegu testów albo inny host procesu) wybiera story; ręcznie napisane `set-managed-windows.schema.json` i `generated/set-managed-windows.ts` zastępuje wynik generatora."
+verify = "Na bieżącej maszynie: zmiana pola w rekordzie Core, potem `dotnet build` i `npm run build` w `web/` dają zaktualizowany schemat i typ TS bez kroków ręcznych, także gdy świeży niepodpisany `MediaStation.SchemaExport.dll` byłby zablokowany (generowanie nie uruchamia osobnego niepodpisanego exe ani dll), a zwykły `dotnet publish` zawiera `shell/`; `dotnet test` przechodzi, w tym `CoreMessageContractTests`."
+covers = ["R8"]
+after = ["1.2"]
+hitl = false
+risk = "medium"
+references = ["deferred-work.md, DW-28", "../plan-ad8-foreground-gate.md"]
+
+[[entry]]
+id = 2
+type = "story"
+title = "Refactor otwierający: handlery Orchestratora i podział testów"
+description = "Przed pierwszą nową gałęzią dispatchu (DW-19) wydziela z `Orchestrator.Handle` (12 gałęzi) grupy handlerów per funkcja (start/wybudzenie, launch, attach/adopcja, Home, stop/restart, awarie, timery, zarządzane okna) i dzieli `OrchestratorTests.cs` (1909 linii, jedna klasa) na pliki według tych samych grup ze wspólnymi helperami; zachowanie się nie zmienia."
+verify = "`dotnet test` przechodzi z tą samą liczbą testów co przed zmianą, żaden plik testów Orchestratora nie przekracza ok. 600 linii, a `Orchestrator.Handle` tylko deleguje do grup."
+covers = ["R5"]
+after = []
+hitl = false
+risk = "low"
+references = ["deferred-work.md, DW-19"]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Tracer bullet: D-pad przesuwa fokus po kafelkach, OK uruchamia aplikację"
+description = "Najcieńsza ścieżka przez wszystkie warstwy: Orchestrator zapamiętuje bieżący tryb i w trybie `shell` przekazuje Actions (Up, Down, Left, Right, Ok, Back, Home) do Shell komunikatem przez most; snapshot dostaje `title` i `icon` z `apps.json`; Shell renderuje kafelki aplikacji w jednym rzędzie z jednym fokusem kluczowanym `appId`, a OK na kafelku `NotRunning` albo `Background` wysyła Intent `LaunchApp` przez most. Most przyjmuje od strony `ready` i Intents tylko z origin shella (guard `e.Source`, F11), WebView2 blokuje nawigację poza shell, `NavigationCompleted` nie loguje `OperationCanceled` jako `navigationFailed` (R7/N8), a `ShellBridge` i `ShellWindow` dostają testy ścieżek odrzucenia (R4/N3). Dochodzi vitest w `web/` z testami modelu fokusu."
+verify = "`dotnet test` przechodzi z testami: Action w trybie `shell` trafia do Shell, w trybie `app` nie; Intent z obcego origin jest odrzucany z `bridgeMessageRejected`; `LaunchApp` z mostu dociera do Orchestratora. `npm test` w `web/` przechodzi z testami fokusu (Lewo/Prawo po `appId`, OK wysyła `LaunchApp`). Na bieżącej maszynie strzałki klawiatury przesuwają fokus po kafelkach, a OK na kafelku daje w logu `startWithoutHost` i kafelek w `Failed`."
+covers = ["R3", "R5", "R8"]
+after = [1, 2, "1.1", "1.7", "2.10", "3.5"]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (tabela routingu, wiersz shell)", "architecture-mediastation/architecture-mediastation.md, AD-16", "tickets/epic-foundation-contracts/epic-foundation-contracts-retrospective.md, F11, R4/N3, R7/N8"]
+
+[[entry]]
+id = 4
+type = "story"
+title = "Zakładki Video, Audio i Game z category"
+description = "Shell grupuje kafelki w zakładki Video, Audio i Game według `category` i kolejności wpisów w `apps.json`; zakładka aktywuje się na fokus, Lewo/Prawo przechodzi między zakładkami, Dół wraca na zapamiętany kafelek tej zakładki (pamięć fokusu per zakładka po `appId`), Góra z kafelków wraca na zakładki; zakładka bez wpisów pokazuje empty state „Tu jeszcze cisza. Muzyka dojdzie wkrótce.”, a fokus zostaje na zakładce i Dół nic nie robi."
+verify = "`npm test` przechodzi z testami: grupowanie i kolejność kafelków z `category`, pamięć fokusu per zakładka po `appId` po przestawieniu wpisów, empty state Audio bez elementu fokusowalnego; na bieżącej maszynie sample `apps.json` daje trzy zakładki, a strzałki przechodzą między nimi."
+covers = ["R1", "R3"]
+after = [3]
+hitl = false
+risk = "medium"
+references = ["ux-mediastation/EXPERIENCE.md, Component Patterns (Tab, Empty state)"]
+
+[[entry]]
+id = 5
+type = "story"
+title = "Kafelek wg DESIGN.md: ikona, tytuł, chip i linia stanu"
+description = "Snapshot dostaje `type` aplikacji z `apps.json`, a kafelek używa `title` i `icon` ze snapshotu ze story 3. Kafelek pokazuje ikonę z `config/icons/` (brak pliku: sam tytuł i wpis `warn`; ikony podaje host tak, żeby guard origin i blokada nawigacji ze story 3 dalej obowiązywały), tytuł oraz chip i linię stanu z tabeli Stany kafelka w `DESIGN.md` dla każdego stanu cyklu życia, z ikonami Material Symbols Rounded i fontem Roboto Flex bundlowanymi lokalnie; linia `Background` bez tytułu treści („W tle · wstrzymane” dla `web`, „W tle · wyciszony” dla `moonlight`, Decision w Notes epiki); fokus `focus-ring` z przejściem ok. 150 ms. Walidacja `apps.json` odrzuca puste albo złożone ze spacji `title` i `icon` (F18)."
+verify = "`dotnet test` przechodzi z testami walidacji pustego i złożonego ze spacji `title` i `icon`; `npm test` przechodzi z testem chipa i linii stanu dla każdego stanu na snapshotach testowych i z testem fallbacku przy braku ikony; na bieżącej maszynie kafelek `Failed` pokazuje „Nie odpowiada” i „Coś się zacięło. Wciśnij OK”."
+covers = ["R2", "R6", "R7"]
+after = [4]
+hitl = false
+risk = "medium"
+references = ["ux-mediastation/DESIGN.md, Components (Stany kafelka, Chip, Tile)", "tickets/epic-foundation-contracts/epic-foundation-contracts-retrospective.md, F18"]
+
+[[entry]]
+id = 6
+type = "story"
+title = "Kropka „w tle” na zakładce"
+description = "Zakładka pokazuje `tab-running-dot`, gdy co najmniej jedna aplikacja tej zakładki jest w `Background`, licząc z `category` w snapshocie (AD-16); kropka znika, gdy żadna nie jest."
+verify = "`npm test` przechodzi z testami na snapshotach testowych: aplikacja Video w `Background` zapala kropkę tylko na Video, aplikacja w `Foreground` albo `Failed` jej nie zapala, a powrót do `NotRunning` ją gasi."
+covers = ["R2"]
+after = [5]
+hitl = false
+risk = "low"
+references = ["ux-mediastation/DESIGN.md, Components (Tab)"]
+
+[[entry]]
+id = 7
+type = "story"
+title = "focusRequest i powrót na ostatni kafelek"
+description = "Shell stosuje każde nowe `focusRequest.seq` dokładnie raz: `default` przenosi fokus na zakładkę Video i jej pierwszy kafelek (zimny start, restart, wybudzenie), `<appId>` na kafelek tej aplikacji i jej zakładkę (awaria na pierwszym planie, AD-10); snapshot z tym samym `seq` nie rusza fokusu. Powrót z aplikacji (Home, Back) zostawia fokus na ostatnim kafelku, a zmiana stanu kafelka pod fokusem fokusu nie przenosi."
+verify = "`npm test` przechodzi z testami: nowe `seq` z `default` i z `<appId>` przestawia fokus raz, powtórzony `seq` i nowy `rev` bez nowego `seq` go nie ruszają, fokus po `appId` przeżywa przestawienie kafelków; na bieżącej maszynie po starcie fokus stoi na pierwszym kafelku Video."
+covers = ["R3"]
+after = [4, "2.4", "2.8"]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-16 (focusRequest)", "ux-mediastation/EXPERIENCE.md, Interaction Primitives (Model fokusu)"]
+
+[[entry]]
+id = 8
+type = "story"
+title = "AppMenu: Uruchom ponownie i Zamknij"
+description = "Shell otwiera AppMenu (stan efemeryczny UI, Decision w Notes epiki) na long-press OK na kafelku `Background` albo `Failed` oraz na OK na `Failed`, z fokusem na „Uruchom ponownie” przy `Failed`, inaczej na pierwszej pozycji; Góra/Dół między pozycjami, OK wysyła `RestartApp` albo `CloseApp` i zamyka menu, Back zamyka menu z fokusem na kafelku, Home zamyka menu. Long-press na `NotRunning`, `Starting` i `Stopping` oraz OK na `Starting` nic nie robią. Panel nad kafelkiem ze scrimem wg `DESIGN.md`."
+verify = "`npm test` przechodzi z testami wyzwalaczy dla każdego stanu kafelka, fokusu startowego menu i zamykania przez Back i Home; `dotnet test` przechodzi z testem, że `RestartApp` i `CloseApp` z mostu docierają do Orchestratora; na bieżącej maszynie OK na kafelku `Failed`, potem OK na „Uruchom ponownie” daje w logu `stopWithoutHost`, kafelek pokazuje „Zamykam…”, a po `stoppingTimeout` wraca do `Failed`."
+covers = ["R4"]
+after = [5, 7, "3.1"]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-8 (AppMenu), AD-10", "ux-mediastation/EXPERIENCE.md, Component Patterns (AppMenu), J4", "ux-mediastation/mockups/key-home-failed-appmenu.html"]
+
+[[entry]]
+id = 9
+type = "story"
+title = "Nagłówek Home, title-safe i ekran błędu konfiguracji"
+description = "Shell dostaje nagłówek wg `DESIGN.md`: logo i „MediaStation”, avatar z powitaniem według pory dnia („Dobry wieczór, Eliza”), zegar oraz miejsce w layoucie na przycisk aktualizacji (sam przycisk: epic-deploy-resilience); cała treść z fokusem mieści się w title-safe 5% (96px/54px), a kursor jest ukryty w bezruchu. Ekran błędu konfiguracji pokazuje, że na ekranie nie zmieściły się kolejne błędy, zamiast ucinać listę bez informacji (F17)."
+verify = "`npm test` przechodzi z testami powitania dla granic pory dnia i wskaźnika liczby niewidocznych błędów; na bieżącej maszynie w 1920×1080 nagłówek i kafelki mieszczą się w title-safe, a `apps.json` z dziesięcioma błędami daje ekran z widocznym wskaźnikiem pozostałych."
+covers = ["R6", "R7"]
+after = [3, "1.4"]
+hitl = false
+risk = "low"
+references = ["ux-mediastation/DESIGN.md, Layout & Spacing, Components (config-error)", "ux-mediastation/EXPERIENCE.md, Voice and Tone", "tickets/epic-foundation-contracts/epic-foundation-contracts-retrospective.md, F17"]
+
+[[entry]]
+id = 10
+type = "story"
+title = "Refactor sweep"
+description = "Sprzątanie po stories 1–9, tylko z zamkniętej listy ustalonej na starcie: znaleziska, które plany i review tych stories odroczyły do ledgera, wymienione z ID DW (DW-26). Zakres nie rośnie w trakcie, przekroczenie budżetu sesji dzieli sweep, a narzędzi bez wpisu w ledgerze się nie przepisuje; zakres wypchnięty z innej story to nowa story."
+verify = "`dotnet test` i `npm test` przechodzą; plan sweepu wymienia ID DW na starcie, a każde z nich ma w ledgerze `status: done` albo uzasadnienie pozostawienia."
+covers = []
+after = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+hitl = false
+risk = "low"
+references = ["deferred-work.md, DW-26"]

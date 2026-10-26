@@ -21,6 +21,7 @@ location: src/MediaStation.Core/Orchestrator/Orchestrator.cs — `OnProcessExite
 source_spec: `epic-orchestrator-lifecycle/story-failed-wejscie-wyjscie-przez-appmenu-i-awaria-na-pierwszym-p-plan.md`
 severity: medium
 reason: `ProcessExited` carries only `appId`. After `CommandCompleted{StopApp}` the stop correlation is consumed, the Orchestrator moves to `Starting` and sends `StartApp`, and a second exit fact from the host (exit watcher next to the command confirmation) is now treated as a failure of the new start. Settled by host story 2.9 guaranteeing that `ProcessExited` refers to the current process (pid in the Event, or dedupe by `rootPid`), plus a loop test with two facts for one stop.
+owner: epic-browserhost (pierwszy prawdziwy host raportujący `ProcessExited`), decyzja refinementu epiki 4, 2026-10-26
 status: open
 
 ### DW-4: Spóźniony AppWindowAttached po timeoucie Starting jest ignorowany, a Hwnd zdjęte w Failed, więc okno, które pojawi się po terminie, może zostać na wierzchu nad shellem bez kompensującego
@@ -29,6 +30,7 @@ location: src/MediaStation.Core/Orchestrator/Orchestrator.cs — `OnAppWindowAtt
 source_spec: `epic-orchestrator-lifecycle/story-transitionid-i-home-w-trakcie-starting-plan.md`
 severity: medium
 reason: Guard `app.State != AppLifecycleState.Starting` w `OnAppWindowAttached` i `app.Hwnd = null` w `EnterFailed` pochodzą ze story 5 i nie zmieniły się w tej story; zmiana domyka kompensację tylko dla attachu w Starting. Skutek potwierdzony sondą: Home w Starting → TimerElapsed → AppWindowAttached daje brak komend i brak snapshotu, a kolejny Home nic nie robi. Rozwiązanie wymaga decyzji, czy Failed zachowuje Hwnd i minimalizuje spóźnione okno, czy zostawia to hostowi — to osobna story.
+owner: epic-browserhost (pierwszy prawdziwy host z `AppWindowAttached`), decyzja refinementu epiki 4, 2026-10-26
 status: open
 
 ### DW-5: Kolejność zwalniania adapterów w composition root (hub → pompa → power → timer → pętla) nie ma testu.
@@ -48,6 +50,7 @@ source_spec: `tickets/epic-input/tickets/story-tracer-bullet-pilot-na-donglu-daj
 severity: low
 reason: Story 1 odroczyła reset `_held`/`_pendingLong` do story, która rejestruje hook; InputHub nie ma ścieżki re-rejestracji ani watchdoga, więc reset nie ma wołającego. Skutek: utracony key-up (np. blokada sesji w trakcie trzymania klawisza) zamraża VK do końca procesu. Domknięcie wymaga watchdoga hooka.
 evidence: Retro A1 (2026-10-23, 19c5038): key-down Home, Back, OK i Keyboard (klawisze bez siatki `repeat`) starszy niż `MaxRepeatHoldMs` zaczyna nowe naciśnięcie, więc Home nie zamarza po utraconym key-up; test `Swallowed_home_with_missing_key_up_is_stale_after_max_hold_and_acts_again`. Zostaje otwarte tylko dla połkniętej strzałki (siatka `repeat`) i dla resetu `_pendingLong` przy re-rejestracji hooka.
+owner: epic-osk, decyzja refinementu epiki 4, 2026-10-26
 status: open
 
 ### DW-7: AD-8 („Jedno naciśnięcie daje jedną Action”, „InputHub jest właścicielem timingu”) i checklista odbioru epiku („dokładnie jeden wpis `action`” dla strzałek) nie opisują, że trzymana strzałka daje `press` + N×`repeat`
@@ -86,6 +89,7 @@ location: src/MediaStation.App/Platform/Input/KeyInjector.cs:22-38
 source_spec: `tickets/epic-input/tickets/story-wstrzykniecie-klawisza-ze-znacznikiem-plan.md`
 severity: low
 reason: KeyInjector jest tylko przekazywany jako delegat w CompositionRoot.cs, testy karmią KeyInjectionPump własnym delegatem, a logi z 2026-10-20..22 nie mają żadnego wpisu keyInjection. Układ struktur pochodzi z CsWin32 (wygenerowane INPUT/KEYBDINPUT), więc ryzyko jest niskie. Rozstrzyga odbiór epiku na UM760: prawdziwy SendKey daje wpis keyInjection, a wstrzyknięty klawisz nie daje Action i wraca przez hook; alternatywnie jednorazowe wywołanie helpera poza testami.
+owner: epic-osk (pierwszy `SendInput` w TextSink foreground), decyzja refinementu epiki 4, 2026-10-26
 status: open
 
 ### DW-11: Przestrzeń współrzędnych clipu (`GetWindowRect`, piksele fizyczne) i zdarzeń hooka (`MSLLHOOKSTRUCT.pt`) może się rozejść, gdy aplikacja nie jest per-monitor DPI aware, a okno OSK stoi na monitorze o
@@ -94,6 +98,7 @@ location: src/MediaStation.App/Platform/Input/InputHub.cs:570-601
 source_spec: `tickets/epic-input/tickets/story-pointer-hook-myszy-i-clipcursor-w-osk-plan.md`
 severity: medium
 reason: Plan (Implementation Notes) twierdzi „WPF w .NET jest per-monitor DPI aware”, ale `src/MediaStation.App/MediaStation.App.csproj` nie deklaruje żadnego manifestu DPI, a domyślny WPF raportuje `SYSTEM_AWARE`. ALDER pracuje przy 200% i ma dwa monitory (1920×1080 oraz 1080×1920), więc na monitorze o skali innej niż systemowa prostokąt clipu i punkt hooka mogą być w różnych przestrzeniach. Rozstrzyga pomiar `GetProcessDpiAwareness` na opublikowanym exe oraz przebieg z OSK na monitorze o innej skali (porównanie prostokąta z `GetWindowRect` z punktem z hooka) — do odbioru epiku, razem z epic-osk, które pierwsze wyśle `clipHwnd`.
+owner: epic-osk, decyzja refinementu epiki 4, 2026-10-26
 status: open
 
 ### DW-12: AD-8 nadal opisuje `SetInputRouting{ mode, appType, pointer, epoch }`, choć kontrakt ma teraz opcjonalne `clipHwnd`; dokumentacja architektury jest nieaktualna do czasu epic-osk.
@@ -146,6 +151,7 @@ location: src/MediaStation.Core/Input/InputPolicy.cs (emituje `Keyboard` w każd
 source_spec: `tickets/epic-input/epic-input-retrospective.md`, A2
 severity: medium
 reason: AD-8/AD-9 każą otwierać OSK z `Keyboard` w `app` + `web` tylko przy `textFocus{active:true}`, a InputHub sam nie bramkuje i dziś Orchestrator ignoruje każdą Action poza `Home`, więc zachowanie odpowiada tabeli tylko przypadkiem. Pierwsza story epic-osk, która podłączy `Keyboard` do OSK, musi dodać bramkę `textFocus` w Orchestratorze i test: `Keyboard` w `app` + `web` bez `textFocus` nie otwiera OSK, a z `textFocus` otwiera. Bez tego przycisk Klawiatura otworzy OSK w przeglądarce bez pola tekstowego.
+owner: epic-osk, decyzja refinementu epiki 4, 2026-10-26
 status: open
 
 ### DW-18: Orchestrator nie zachowuje `rootPid` z `AppWindowAttached`, którego `epic-windows-audio` potrzebuje do AD-15.
@@ -164,7 +170,7 @@ location: tests/MediaStation.Core.Tests/OrchestratorTests.cs; src/MediaStation.C
 source_spec: `tickets/epic-input/epic-input-retrospective.md`, follow-through A4
 severity: low
 reason: `epic-input` dodała sink i command, nie gałąź, więc rozbicie nie stało się pilne. Wyzwalacz: pierwsza epika, która dodaje gałąź dispatchu (`epic-home-screen`, `epic-osk`) najpierw wydziela grupy handlerów per funkcja i dzieli plik testów.
-owner: epic-home-screen / epic-osk (pierwsza z nich)
+owner: epic-home-screen, story 4.2 (refactor otwierający), 2026-10-26
 status: open
 
 ### DW-20: Plany ticketów nie zapisują HEAD zamknięcia, a squashe pętli są nazywane `Merge`.
@@ -209,7 +215,7 @@ location: src/MediaStation.Core/Input/InputCalibration.cs
 source_spec: `tickets/epic-input/epic-input-retrospective.md`, A8
 severity: low
 reason: Przy równoległym trzymaniu dwóch przycisków pilota puszczenie jednego pozwala zalogować drugi ponownie. Klucz dedupe powinien być VK→usage, nie globalny reset.
-owner: author, przy następnym dotknięciu kalibracji
+owner: backlog: story „`--calibrate-input` zapisuje wybrany przycisk Klawiatura do input.json”, 2026-10-26
 status: open
 
 ### DW-25: `InputHub` (815 linii) i `InputPolicy` (678 linii) przerosły rolę „cienkiego adaptera".
@@ -227,7 +233,7 @@ location: bmad-loop (planowanie sweepów), PO
 source_spec: `tickets/epic-input/epic-input-retrospective.md`, A10
 severity: low
 reason: Zakres „odroczone znaleziska ze stories 1-9" rozrósł się do przepisania narzędzia, które potem wymagało własnego review, pominiętego. Sweep ma mieć listę ID z ledgera, dzielić się przy przekroczeniu budżetu sesji i nie przepisywać narzędzi bez wpisu w ledgerze.
-owner: PO / bmad-loop tooling
+owner: PO / bmad-loop tooling; zastosowane w zakresie story 4.10 (Refactor sweep z zamkniętą listą ID), 2026-10-26
 status: open
 
 ### DW-27: `--calibrate-input` filtruje po sygnaturach z `input.json`, więc nowy pilot (inny VID/PID) nie daje żadnego logu.
@@ -245,7 +251,7 @@ location: `tools/MediaStation.SchemaExport`; `web/contracts/schema`, `web/contra
 source_spec: `_bmad-output/plan-ad8-foreground-gate.md`
 severity: medium
 reason: Application Control blokuje świeży niepodpisany `MediaStation.SchemaExport.dll` (0x800711C7, CodeIntegrity 3077/3033), więc `dotnet build` nie odświeża `web/contracts` i publish wymaga `-p:SkipWebBuild=true`, ręcznego `npm run build` w `web/` i ręcznego skopiowania `web/shell/dist` do `publish/shell`. Schemat `set-managed-windows.schema.json` i `generated/set-managed-windows.ts` zostały napisane ręcznie w formacie istniejących plików (pliki nie są w gicie, więc nic nie rozjeżdża się w repo; test `CoreMessageContractTests` sprawdza kształt schematu z kodu). Dotyczy też UM760, jeśli ma tę samą politykę. Rozwiązanie: podpisać narzędzie albo dodać je do reguł Application Control; alternatywnie generować schematy z testów.
-owner: author
+owner: epic-home-screen, story 4.1, 2026-10-26
 status: open
 
 ### DW-29: `check-home-s10.ps1` nie znajduje okna Edge jako celu (`no target window`), mimo że okno Edge jest otwarte.

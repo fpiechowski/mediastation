@@ -40,3 +40,4 @@ Verify: na UM760 z pilotem G20S Pro na donglu: kalibracja z wybranym przyciskiem
 - Decision: wybór przycisku to osobna flaga trybu kalibracji (np. `--calibrate-input --pick-keyboard`): kalibracja kończy się na pierwszym przycisku pilota przychodzącym jako raport HID Consumer, zapisuje go jako Klawiaturę i kończy z exit 0; bez flagi tryb działa jak dziś (logowanie przez 60 s, bez zapisu). (2026-10-26).
 - Assumption: zapis idzie do `input.json` w `%LOCALAPPDATA%\MediaStation\config`, atomowo, z kopią poprzedniej wersji; wynik niezgodny ze schematem nie jest zapisywany (jak w `KeyboardButtonMapping`).
 - Open question: komunikat dla osoby przy pilocie (log, okno, nic), bo tryb nie ma UI; rozstrzyga refine.
+- Decision: ledger DW-24 (dedupe usages w kalibracji czyści wszystkie usages przy dowolnym key-up pilota; klucz VK→usage zamiast globalnego resetu) wchodzi do tej story, bo dotyka tego samego `InputCalibration` (refinement epiki 4, 2026-10-26).

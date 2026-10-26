@@ -46,3 +46,4 @@ Okno OSK w `Shell/`, tryb `osk` w InputHub, `TextSink` (`web` w BrowserHost, `fo
 - Waits on epic-input because: tryb `osk` w routingu, pointer i `ClipCursor`, Action `Keyboard` z mapowaniem z `input.json`.
 - Waits on epic-browserhost because: story 1 ustala tryb okna, od którego zależy nakładka; `Input.insertText`.
 - Waits on epic-netflix-dpad because: `textFocus` z drivera i obsługa `osk` w PageRuntime.
+- Decision: ledger DW-6, DW-10, DW-11, DW-17, DW-22 i DW-25 przypisane tej epice; treść jest w `deferred-work.md` (refinement epiki 4, 2026-10-26).
