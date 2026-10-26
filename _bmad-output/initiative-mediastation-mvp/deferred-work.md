@@ -216,7 +216,7 @@ origin: retro epiki 3, 2026-10-23 (F16/A10)
 location: bmad-loop (planowanie sweepów), PO
 source_spec: `tickets/epic-input/epic-input-retrospective.md`, A10
 severity: low
-reason: Zakres „odroczone znaleziska ze stories 1-9" rozrósł się do przepisania narzędzia, które potem wymagało własnego review, pominiętego. Sweep ma mieć listę ID z ledgera, dzielić się przy przekroczeniu budżetu sesji i nie przepisywać narzędzi bez wpisu w ledgerze.
+reason: Zakres „odroczone znaleziska ze stories 1-9" rozrósł się do przepisania narzędzia, które potem wymagało własnego review, pominiętego. Sweep ma mieć listę ID z ledgera, dzielić się przy przekroczeniu budżetu sesji i nie przepisywać narzędzi bez wpisu w ledgerze. Story 4.10 zastosowała to: lista ID ustalona na starcie była pusta (stories 4.1–4.9 i 4.11 odroczyły 0 znalezisk), kodu nie zmieniono. Wpis zostaje `open` do zamknięcia przez orkiestrator/PO po jego weryfikacji 4.10.
 owner: PO / bmad-loop tooling; zastosowane w zakresie story 4.10 (Refactor sweep z zamkniętą listą ID), 2026-10-26
 status: open
 
