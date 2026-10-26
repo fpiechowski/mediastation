@@ -1,5 +1,5 @@
 import type { ShellSnapshot } from '../../contracts/generated/shell-snapshot';
-import { CATEGORIES, tilesOf, type FocusState } from './focus';
+import { CATEGORIES, tabsWithBackground, tilesOf, type FocusState } from './focus';
 import { Tile } from './Tile';
 
 /** Logo placeholder (DESIGN.md → components.logo): zaokrąglony ekran + play w currentColor, wordmark obok. */
@@ -28,6 +28,7 @@ interface PlaceholderProps {
 /** Rząd zakładek i kafelki aktywnej zakładki; jeden widoczny fokus (zakładka albo kafelek), bez handlerów myszy i klawiatury. */
 export function Placeholder({ apps, focus }: PlaceholderProps) {
   const tiles = tilesOf(apps, focus.activeTab);
+  const running = tabsWithBackground(apps);
   return (
     <main className="screen placeholder" aria-label="MediaStation">
       <Brand />
@@ -41,6 +42,7 @@ export function Placeholder({ apps, focus }: PlaceholderProps) {
               className={pill ? 'tab tab--active tab--focused' : active ? 'tab tab--active' : 'tab'}
             >
               {TAB_LABELS[category]}
+              {running.has(category) && <span className="tab-running-dot" aria-hidden="true" />}
             </li>
           );
         })}

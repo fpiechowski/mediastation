@@ -15,6 +15,11 @@ export function tilesOf(apps: readonly AppTile[], category: AppCategory): AppTil
   return apps.filter((app) => app.category === category);
 }
 
+/** Zakładki z aplikacją w `Background` (kropka „w tle”); wyliczane ze snapshotu po `category`, bez własnego stanu. */
+export function tabsWithBackground(apps: readonly AppTile[]): ReadonlySet<AppCategory> {
+  return new Set(apps.filter((app) => app.state === 'background').map((app) => app.category));
+}
+
 export interface FocusState {
   /** Gdzie stoi fokus: w rzędzie zakładek albo na kafelkach aktywnej zakładki. */
   zone: 'tabs' | 'tiles';
