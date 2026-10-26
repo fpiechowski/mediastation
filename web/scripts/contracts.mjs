@@ -1,5 +1,5 @@
 // Generuje typy TS z JSON Schema eksportowanej przez Core (AD-16): <nazwa>.schema.json → <nazwa>.ts.
-// Schema powstaje w `dotnet build` (tools/MediaStation.SchemaExport); wynik w contracts/generated nie jest w gicie.
+// Schema eksportuje test Category=SchemaExport w MediaStation.Core.Tests (`npm run contracts:export` albo `dotnet build` App); wynik w contracts/generated nie jest w gicie.
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -15,14 +15,14 @@ const schemas = existsSync(schemaDir)
   ? (await readdir(schemaDir)).filter((name) => name.endsWith(schemaSuffix)).sort()
   : [];
 if (schemas.length === 0) {
-  console.error(`contracts: brak *${schemaSuffix} w ${schemaDir} — uruchom najpierw \`dotnet build\` (eksport schematów z Core).`);
+  console.error(`contracts: brak *${schemaSuffix} w ${schemaDir} — uruchom najpierw \`npm run contracts:export\` albo \`dotnet build\` (eksport schematów z Core).`);
   process.exit(1);
 }
 
 const banner = `/* eslint-disable */
 /**
  * WYGENEROWANE z JSON Schema MediaStation.Core przez web/scripts/contracts.mjs — nie edytuj ręcznie.
- * Zmień rekord w src/MediaStation.Core/Contracts i uruchom \`dotnet build\`.
+ * Zmień rekord w src/MediaStation.Core/Contracts i uruchom \`dotnet build\` albo \`npm run build\`.
  */`;
 
 await mkdir(outDir, { recursive: true });

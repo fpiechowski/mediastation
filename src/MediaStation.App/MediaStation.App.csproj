@@ -33,36 +33,37 @@
   </ItemGroup>
 
   <!--
-    Build web jako target MSBuild (AD-13): SchemaExport → npm ci (gdy brak node_modules) →
-    Debug: npm run contracts (shell z Vite dev servera), inne konfiguracje: npm run build i web/shell/dist → <exe>/shell.
+    Build web jako target MSBuild (AD-13, AD-16): budowa MediaStation.Core.Tests w tym samym przebiegu MSBuild →
+    test Category=SchemaExport (eksport schematów, bez własnego exe, bo Application Control blokuje świeże niepodpisane pliki) →
+    npm ci (gdy brak node_modules) → npm run contracts:generate →
+    Debug: typecheck (shell z Vite dev servera), inne konfiguracje: npm run build:shell i web/shell/dist → <exe>/shell.
+    Uwaga: nigdy osobny proces budujący (dotnet build lub dotnet test bez opcji no-build) w tym targecie: wyścig o bin/obj przy buildzie solucji.
   -->
   <PropertyGroup>
     <MediaStationRepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</MediaStationRepoRoot>
     <MediaStationWebDir>$(MediaStationRepoRoot)web\</MediaStationWebDir>
-    <MediaStationSchemaDir>$(MediaStationWebDir)contracts\schema</MediaStationSchemaDir>
     <MediaStationShellDist>$(MediaStationWebDir)shell\dist\</MediaStationShellDist>
-    <MediaStationSchemaExportProject>$(MediaStationRepoRoot)tools\MediaStation.SchemaExport\MediaStation.SchemaExport.csproj</MediaStationSchemaExportProject>
+    <MediaStationCoreTestsProject>$(MediaStationRepoRoot)tests\MediaStation.Core.Tests\MediaStation.Core.Tests.csproj</MediaStationCoreTestsProject>
     <MediaStationShellFromDevServer Condition="'$(Configuration)' == 'Debug'">true</MediaStationShellFromDevServer>
     <DefineConstants Condition="'$(MediaStationShellFromDevServer)' == 'true'">$(DefineConstants);SHELL_DEV_SERVER</DefineConstants>
   </PropertyGroup>
 
   <Target Name="BuildWeb" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipWebBuild)' != 'true'">
-    <MSBuild Projects="$(MediaStationSchemaExportProject)"
+    <MSBuild Projects="$(MediaStationCoreTestsProject)"
              Targets="Build"
              Properties="Configuration=$(Configuration)"
-             RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishReadyToRun;PublishSingleFile;_IsPublishing;TargetFramework">
-      <Output TaskParameter="TargetOutputs" ItemName="_MediaStationSchemaExportAssembly" />
-    </MSBuild>
+             RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishReadyToRun;PublishSingleFile;_IsPublishing;TargetFramework" />
 
-    <Exec Command="dotnet &quot;@(_MediaStationSchemaExportAssembly)&quot; &quot;$(MediaStationSchemaDir)&quot;" />
+    <!-- Zero pasujących testów albo zablokowany host testów = niezerowy kod (MTP: 8) = błąd buildu, bez fallbacku na stare typy. -->
+    <Exec Command="dotnet test --project &quot;$(MediaStationCoreTestsProject)&quot; --no-build --no-restore -c $(Configuration) --filter Category=SchemaExport" />
 
     <Exec Command="npm ci" WorkingDirectory="$(MediaStationWebDir)" Condition="!Exists('$(MediaStationWebDir)node_modules')" />
 
-    <Exec Command="npm run contracts" WorkingDirectory="$(MediaStationWebDir)" Condition="'$(MediaStationShellFromDevServer)' == 'true'" />
+    <Exec Command="npm run contracts:generate" WorkingDirectory="$(MediaStationWebDir)" />
 
     <Exec Command="npm run typecheck" WorkingDirectory="$(MediaStationWebDir)" Condition="'$(MediaStationShellFromDevServer)' == 'true'" />
 
-    <Exec Command="npm run build" WorkingDirectory="$(MediaStationWebDir)" Condition="'$(MediaStationShellFromDevServer)' != 'true'" />
+    <Exec Command="npm run build:shell" WorkingDirectory="$(MediaStationWebDir)" Condition="'$(MediaStationShellFromDevServer)' != 'true'" />
 
     <ItemGroup Condition="'$(MediaStationShellFromDevServer)' != 'true'">
       <_MediaStationShellFile Include="$(MediaStationShellDist)**\*" />

@@ -15,5 +15,5 @@ persistent_facts = [
   "The `start` entry carries `data.version` as `1.0.0+<full sha>`, so the first launch asserts the build with `msg=start,data.version~=<short HEAD>`; a stale publish folder otherwise passes unnoticed.",
   "Run check scripts as `powershell -NoProfile -ExecutionPolicy Bypass -File tools/<script>.ps1`; `check-home-s10.ps1` has `-SelfTest` for P0. If execution policy still blocks: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.",
   "MediaStation started from a terminal does not take the foreground by itself: `focus --pid` it before any press.",
-  "On UM760, Application Control can block `dotnet publish` (fresh unsigned `MediaStation.SchemaExport.dll`); the recorded workaround is `npm run build` in `web/`, `dotnet publish ... -p:SkipWebBuild=true`, then copy `web/shell/dist/*` into `publish\\shell`.",
+  "Schema export now runs as the `Category=SchemaExport` test inside `dotnet test` (no unsigned SchemaExport exe), so the unsigned SchemaExport exe no longer blocks `dotnet publish`; the test host (`dotnet test`) is still a fresh unsigned exe, so if Application Control blocks it the build fails loudly. Plain `dotnet publish` was verified on UM760 in ticket 4.1; the old `SkipWebBuild` + manual copy workaround is only the fallback if the test host is blocked (DW-28).",
 ]
