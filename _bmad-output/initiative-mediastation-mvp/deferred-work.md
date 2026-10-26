@@ -292,7 +292,7 @@ location: tools/inject-power.ps1 (sprawdzenie `snapshotPublished: expected 3`, `
 source_spec: `tickets/epic-home-screen/epic-home-screen-um760-acceptance.md`, S18
 severity: low
 reason: Przy aplikacji działającej od S5 skrypt zobaczył 9 snapshotów (rev 1–7 sprzed wybudzeń) i `seq 1 instead of 2`, choć oba wybudzenia dały poprawne `focusRequest{default}` z rosnącym `seq`; powtórka na świeżo uruchomionej aplikacji przeszła. Naprawa: liczyć snapshoty i `seq` względem ostatniego snapshotu przed pierwszym `powerSignalInjected`, albo odmówić startu z jasnym komunikatem, gdy aplikacja ma historię. Do tego czasu plany odbioru uruchamiają S18 na świeżej aplikacji.
-owner: następna story dotykająca `tools/inject-power.ps1` albo Refactor sweep epic-windows-audio
+owner: epic-windows-audio, story 7 (Refactor sweep, zamknięta lista), 2026-10-26
 status: open
 
 ### DW-35: Granica most/okno shella (4.3/4.11) i przyrost `tokens.css` (6 commitów) nie przeszły review na poziomie całej epiki.
@@ -301,7 +301,7 @@ location: src/MediaStation.App/Shell/ (`ShellBridge`, `ShellOutbox`, `ShellWindo
 source_spec: `tickets/epic-home-screen/epic-home-screen-retrospective.md`, F5, A3
 severity: low
 reason: Review szło per ticket; retro nie uruchomiło review diffu `fe0a400..2d7cfaa`. Odbiór na UM760 nie pokazał błędów hosta shella (0× `navigationBlocked`, `newWindowBlocked`, `webViewProcessFailed`), więc ryzyko dotyczy struktury, nie zachowania. Jedno `bmad-review` tych plików przed pierwszą story, która zmienia most albo `tokens.css`.
-owner: epic-windows-audio (story 5.1 dotyka okna shella) albo epic-netflix-dpad, pierwsza z nich
+owner: pierwsza story, która zmienia `ShellBridge`, `ShellOutbox`, `ShellWindow` albo `tokens.css` (plan epiki 5 ich nie zmienia, 2026-10-26)
 status: open
 
 ### DW-36: `MissingHostPort` odpowiada `CommandFailed{ errorCode: unexpected }`, więc każdy OK na kafelku bez hosta daje `warn commandFailed`, nieodróżnialny od prawdziwej awarii.
