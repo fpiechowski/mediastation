@@ -25,11 +25,23 @@ public class ShellSnapshotFactoryTests
         Assert.Empty(snapshot.ConfigErrors);
         Assert.Equal(
             [
-                new AppSnapshot("netflix", AppCategory.Video, AppLifecycleState.NotRunning, "Netflix"),
-                new AppSnapshot("plex", AppCategory.Game, AppLifecycleState.NotRunning, "Plex"),
+                new AppSnapshot("netflix", AppCategory.Video, AppLifecycleState.NotRunning, "Netflix", "netflix.png", AppType.Web),
+                new AppSnapshot("plex", AppCategory.Game, AppLifecycleState.NotRunning, "Plex", "plex.png", AppType.Native),
             ],
             snapshot.Apps);
         Assert.Null(snapshot.FocusRequest);
+    }
+
+    [Fact]
+    public void Missing_icon_becomes_null_in_snapshot_and_others_keep_their_file()
+    {
+        var config = TwoApps() with { MissingIcons = new HashSet<string> { "plex" } };
+
+        var snapshot = ShellSnapshotFactory.FromConfig(new ConfigResult(config, []), rev: 0);
+
+        Assert.Equal("netflix.png", snapshot.Apps[0].Icon);
+        Assert.Null(snapshot.Apps[1].Icon);
+        Assert.Equal(AppType.Native, snapshot.Apps[1].Type);
     }
 
     [Fact]

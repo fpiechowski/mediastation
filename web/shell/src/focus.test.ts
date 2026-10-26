@@ -14,6 +14,8 @@ const tile = (
   category,
   state,
   title: appId.toUpperCase(),
+  icon: null,
+  type: 'web',
 });
 
 const snapshot = (apps: AppTile[], focusRequest: ShellSnapshot['focusRequest'], rev = 1): ShellSnapshot => ({

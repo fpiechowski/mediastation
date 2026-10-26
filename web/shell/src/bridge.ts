@@ -6,7 +6,7 @@ import type { Action } from '../../contracts/generated/action';
 import type { CloseApp } from '../../contracts/generated/close-app';
 import type { LaunchApp } from '../../contracts/generated/launch-app';
 import type { RestartApp } from '../../contracts/generated/restart-app';
-import type { ShellSnapshot } from '../../contracts/generated/shell-snapshot';
+import type { AppType, ShellSnapshot } from '../../contracts/generated/shell-snapshot';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -36,10 +36,21 @@ function isEnvelope(value: unknown): value is Envelope<unknown> {
   return typeof e.v === 'number' && typeof e.type === 'string' && 'payload' in e;
 }
 
+// Rekord po kluczach typu z generated: nowy `AppType` bez wpisu tutaj nie przejdzie typechecku.
+const APP_TYPES: Record<AppType, true> = { web: true, moonlight: true, native: true };
+
 function isAppSnapshot(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) return false;
   const app = value as Record<string, unknown>;
-  return typeof app.appId === 'string' && typeof app.category === 'string' && typeof app.state === 'string' && typeof app.title === 'string';
+  return (
+    typeof app.appId === 'string' &&
+    typeof app.category === 'string' &&
+    typeof app.state === 'string' &&
+    typeof app.title === 'string' &&
+    (app.icon === null || typeof app.icon === 'string') &&
+    typeof app.type === 'string' &&
+    Object.hasOwn(APP_TYPES, app.type)
+  );
 }
 
 function isFocusRequest(value: unknown): boolean {

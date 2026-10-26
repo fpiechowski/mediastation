@@ -9,6 +9,19 @@ namespace MediaStation.Core.Tests;
 public class OrchestratorStartupTests
 {
     [Fact]
+    public void Snapshot_carries_icon_and_type_from_the_same_entries_as_the_factory()
+    {
+        var config = OrchestratorTestSupport.WebAndMoonlight() with { MissingIcons = new HashSet<string> { "moonlight-pc" } };
+
+        var (_, started) = OrchestratorTestSupport.StartedWith(config);
+
+        Assert.Equal("netflix.png", started.Apps[0].Icon);
+        Assert.Equal(AppType.Web, started.Apps[0].Type);
+        Assert.Null(started.Apps[1].Icon);
+        Assert.Equal(AppType.Moonlight, started.Apps[1].Type);
+    }
+
+    [Fact]
     public void First_started_yields_placeholder_with_not_running_apps_and_default_focus()
     {
         var orchestrator = Create();

@@ -10,7 +10,22 @@ using MediaStation.Core.Input;
 namespace MediaStation.Core.Config;
 
 /// <summary>Trzy pliki configu po walidacji (AD-11); <c>settings</c> z uzupełnionymi wartościami domyślnymi.</summary>
-public sealed record LoadedConfig(AppsConfig Apps, InputConfig Input, Settings Settings);
+/// <remarks>
+/// <see cref="MissingIcons"/> to <c>appId</c> wpisów, których pliku ikony App nie znalazł w <c>config/icons/</c>
+/// (Core nie dotyka dysku, AD-3); pusty, dopóki App go nie ustawi.
+/// </remarks>
+public sealed record LoadedConfig(AppsConfig Apps, InputConfig Input, Settings Settings)
+{
+    public IReadOnlySet<string> MissingIcons { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>Nazwa pliku ikony do snapshotu albo <c>null</c>, gdy pliku brak.</summary>
+    public string? IconOf(AppEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        return MissingIcons.Contains(entry.Id) ? null : entry.Icon;
+    }
+}
 
 /// <summary>Wynik walidacji: <see cref="Config"/> jest różny od <c>null</c> wtedy i tylko wtedy, gdy <see cref="Errors"/> jest puste.</summary>
 public sealed record ConfigResult(LoadedConfig? Config, IReadOnlyList<ConfigError> Errors);
@@ -204,6 +219,32 @@ public static class ConfigValidation
     private static readonly Regex VirtualKey = new(@"^0x[0-9A-Fa-f]{2}\z", RegexOptions.CultureInvariant);
     private static readonly Regex GitHubRepo = new(@"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?/[A-Za-z0-9._-]+\z", RegexOptions.CultureInvariant);
 
+    // Core nie używa System.IO.Path (AD-3), więc lista znaków niedozwolonych w nazwie pliku Windows jest jawna.
+    private static readonly char[] InvalidIconChars =
+        [.. "/\\:*?\"<>|", .. Enumerable.Range(0, 32).Select(static c => (char)c)];
+
+    /// <summary>
+    /// <c>title</c> i <c>icon</c> niepuste i nie z samych spacji; <c>icon</c> to nazwa pliku w <c>config/icons/</c>:
+    /// bez separatorów ścieżki, znaków niedozwolonych w nazwie pliku i bez <c>..</c> (F18, AD-11).
+    /// </summary>
+    private static void CheckTitleAndIcon(AppEntry entry, string entryPath, FileErrors errors)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Title))
+        {
+            errors.Add(JsonErrorPath.Property(entryPath, "title"), "title nie może być pusty");
+        }
+
+        var iconPath = JsonErrorPath.Property(entryPath, "icon");
+        if (string.IsNullOrWhiteSpace(entry.Icon))
+        {
+            errors.Add(iconPath, "icon nie może być pusty");
+        }
+        else if (entry.Icon.Contains("..", StringComparison.Ordinal) || entry.Icon.IndexOfAny(InvalidIconChars) >= 0)
+        {
+            errors.Add(iconPath, $"icon {Quote(entry.Icon)} musi być samą nazwą pliku z config/icons (bez ścieżki, znaków specjalnych i „..”)");
+        }
+    }
+
     private static void CheckApps(AppsConfig config, FileErrors errors)
     {
         var appsPath = JsonErrorPath.Property("$", "apps");
@@ -219,6 +260,8 @@ public static class ConfigValidation
                 errors.Add(entryPath, NullObjectReason);
                 continue;
             }
+
+            CheckTitleAndIcon(entry, entryPath, errors);
 
             var idPath = JsonErrorPath.Property(entryPath, "id");
             if (!KebabCase.IsMatch(entry.Id))

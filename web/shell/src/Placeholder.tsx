@@ -1,5 +1,6 @@
 import type { ShellSnapshot } from '../../contracts/generated/shell-snapshot';
 import { CATEGORIES, tilesOf, type FocusState } from './focus';
+import { Tile } from './Tile';
 
 /** Logo placeholder (DESIGN.md → components.logo): zaokrąglony ekran + play w currentColor, wordmark obok. */
 export function Brand() {
@@ -15,16 +16,6 @@ export function Brand() {
 }
 
 type AppTile = ShellSnapshot['apps'][number];
-
-/** Stan kafelka tekstem (ikony i chip stanu dojdą w kolejnych story). */
-const STATE_LABELS: Record<AppTile['state'], string> = {
-  notRunning: 'Nie uruchomiona',
-  starting: 'Uruchamianie',
-  foreground: 'Na ekranie',
-  background: 'W tle',
-  stopping: 'Zamykanie',
-  failed: 'Błąd',
-};
 
 /** Etykiety zakładek (kolejność z `CATEGORIES`). */
 const TAB_LABELS: Record<AppTile['category'], string> = { video: 'Video', audio: 'Audio', game: 'Game' };
@@ -59,13 +50,7 @@ export function Placeholder({ apps, focus }: PlaceholderProps) {
       ) : (
         <ul className="tiles">
           {tiles.map((app) => (
-            <li
-              key={app.appId}
-              className={focus.zone === 'tiles' && app.appId === focus.focusedAppId ? 'tile tile--focused' : 'tile'}
-            >
-              <span className="tile__title">{app.title}</span>
-              <span className="tile__state">{STATE_LABELS[app.state]}</span>
-            </li>
+            <Tile key={app.appId} app={app} focused={focus.zone === 'tiles' && app.appId === focus.focusedAppId} />
           ))}
         </ul>
       )}

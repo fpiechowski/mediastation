@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using MediaStation.Core.Contracts;
@@ -26,7 +27,22 @@ public enum BrowserKind
 [JsonDerivedType(typeof(WebApp), "web")]
 [JsonDerivedType(typeof(MoonlightApp), "moonlight")]
 [JsonDerivedType(typeof(NativeApp), "native")]
-public abstract record AppEntry(string Id, AppCategory Category, string Title, string Icon);
+public abstract record AppEntry(string Id, AppCategory Category, string Title, string Icon)
+{
+    /// <summary>Typ aplikacji z rekordu <c>apps.json</c>; wspólny dla Orchestratora, routera i snapshotu (AD-11).</summary>
+    public static AppType AppTypeOf(AppEntry app)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+
+        return app switch
+        {
+            WebApp => AppType.Web,
+            MoonlightApp => AppType.Moonlight,
+            NativeApp => AppType.Native,
+            _ => throw new InvalidOperationException($"Nieznany typ aplikacji {app.GetType().FullName}."),
+        };
+    }
+}
 
 /// <summary>
 /// Aplikacja w przeglądarce sterowanej przez CDP (AD-1). Back idzie zawsze do strony (AD-7, AD-8), więc nie ma pola <c>back</c>.

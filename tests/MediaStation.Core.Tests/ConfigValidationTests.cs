@@ -284,6 +284,41 @@ public class ConfigValidationTests
         Assert.Equal(new ConfigError(file, path, reason), Assert.Single(result.Errors));
     }
 
+    // ── title i icon ──────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("title", "")]
+    [InlineData("title", "   ")]
+    [InlineData("icon", "")]
+    [InlineData("icon", "   ")]
+    [InlineData("icon", "a/b.png")]
+    [InlineData("icon", "a\\b.png")]
+    [InlineData("icon", "..")]
+    [InlineData("icon", "..\\x.png")]
+    [InlineData("icon", "a:b.png")]
+    public void Blank_title_or_icon_and_icon_with_path_are_rejected(string field, string value)
+    {
+        var original = field == "title" ? "\"title\": \"T\"" : "\"icon\": \"i.png\"";
+        var apps = AppsJson(Web().Replace(original, $"\"{field}\": \"{value}\""));
+
+        var error = SingleError(apps);
+
+        Assert.Equal(Apps, error.File);
+        Assert.Equal($"$.apps[0].{field}", error.Path);
+    }
+
+    [Fact]
+    public void Missing_icons_default_to_empty_and_icon_of_returns_file_or_null()
+    {
+        var config = Loaded();
+
+        Assert.Empty(config.MissingIcons);
+        Assert.Equal("netflix.png", config.IconOf(config.Apps.Apps[0]));
+        var withMissing = config with { MissingIcons = new HashSet<string> { "netflix" } };
+        Assert.Null(withMissing.IconOf(config.Apps.Apps[0]));
+        Assert.Equal("pc.png", withMissing.IconOf(config.Apps.Apps[1]));
+    }
+
     // ── Nieznane pole ─────────────────────────────────────────────────────────
 
     public static TheoryData<string, string, string, string> UnknownFields => new()

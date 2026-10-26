@@ -45,6 +45,9 @@ public static class CompositionRoot
 
     public static string ConfigDir { get; } = Path.Combine(DataRoot, "config");
 
+    /// <summary>Ikony kafelków (<c>icon</c> z <c>apps.json</c> to nazwa pliku tutaj); shell czyta je przez <see cref="ShellOrigin.IconsHost"/>.</summary>
+    public static string IconsDir { get; } = Path.Combine(ConfigDir, "icons");
+
     public static string LogsDir { get; } = Path.Combine(DataRoot, "logs");
 
     public static string WebView2UserDataDir { get; } = Path.Combine(DataRoot, "webview2");
@@ -103,7 +106,7 @@ public static class CompositionRoot
     /// Odczyt configu i walidacja (AD-11) wspólne dla trybu głównego i kalibracji: App czyta pliki, Core waliduje,
     /// a każdy błąd zostaje w logu jako <c>configError</c>. Zwraca też <see cref="Config"/> dla pozostałych epik.
     /// </summary>
-    private static ConfigResult LoadConfig(ILog log)
+    private static ConfigResult LoadConfig(ILog log, bool checkIcons = false)
     {
         var files = ConfigFileReader.ReadAll(ConfigDir, ConfigPreflight.RequiredFiles);
         var result = ConfigValidation.Validate(files);
@@ -115,6 +118,23 @@ public static class CompositionRoot
                 ["path"] = error.Path,
                 ["reason"] = error.Reason,
             });
+        }
+
+        if (checkIcons && result.Config is { } loaded)
+        {
+            // Brak pliku ikony to ostrzeżenie, nie błąd: kafelek pokaże sam tytuł (snapshot niesie `icon: null`).
+            var missing = AppIcons.FindMissing(loaded.Apps.Apps, IconsDir, File.Exists);
+            foreach (var app in missing)
+            {
+                log.Warn(ConfigSrc, "appIconMissing", data: new Dictionary<string, object?>
+                {
+                    ["appId"] = app.Id,
+                    ["icon"] = app.Icon,
+                });
+            }
+
+            var withIcons = loaded with { MissingIcons = new HashSet<string>(missing.Select(static a => a.Id), StringComparer.Ordinal) };
+            result = new ConfigResult(withIcons, result.Errors);
         }
 
         Config = result.Config;
@@ -183,7 +203,7 @@ public static class CompositionRoot
     /// <summary>Tryb główny: config (I/O tylko w App), walidacja w Core, snapshot i okno shella.</summary>
     private static void StartRun(Application app, ILog log, TimeProvider time)
     {
-        var result = LoadConfig(log);
+        var result = LoadConfig(log, checkIcons: true);
 
         // Bootstrap ma rev 0 i nie jest logowany: pierwszy snapshot z Orchestratora ma rev 1.
         var snapshot = ShellSnapshotFactory.FromConfig(result, rev: 0);
@@ -192,7 +212,7 @@ public static class CompositionRoot
         // Zegar mostu ma skalę Action.TsMono (ms od startu systemu, jak `time` hooka LL), żeby próg świeżości był spójny.
         OrchestratorLoop? postsTo = null;
         var bridge = new ShellBridge(snapshot, log, app.Dispatcher, static () => Environment.TickCount64, intent => postsTo?.Post(intent));
-        var window = new ShellWindow(bridge, WebView2UserDataDir, log);
+        var window = new ShellWindow(bridge, WebView2UserDataDir, IconsDir, log);
         app.MainWindow = window;
         window.Show();
 
@@ -206,7 +226,7 @@ public static class CompositionRoot
         var appTypes = new Dictionary<string, AppType>(StringComparer.Ordinal);
         foreach (var entry in config.Apps.Apps)
         {
-            appTypes.Add(entry.Id, AppTypeOf(entry));
+            appTypes.Add(entry.Id, AppEntry.AppTypeOf(entry));
         }
 
         // Adaptery „brak hosta” odpowiadają w kolejce pętli, a pętla powstaje po routerze, więc delegat czyta ją leniwie.
@@ -356,13 +376,4 @@ public static class CompositionRoot
         return assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
             ?? assembly.GetName().Version?.ToString();
     }
-
-    /// <summary>Typ aplikacji z rekordu <c>apps.json</c>; nim router wybiera hosta dla <c>StartApp</c> (AD-11).</summary>
-    private static AppType AppTypeOf(AppEntry app) => app switch
-    {
-        WebApp => AppType.Web,
-        MoonlightApp => AppType.Moonlight,
-        NativeApp => AppType.Native,
-        _ => throw new InvalidOperationException($"Nieznany typ aplikacji {app.GetType().FullName}."),
-    };
 }

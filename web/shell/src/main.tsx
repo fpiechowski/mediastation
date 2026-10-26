@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 // Font lokalnie (UM760 bywa offline); wariant „standard” ma oś opsz.
 import '@fontsource-variable/roboto-flex/standard.css';
+// Ikony Material Symbols Rounded (DESIGN.md → Components → Chip), też lokalnie; klasa `.material-symbols` w tokens.css.
+import '@fontsource/material-symbols-rounded/400.css';
 import './tokens.css';
 import { App } from './App';
 

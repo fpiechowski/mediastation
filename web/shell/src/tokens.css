@@ -8,6 +8,10 @@
   --text: #ffffff;
   --text-2: #c4c7cc;
   --text-3: #9aa0a6;
+  --accent: #8ab4f8;
+  --tile-mark: #e6e8eb;
+  --tile-gradient-top: #2a2d33;
+  --scrim: #0f1012b8;
   --surface: #1e2024;
   --surface-2: #26292e;
   --line: #33363c;
@@ -26,6 +30,12 @@
   --body-size: 26px;
   --body-weight: 400;
   --body-line: 1.3;
+  --tile-mark-size: 64px;
+  --tile-mark-weight: 650;
+  --tile-mark-tracking: -0.02em;
+  --tile-name-size: 30px;
+  --chip-size: 24px;
+  --chip-weight: 400;
 
   /* spacing */
   --space-2: 12px;
@@ -39,8 +49,12 @@
   --apps-top: 292px;
   --tile-gap: 48px;
   --tile-radius: 22px;
-  --tile-width: 320px;
-  --tile-height: 200px;
+  --tile-width: 544px;
+  --tile-height: 306px;
+  --meta-gap: 30px;
+  --meta-gap-focused: 44px;
+  --focus-duration: 150ms;
+  --elevation-rest: 0 2px 6px rgba(0, 0, 0, 0.35);
   --elevation-lift: 0 28px 56px rgba(0, 0, 0, 0.6), 0 10px 20px rgba(0, 0, 0, 0.45);
 
   /* components.tab */
@@ -190,12 +204,27 @@ body {
   color: var(--text-2);
 }
 
-/* Rząd kafelków (DESIGN.md → components.focus-ring): fokus to biały obrys 5px, skala 1.08 i cień. */
+/* Ikony Material Symbols Rounded (ligatury); rozmiar z kontekstu (chip 22px). */
+.material-symbols {
+  font-family: 'Material Symbols Rounded', sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  display: inline-block;
+  -webkit-font-feature-settings: 'liga';
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Rząd kafelków 544×306 (DESIGN.md → Tile): wiersz 3 kafelków wychodzi poza title-safe, dopasowanie to story 4.9. */
 .tiles {
   position: absolute;
   top: var(--apps-top);
   left: var(--gutter);
-  right: var(--gutter);
   display: flex;
   gap: var(--tile-gap);
   list-style: none;
@@ -203,34 +232,112 @@ body {
 
 .tile {
   width: var(--tile-width);
-  height: var(--tile-height);
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  border: 1px solid var(--line);
-  border-radius: var(--tile-radius);
-  background: var(--surface);
+  flex: none;
 }
 
-.tile--focused {
-  outline: 5px solid var(--focus);
+.tile__card {
+  position: relative;
+  width: var(--tile-width);
+  height: var(--tile-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--tile-radius);
+  background: linear-gradient(160deg, var(--tile-gradient-top) 0%, var(--surface) 60%);
+  box-shadow: var(--elevation-rest);
+  /* components.focus-ring: obrys 5px (przezroczysty w spoczynku, żeby przejście było płynne), skala 1.08 i cień. */
+  outline: 5px solid transparent;
   outline-offset: 0;
+  transition:
+    transform var(--focus-duration) ease-out,
+    outline-color var(--focus-duration) ease-out,
+    box-shadow var(--focus-duration) ease-out;
+}
+
+.tile--focused .tile__card {
+  outline-color: var(--focus);
   transform: scale(1.08);
   box-shadow: var(--elevation-lift);
 }
 
-.tile__title {
-  font-size: var(--card-title-size);
-  font-weight: var(--card-title-weight);
-  line-height: var(--card-title-line);
-  letter-spacing: var(--card-title-tracking);
+.tile__icon {
+  max-width: 60%;
+  max-height: 60%;
+  object-fit: contain;
 }
 
-.tile__state {
+.tile__mark {
+  padding: 0 var(--space-4);
+  text-align: center;
+  font-size: var(--tile-mark-size);
+  font-weight: var(--tile-mark-weight);
+  letter-spacing: var(--tile-mark-tracking);
+  line-height: 1.1;
+  color: var(--tile-mark);
+}
+
+/* components.chip: pigułka w lewym dolnym rogu, inset 24px. */
+.chip {
+  position: absolute;
+  left: var(--space-4);
+  bottom: var(--space-4);
+  height: 44px;
+  padding: 0 18px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 9999px;
+  background: var(--scrim);
+  color: var(--text);
+  font-size: var(--chip-size);
+  font-weight: var(--chip-weight);
+  white-space: nowrap;
+}
+
+/* components.tile-meta: nazwa + linia stanu; w fokusie odsunięta, żeby skala jej nie zasłoniła. */
+.tile__meta {
+  margin-top: var(--meta-gap);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: margin-top var(--focus-duration) ease-out;
+}
+
+.tile--focused .tile__meta {
+  margin-top: var(--meta-gap-focused);
+}
+
+.tile__name {
+  font-size: var(--tile-name-size);
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.tile--focused .tile__name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Linia ma stałą wysokość, więc brak tekstu nie przesuwa układu. */
+.tile__line {
+  min-height: calc(var(--body-size) * var(--body-line));
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--body-size);
+  font-weight: var(--body-weight);
+  line-height: var(--body-line);
   color: var(--text-2);
+}
+
+/* components.state-dot */
+.state-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 9999px;
+  background: var(--accent);
 }
 
 /* components.config-error: pełny ekran na ground, logo w lewym górnym rogu. */

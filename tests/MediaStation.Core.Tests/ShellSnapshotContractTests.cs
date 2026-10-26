@@ -17,7 +17,7 @@ public class ShellSnapshotContractTests
         1,
         ShellScreen.Placeholder,
         [],
-        [new AppSnapshot("netflix", AppCategory.Video, AppLifecycleState.NotRunning, "Netflix")],
+        [new AppSnapshot("netflix", AppCategory.Video, AppLifecycleState.NotRunning, "Netflix", "netflix.png", AppType.Web)],
         new FocusRequest(FocusRequest.DefaultTarget, 1));
 
     [Fact]
@@ -49,7 +49,7 @@ public class ShellSnapshotContractTests
         var json = ContractJson.Serialize(PlaceholderSnapshot);
 
         Assert.Equal(
-            """{"rev":1,"screen":"placeholder","configErrors":[],"apps":[{"appId":"netflix","category":"video","state":"notRunning","title":"Netflix"}],"focusRequest":{"target":"default","seq":1}}""",
+            """{"rev":1,"screen":"placeholder","configErrors":[],"apps":[{"appId":"netflix","category":"video","state":"notRunning","title":"Netflix","icon":"netflix.png","type":"web"}],"focusRequest":{"target":"default","seq":1}}""",
             json);
         var back = ContractJson.Deserialize<ShellSnapshot>(json);
         Assert.NotNull(back);
@@ -61,12 +61,28 @@ public class ShellSnapshotContractTests
     }
 
     [Fact]
+    public void Missing_icon_serializes_as_explicit_null_and_round_trips()
+    {
+        var snapshot = PlaceholderSnapshot with
+        {
+            Apps = [new AppSnapshot("plex", AppCategory.Game, AppLifecycleState.Background, "Plex", null, AppType.Native)],
+        };
+
+        var json = ContractJson.Serialize(snapshot);
+
+        Assert.Contains("\"title\":\"Plex\",\"icon\":null,\"type\":\"native\"}", json);
+        var back = ContractJson.Deserialize<ShellSnapshot>(json);
+        Assert.NotNull(back);
+        Assert.Equal(snapshot.Apps, back.Apps);
+    }
+
+    [Fact]
     public void Envelope_wraps_snapshot()
     {
         var json = ContractJson.Serialize(Envelope.Snapshot(PlaceholderSnapshot));
 
         Assert.Equal(
-            """{"v":1,"type":"snapshot","payload":{"rev":1,"screen":"placeholder","configErrors":[],"apps":[{"appId":"netflix","category":"video","state":"notRunning","title":"Netflix"}],"focusRequest":{"target":"default","seq":1}}}""",
+            """{"v":1,"type":"snapshot","payload":{"rev":1,"screen":"placeholder","configErrors":[],"apps":[{"appId":"netflix","category":"video","state":"notRunning","title":"Netflix","icon":"netflix.png","type":"web"}],"focusRequest":{"target":"default","seq":1}}}""",
             json);
     }
 
@@ -169,8 +185,13 @@ public class ShellSnapshotContractTests
         var app = properties["apps"]!["items"]!;
         Assert.Equal("AppSnapshot", app["title"]!.GetValue<string>());
         Assert.Equal(
-            ["appId", "category", "state", "title"],
+            ["appId", "category", "state", "title", "icon", "type"],
             app["required"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray());
+        var iconTypes = app["properties"]!["icon"]!["type"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
+        Assert.Equal(["string", "null"], iconTypes);
+        var appType = app["properties"]!["type"]!;
+        Assert.Equal("AppType", appType["title"]!.GetValue<string>());
+        Assert.Equal(["web", "moonlight", "native"], appType["enum"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray());
         var category = app["properties"]!["category"]!;
         Assert.Equal("AppCategory", category["title"]!.GetValue<string>());
         Assert.Equal(["video", "audio", "game"], category["enum"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray());

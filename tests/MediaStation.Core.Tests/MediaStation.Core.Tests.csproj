@@ -24,6 +24,7 @@
     PowerNotifications (hook, RegisterPowerSettingNotification, SystemEvents, Marshal payloadu).
   -->
   <ItemGroup>
+    <Compile Include="..\..\src\MediaStation.App\Config\AppIcons.cs" Link="App\AppIcons.cs" />
     <Compile Include="..\..\src\MediaStation.App\Diagnostics\UiHang.cs" Link="App\UiHang.cs" />
     <Compile Include="..\..\src\MediaStation.App\TeardownSequence.cs" Link="App\TeardownSequence.cs" />
     <Compile Include="..\..\src\MediaStation.App\Hosts\MissingHostPort.cs" Link="App\MissingHostPort.cs" />

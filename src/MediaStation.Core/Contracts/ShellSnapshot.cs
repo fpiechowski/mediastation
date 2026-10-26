@@ -22,9 +22,17 @@ public enum AppLifecycleState
 
 /// <summary>
 /// Kafelek aplikacji w snapshocie; <see cref="AppId"/> jest stabilnym kluczem fokusu UI (AD-16),
-/// a <see cref="Title"/> to podpis kafelka z <c>apps.json</c>.
+/// a <see cref="Title"/> to podpis kafelka z <c>apps.json</c>. <see cref="Icon"/> to sama nazwa pliku w <c>config/icons/</c>
+/// albo <c>null</c>, gdy App nie znalazł pliku (kafelek pokazuje wtedy sam tytuł); <see cref="Type"/> wybiera wariant
+/// chipa i linii stanu (np. „Wstrzymane” tylko dla <c>web</c>).
 /// </summary>
-public sealed record AppSnapshot(string AppId, AppCategory Category, AppLifecycleState State, string Title);
+public sealed record AppSnapshot(
+    string AppId,
+    AppCategory Category,
+    AppLifecycleState State,
+    string Title,
+    string? Icon,
+    AppType Type);
 
 /// <summary>
 /// Żądanie fokusu dla UI (AD-16). <see cref="Target"/> to <see cref="DefaultTarget"/> albo <c>appId</c>;

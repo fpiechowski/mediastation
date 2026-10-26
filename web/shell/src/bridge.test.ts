@@ -38,6 +38,30 @@ describe('bridge', () => {
     expect(onAction).toHaveBeenCalledTimes(1);
   });
 
+  it('przyjmuje snapshot z icon (string albo null) i type, a odrzuca bez type lub z icon innego typu', () => {
+    const { emit } = stubWebview();
+    const onSnapshot = vi.fn();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    connectBridge(onSnapshot, () => {});
+    const app = { appId: 'netflix', category: 'video', state: 'notRunning', title: 'Netflix', icon: 'netflix.png', type: 'web' };
+    const snapshot = (apps: unknown[], rev: number) => ({
+      v: 1,
+      type: 'snapshot',
+      payload: { rev, screen: 'placeholder', configErrors: [], apps, focusRequest: null },
+    });
+
+    emit(snapshot([app], 1));
+    emit(snapshot([{ ...app, icon: null }], 2));
+    expect(onSnapshot).toHaveBeenCalledTimes(2);
+
+    const { type: _type, ...withoutType } = app;
+    emit(snapshot([withoutType], 3));
+    emit(snapshot([{ ...app, icon: 5 }], 4));
+    emit(snapshot([{ ...app, icon: undefined }], 5));
+    emit(snapshot([{ ...app, type: 'foo' }], 6));
+    expect(onSnapshot).toHaveBeenCalledTimes(2);
+  });
+
   it('sendIntent wysyła kopertę launchApp', () => {
     const { postMessage } = stubWebview();
 

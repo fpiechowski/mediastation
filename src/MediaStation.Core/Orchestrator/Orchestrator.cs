@@ -68,7 +68,7 @@ public sealed partial class Orchestrator
         foreach (var app in config.Apps.Apps)
         {
             var (type, pointer) = Describe(app);
-            var state = new AppState(app.Id, app.Category, app.Title, type, pointer);
+            var state = new AppState(app.Id, app.Category, app.Title, config.IconOf(app), type, pointer);
             _apps.Add(state);
             _appsById.Add(state.AppId, state);
         }
@@ -118,7 +118,7 @@ public sealed partial class Orchestrator
         for (var i = 0; i < _apps.Count; i++)
         {
             var app = _apps[i];
-            apps[i] = new AppSnapshot(app.AppId, app.Category, app.State, app.Title);
+            apps[i] = new AppSnapshot(app.AppId, app.Category, app.State, app.Title, app.Icon, app.Type);
         }
 
         return new ShellSnapshot(
@@ -152,19 +152,21 @@ public sealed partial class Orchestrator
     /// <summary>Typ i polityka wskaźnika z rekordu <c>apps.json</c>, z których żyje routing i mapa routera (AD-11).</summary>
     private static (AppType Type, PointerPolicy Pointer) Describe(AppEntry app) => app switch
     {
-        WebApp web => (AppType.Web, web.Pointer),
-        MoonlightApp moonlight => (AppType.Moonlight, moonlight.Pointer),
-        NativeApp native => (AppType.Native, native.Pointer),
+        WebApp web => (AppEntry.AppTypeOf(web), web.Pointer),
+        MoonlightApp moonlight => (AppEntry.AppTypeOf(moonlight), moonlight.Pointer),
+        NativeApp native => (AppEntry.AppTypeOf(native), native.Pointer),
         _ => throw new InvalidOperationException($"Nieznany typ aplikacji {app.GetType().FullName}."),
     };
 
-    private sealed class AppState(string appId, AppCategory category, string title, AppType type, PointerPolicy pointer)
+    private sealed class AppState(string appId, AppCategory category, string title, string? icon, AppType type, PointerPolicy pointer)
     {
         public string AppId { get; } = appId;
 
         public AppCategory Category { get; } = category;
 
         public string Title { get; } = title;
+
+        public string? Icon { get; } = icon;
 
         public AppType Type { get; } = type;
 

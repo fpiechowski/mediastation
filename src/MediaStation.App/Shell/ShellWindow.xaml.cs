@@ -18,12 +18,14 @@ public partial class ShellWindow : Window
 
     private readonly ShellBridge _bridge;
     private readonly string _userDataDir;
+    private readonly string _iconsDir;
     private readonly ILog _log;
 
-    public ShellWindow(ShellBridge bridge, string userDataDir, ILog log)
+    public ShellWindow(ShellBridge bridge, string userDataDir, string iconsDir, ILog log)
     {
         _bridge = bridge;
         _userDataDir = userDataDir;
+        _iconsDir = iconsDir;
         _log = log;
         InitializeComponent();
         Loaded += OnLoaded;
@@ -43,6 +45,8 @@ public partial class ShellWindow : Window
             core.Settings.IsStatusBarEnabled = false;
             core.Settings.IsPinchZoomEnabled = false;
             core.Settings.IsSwipeNavigationEnabled = false;
+            Directory.CreateDirectory(_iconsDir);
+            core.SetVirtualHostNameToFolderMapping(ShellOrigin.IconsHost, _iconsDir, CoreWebView2HostResourceAccessKind.DenyCors);
 #if !SHELL_DEV_SERVER
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.AreBrowserAcceleratorKeysEnabled = false;
