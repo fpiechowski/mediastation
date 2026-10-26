@@ -2,7 +2,7 @@
 name: MediaStation
 status: final
 created: 2026-10-16
-updated: 2026-10-18
+updated: 2026-10-26
 sources:
   - ../brief-mediastation/brief-mediastation.md
   - ../brief-mediastation/addendum.md
@@ -111,7 +111,7 @@ Chip + linia stanu: copy, ikony i wygląd ma jedno źródło — `DESIGN.md` →
 | NotRunning | OK = start |
 | Starting | Ikona statyczna; po timeoucie startu → Failed (AD-10). Aplikacja wychodzi na pierwszy plan po starcie (Moonlight 1–2 s). Klawisz Home w trakcie → aplikacja minimalizowana po starcie komendą kompensującą po nowszym `transitionId` (AD-14), kafelek przechodzi w Background |
 | Foreground | Home niewidoczny |
-| Background | Aplikacja schowana i wyciszona (Netflix: pause → mute → minimize; Moonlight: mute → minimize, sesja żyje); kropka na zakładce. OK przywraca; Netflix stoi na pauzie, OK wznawia (nigdy autowznowienie) |
+| Background | Aplikacja schowana i wyciszona (Netflix: pause → mute → minimize; Moonlight: mute → minimize, sesja żyje; natywne, np. Plex: mute → minimize, aplikacja gra dalej wyciszona); kropka na zakładce. OK przywraca; Netflix stoi na pauzie, OK wznawia (nigdy autowznowienie) |
 | Stopping | Fokus zostaje na kafelku |
 | Failed | Ikona + tekst, bez koloru błędu. OK → AppMenu z fokusem na „Uruchom ponownie”; wyjście z Failed tylko przez AppMenu. Failed także przy niezgodnej wersji major protokołu |
 
@@ -162,7 +162,7 @@ Chip + linia stanu: copy, ikony i wygląd ma jedno źródło — `DESIGN.md` →
 
 **OK / long-press**
 - OK = główna akcja elementu. **AppMenu = long-press OK (`phase: long`) na kafelku w trybie `shell`.**
-- OK na kafelku Failed = Intent AppMenu z fokusem na „Uruchom ponownie”.
+- OK na kafelku Failed otwiera AppMenu w Shell z fokusem na „Uruchom ponownie”. Stan otwartego AppMenu trzyma Shell jako efemeryczny stan nawigacji (AD-16); otwarcie AppMenu nie jest Intentem. Do Orchestratora idą tylko pozycje menu jako Intents `RestartApp` i `CloseApp`.
 - W OSK: `press` wstawia literę, `long` otwiera rząd wariantów (patrz OSK).
 
 **Back**
@@ -295,7 +295,7 @@ Odrzucone (forge): Filmweb na TV, ocena z pilota, karta tylko dla profilu Elizy,
 | Action `Keyboard` z pilota | W MVP: otwiera OSK w Plexie, UI Moonlighta i na polach shella; w Netflixie OSK nadal otwiera się sama. R10 zastąpione w `change-osk-everywhere-github-update` | AD-8, AD-9 |
 | Przycisk aktualizacji | Snapshot `update{available, version, phase}`, Intent `InstallUpdate`. `<wersja>` w copy to semver bez prefiksu „v” (np. 1.4.0) | AD-17 |
 | Komunikat po rollbacku | Snapshot musi nieść informację o rollbacku z wersją, która nie wystartowała (np. `update.rolledBack{ version }`), przekazaną przez `--supervise` przy starcie poprzedniej wersji. **Do dopisania w AD-17** | AD-17 |
-| OK na kafelku Failed | Intent AppMenu z fokusem na „Uruchom ponownie” | AD-8, AD-10 |
+| OK na kafelku Failed | Shell otwiera AppMenu z fokusem na „Uruchom ponownie”; stan otwartego AppMenu trzyma Shell jako efemeryczny stan nawigacji, bez Intentu `OpenAppMenu`. Pozycje menu → Intents `RestartApp` i `CloseApp`. Home w trybie `shell` dociera do Shell jako Action i zamyka nakładkę | AD-8, AD-10, AD-16 |
 | Foreground → Failed | Orchestrator sam pokazuje Home, fokus na kafelku Failed przez `focusRequest{appId, seq}` (R7) | AD-10, AD-15, AD-16 |
 | Fokus startowy | Zimny start, restart, wybudzenie → `focusRequest{default, seq}` (Video, pierwszy kafelek); UI stosuje każde nowe `seq` raz (R7, L31) | AD-10, AD-16 |
 | Zerwane CDP | Bez UI; D-pad niebuforowany; po `cdpReconnectTimeout` (30 s) → Failed (R8) | AD-7, AD-10, AD-11 |

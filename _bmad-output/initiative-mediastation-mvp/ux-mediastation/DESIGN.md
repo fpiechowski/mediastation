@@ -3,7 +3,7 @@ name: MediaStation
 description: Ciemny 10-foot UI na TV 1920×1080 w kanonie Google TV / Apple TV — kafelki aplikacji, wiersz „Do oceny”, biały fokus widoczny z kanapy.
 status: final
 created: 2026-10-16
-updated: 2026-10-18
+updated: 2026-10-26
 sources:
   - ../brief-mediastation/brief-mediastation.md
   - ../brief-mediastation/addendum.md
@@ -211,10 +211,11 @@ components:
   chip-background:
     icon: pause
     label: 'Wstrzymane'
+    note: 'Tylko typ `web` (np. Netflix): AD-5 pauzuje przy wyjściu tylko aplikacje `web`.'
   chip-background-muted:
     icon: volume_off
     label: 'Wyciszony'
-    note: 'Moonlight w tle: sesja żyje, tylko wyciszona.'
+    note: 'Moonlight i aplikacje natywne (`native`, np. Plex) w tle: grają dalej, tylko wyciszone.'
   chip-starting:
     icon: progress_activity
     label: 'Uruchamiam…'
@@ -491,7 +492,7 @@ Obrys fokusu przyjmuje promień elementu (`outline-offset: 0`) — w shellu i w 
 |---|---|---|
 | NotRunning | — | — |
 | Starting | `progress_activity` „Uruchamiam…” (ikona statyczna) | „Chwilka…” |
-| Background | `pause` „Wstrzymane” (Netflix) / `volume_off` „Wyciszony” (Moonlight — sesja żyje, nie jest wstrzymana) | `{components.state-dot}` + „W tle · <tytuł>, wstrzymane” (Netflix) albo „W tle · wyciszony” (Moonlight) |
+| Background | `pause` „Wstrzymane” — wyłącznie typ `web` (Netflix) / `volume_off` „Wyciszony” — Moonlight (sesja żyje, nie jest wstrzymana) i aplikacje natywne (`native`, np. Plex). AD-5 pauzuje przy wyjściu tylko `web`; natywna aplikacja gra dalej wyciszona i zminimalizowana | `{components.state-dot}` + „W tle · <tytuł>, wstrzymane” (`web`); „W tle · wstrzymane”, gdy tytuł treści nie jest znany (tytuł dokłada epic-netflix-dpad); „W tle · wyciszony” (Moonlight, `native`) |
 | Stopping | `close` „Zamykam…” | — |
 | Failed | `error` „Nie odpowiada” | „Coś się zacięło. Wciśnij OK” |
 
