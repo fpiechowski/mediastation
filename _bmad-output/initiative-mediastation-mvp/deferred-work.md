@@ -190,7 +190,8 @@ source_spec: `tickets/epic-input/epic-input-retrospective.md`, A7
 severity: low
 reason: Świadoma konwencja (accepted as-is), ale niezapisana w architekturze, więc jest odkrywana ponownie. Przy następnym dotknięciu architektury dopisać ją jako konwencję projektu.
 owner: author, następny pass architektury
-status: open
+status: done 2026-10-26
+resolution: konwencja dopisana w architekturze (commit 11c7d36): Consistency Conventions, wiersz „Testy kodu App” (linkowanie źródeł App bez WPF, WebView2 i Win32 do `MediaStation.Core.Tests`, wydzielanie testowanej logiki z typów WPF/WebView2/Win32), oraz AD-13 → Testy.
 
 ### DW-24: Dedupe wciśniętych usages w kalibracji czyści wszystkie usages przy dowolnym key-up pilota.
 origin: retro epiki 3, 2026-10-23 (F10/A8)
