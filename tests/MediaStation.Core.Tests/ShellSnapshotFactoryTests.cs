@@ -25,8 +25,8 @@ public class ShellSnapshotFactoryTests
         Assert.Empty(snapshot.ConfigErrors);
         Assert.Equal(
             [
-                new AppSnapshot("netflix", AppCategory.Video, AppLifecycleState.NotRunning),
-                new AppSnapshot("plex", AppCategory.Game, AppLifecycleState.NotRunning),
+                new AppSnapshot("netflix", AppCategory.Video, AppLifecycleState.NotRunning, "Netflix"),
+                new AppSnapshot("plex", AppCategory.Game, AppLifecycleState.NotRunning, "Plex"),
             ],
             snapshot.Apps);
         Assert.Null(snapshot.FocusRequest);

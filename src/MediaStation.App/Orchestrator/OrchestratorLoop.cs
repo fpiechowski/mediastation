@@ -19,6 +19,7 @@ public sealed class OrchestratorLoop : IDisposable
     private readonly CoreOrchestrator _orchestrator;
     private readonly Action<IReadOnlyList<Command>> _dispatch;
     private readonly Action<ShellSnapshot> _publish;
+    private readonly Action<Action> _publishAction;
     private readonly ILog _log;
     private readonly BlockingCollection<IOrchestratorMessage> _queue = new();
     private readonly Thread _thread;
@@ -29,16 +30,19 @@ public sealed class OrchestratorLoop : IDisposable
         CoreOrchestrator orchestrator,
         Action<IReadOnlyList<Command>> dispatch,
         Action<ShellSnapshot> publish,
+        Action<Action> publishAction,
         ILog log)
     {
         ArgumentNullException.ThrowIfNull(orchestrator);
         ArgumentNullException.ThrowIfNull(dispatch);
         ArgumentNullException.ThrowIfNull(publish);
+        ArgumentNullException.ThrowIfNull(publishAction);
         ArgumentNullException.ThrowIfNull(log);
 
         _orchestrator = orchestrator;
         _dispatch = dispatch;
         _publish = publish;
+        _publishAction = publishAction;
         _log = log;
         _thread = new Thread(Run)
         {
@@ -138,6 +142,22 @@ public sealed class OrchestratorLoop : IDisposable
                 if (result.Snapshot is { } snapshot)
                 {
                     _publish(snapshot);
+                }
+
+                // Actions dla Shell po snapshocie tego samego kroku (AD-8): Shell ocenia je na stanie z kroku lub nowszym.
+                foreach (var action in result.Actions)
+                {
+                    _publishAction(action);
+                }
+
+                if (result.IgnoredIntent is { } ignored)
+                {
+                    _log.Warn(Src, "intentIgnored", new Dictionary<string, object?>
+                    {
+                        ["intent"] = ignored.Intent,
+                        ["appId"] = ignored.AppId,
+                        ["reason"] = ignored.Reason,
+                    });
                 }
             }
             catch (Exception ex)

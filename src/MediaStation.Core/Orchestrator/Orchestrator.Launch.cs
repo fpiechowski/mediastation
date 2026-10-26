@@ -19,19 +19,24 @@ public sealed partial class Orchestrator
     /// </summary>
     private OrchestratorResult OnLaunchApp(LaunchApp launch)
     {
-        if (!_appsById.TryGetValue(launch.AppId, out var app) || AnotherAppIsActive(app))
+        if (!_appsById.TryGetValue(launch.AppId, out var app))
         {
-            return OrchestratorResult.None;
+            return Ignored(launch, "nieznany appId");
+        }
+
+        if (AnotherAppIsActive(app))
+        {
+            return Ignored(launch, "inna aplikacja jest aktywna");
         }
 
         if (app.State == AppLifecycleState.Background)
         {
-            return app.Hwnd is { } hwnd ? OnResume(app, hwnd) : OrchestratorResult.None;
+            return app.Hwnd is { } hwnd ? OnResume(app, hwnd) : Ignored(launch, "brak okna aplikacji w tle");
         }
 
         if (app.State != AppLifecycleState.NotRunning)
         {
-            return OrchestratorResult.None;
+            return Ignored(launch, $"stan {app.State} nie pozwala na uruchomienie");
         }
 
         var cmdId = NextCmdId();
@@ -40,6 +45,10 @@ public sealed partial class Orchestrator
         _pendingStarts.Add(cmdId, app.AppId);
         return new OrchestratorResult([new StartApp(cmdId, app.AppId), ScheduleStartTimeout(app.AppId)], Snapshot());
     }
+
+    /// <summary>Odrzucenie <see cref="LaunchApp"/>: bez komend i snapshotu, z <see cref="IgnoredIntent"/> do logu pętli.</summary>
+    private static OrchestratorResult Ignored(LaunchApp launch, string reason) =>
+        OrchestratorResult.None with { IgnoredIntent = new IgnoredIntent(nameof(LaunchApp), launch.AppId, reason) };
 
     /// <summary>
     /// Powrót z tła: proces żyje, więc wystarczą <see cref="ActivateWindow"/> i routing wejścia aplikacji.
@@ -51,7 +60,7 @@ public sealed partial class Orchestrator
         app.ForegroundTransition = NextTransitionId();
         app.State = AppLifecycleState.Foreground;
         var activate = new ActivateWindow(NextCmdId(), hwnd);
-        var routing = new SetInputRouting(NextCmdId(), InputMode.App, app.Type, app.Pointer, NextEpoch());
+        var routing = Route(InputMode.App, app.Type, app.Pointer);
         return new OrchestratorResult([activate, routing], Snapshot());
     }
 }

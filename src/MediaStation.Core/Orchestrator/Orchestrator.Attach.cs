@@ -54,7 +54,7 @@ public sealed partial class Orchestrator
 
         app.State = AppLifecycleState.Foreground;
         var activate = new ActivateWindow(NextCmdId(), attached.Hwnd);
-        var routing = new SetInputRouting(NextCmdId(), InputMode.App, app.Type, app.Pointer, NextEpoch());
+        var routing = Route(InputMode.App, app.Type, app.Pointer);
         var commands = new List<Command> { activate, routing };
 
         // Okno zdążyło przed deadlinem: timeout `Starting` traci znaczenie, a scheduler dostaje jawne anulowanie.

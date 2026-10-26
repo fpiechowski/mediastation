@@ -35,7 +35,7 @@ public static class ShellSnapshotFactory
         for (var i = 0; i < apps.Length; i++)
         {
             var app = config.Apps.Apps[i];
-            apps[i] = new AppSnapshot(app.Id, app.Category, AppLifecycleState.NotRunning);
+            apps[i] = new AppSnapshot(app.Id, app.Category, AppLifecycleState.NotRunning, app.Title);
         }
 
         return apps;

@@ -187,7 +187,11 @@ public static class CompositionRoot
 
         // Bootstrap ma rev 0 i nie jest logowany: pierwszy snapshot z Orchestratora ma rev 1.
         var snapshot = ShellSnapshotFactory.FromConfig(result, rev: 0);
-        var bridge = new ShellBridge(snapshot, log, app.Dispatcher);
+
+        // Intenty z Shell wpadają do kolejki pętli, która powstaje dopiero po routerze, więc delegat czyta ją leniwie.
+        // Zegar mostu ma skalę Action.TsMono (ms od startu systemu, jak `time` hooka LL), żeby próg świeżości był spójny.
+        OrchestratorLoop? postsTo = null;
+        var bridge = new ShellBridge(snapshot, log, app.Dispatcher, static () => Environment.TickCount64, intent => postsTo?.Post(intent));
         var window = new ShellWindow(bridge, WebView2UserDataDir, log);
         app.MainWindow = window;
         window.Show();
@@ -206,7 +210,6 @@ public static class CompositionRoot
         }
 
         // Adaptery „brak hosta” odpowiadają w kolejce pętli, a pętla powstaje po routerze, więc delegat czyta ją leniwie.
-        OrchestratorLoop? postsTo = null;
         var hosts = new Dictionary<AppType, IAppHostPort>
         {
             [AppType.Web] = new MissingHostPort(log, message => postsTo?.Post(message)),
@@ -244,7 +247,7 @@ public static class CompositionRoot
 
         keyInjection.Start();
 
-        var loop = new OrchestratorLoop(new CoreOrchestrator(config, time), router.Dispatch, bridge.Publish, log);
+        var loop = new OrchestratorLoop(new CoreOrchestrator(config, time), router.Dispatch, bridge.Publish, bridge.PublishAction, log);
         postsTo = loop;
         loop.Start();
 

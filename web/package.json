@@ -11,6 +11,7 @@
     "contracts:generate": "node scripts/contracts.mjs",
     "contracts": "npm run contracts:export && npm run contracts:generate",
     "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
     "dev": "vite shell",
     "build:shell": "npm run typecheck && vite build shell",
     "build": "npm run contracts && npm run build:shell"
@@ -26,6 +27,7 @@
     "@vitejs/plugin-react": "6.1.2",
     "json-schema-to-typescript": "16.0.0",
     "typescript": "6.0.3",
-    "vite": "8.3.4"
+    "vite": "8.3.4",
+    "vitest": "5.0.4"
   }
 }

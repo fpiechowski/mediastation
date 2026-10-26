@@ -446,7 +446,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 | Pliki | `%LOCALAPPDATA%\MediaStation\{config,data,profiles\<appId>,logs}`; każdy plik w `data/` ma `schemaVersion` i zapis atomowy |
 | Błędy | `CommandFailed{cmdId, errorCode}` z enumem `ErrorCode` w Core; o stanie `Failed` decyduje Orchestrator |
 | Interop Win32 | tylko w `Platform/*`, przez CsWin32; C# i JS ze spike'u to referencja zachowania, nie kod do skopiowania bez przeglądu |
-| Testy kodu App | Nie ma osobnego projektu testów App. Źródła `MediaStation.App` bez WPF, WebView2 i Win32 są linkowane (`<Compile Include="…" Link="App\…" />`) do `tests/MediaStation.Core.Tests/MediaStation.Core.Tests.csproj` (19 plików na 2026-10-26). Logikę, którą chcemy testować, wydziela się z typów WPF/WebView2/Win32 do osobnego pliku (np. walidacja wiadomości `ShellBridge` od `CoreWebView2`) |
+| Testy kodu App | Nie ma osobnego projektu testów App. Źródła `MediaStation.App` bez WPF, WebView2 i Win32 są linkowane (`<Compile Include="…" Link="App\…" />`) do `tests/MediaStation.Core.Tests/MediaStation.Core.Tests.csproj` (21 plików na 2026-10-26). Logikę, którą chcemy testować, wydziela się z typów WPF/WebView2/Win32 do osobnego pliku (np. walidacja wiadomości `ShellBridge` od `CoreWebView2`) |
 
 ## Stack
 

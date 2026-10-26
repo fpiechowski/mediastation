@@ -20,7 +20,7 @@ public sealed partial class Orchestrator
     {
         var commands = new List<Command>(_apps.Count + 1)
         {
-            new SetInputRouting(NextCmdId(), InputMode.Shell, null, PointerPolicy.Blocked, NextEpoch()),
+            Route(InputMode.Shell, null, PointerPolicy.Blocked),
         };
         foreach (var app in _apps)
         {
@@ -69,7 +69,7 @@ public sealed partial class Orchestrator
             foreground.State = AppLifecycleState.Background;
             commands.Add(new MinimizeWindow(NextCmdId(), hwnd));
             commands.Add(new ShowShell(NextCmdId()));
-            commands.Add(new SetInputRouting(NextCmdId(), InputMode.Shell, null, PointerPolicy.Blocked, NextEpoch()));
+            commands.Add(Route(InputMode.Shell, null, PointerPolicy.Blocked));
         }
 
         foreach (var app in _apps)

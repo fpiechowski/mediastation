@@ -10,6 +10,28 @@ namespace MediaStation.Core.Orchestrator;
 public sealed partial class Orchestrator
 {
     /// <summary>
+    /// Action z InputHub: Home jest obsługiwany jak dotąd (<see cref="OnHome"/>) i zawsze trafia też do Shell,
+    /// także gdy nic nie zmienił. Pozostałe Actions Shell dostaje tylko w trybie <c>shell</c> (AD-8): strzałki
+    /// (<c>press</c>/<c>repeat</c>), Ok (<c>press</c>/<c>long</c>) i Back (<c>press</c>). W trybie <c>app</c>/<c>osk</c>
+    /// wejście należy do aplikacji, więc <see cref="OrchestratorResult.Actions"/> zostaje puste.
+    /// </summary>
+    private OrchestratorResult OnAction(ActionMessage action)
+    {
+        var result = OnHome(action);
+        var forward = action.Kind == ActionKind.Home || (_mode == InputMode.Shell && IsShellAction(action));
+        return forward ? result with { Actions = [action] } : result;
+    }
+
+    private static bool IsShellAction(ActionMessage action) => action.Kind switch
+    {
+        ActionKind.Up or ActionKind.Down or ActionKind.Left or ActionKind.Right =>
+            action.Phase is ActionPhase.Press or ActionPhase.Repeat,
+        ActionKind.Ok => action.Phase is ActionPhase.Press or ActionPhase.Long,
+        ActionKind.Back => action.Phase == ActionPhase.Press,
+        _ => false,
+    };
+
+    /// <summary>
     /// Home z pierwszego planu: aplikacja schodzi do <c>Background</c>, shell wraca na wierzch, a InputHub
     /// dostaje tryb <c>shell</c>. Kolejność komend jest istotna (AD-5/AD-15): najpierw minimalizacja,
     /// potem <see cref="ShowShell"/>, na końcu routing. Fokusu nie zmieniamy — UI sam wraca na ostatni kafelek.
@@ -39,7 +61,7 @@ public sealed partial class Orchestrator
             app.State = AppLifecycleState.Background;
             var minimize = new MinimizeWindow(NextCmdId(), hwnd);
             var showShell = new ShowShell(NextCmdId());
-            var routing = new SetInputRouting(NextCmdId(), InputMode.Shell, null, PointerPolicy.Blocked, NextEpoch());
+            var routing = Route(InputMode.Shell, null, PointerPolicy.Blocked);
             return new OrchestratorResult([minimize, showShell, routing], Snapshot());
         }
 

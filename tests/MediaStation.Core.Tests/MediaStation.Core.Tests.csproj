@@ -43,6 +43,8 @@
     <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSourcesAttachment.cs" Link="App\PowerSourcesAttachment.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\WakeSignalGate.cs" Link="App\WakeSignalGate.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Window\LogWindowManagerPort.cs" Link="App\LogWindowManagerPort.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Shell\ShellMessageGate.cs" Link="App\ShellMessageGate.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Shell\ShellOutbox.cs" Link="App\ShellOutbox.cs" />
   </ItemGroup>
 
   <ItemGroup>

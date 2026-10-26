@@ -20,8 +20,11 @@ public enum AppLifecycleState
     Failed,
 }
 
-/// <summary>Kafelek aplikacji w snapshocie; <see cref="AppId"/> jest stabilnym kluczem fokusu UI (AD-16).</summary>
-public sealed record AppSnapshot(string AppId, AppCategory Category, AppLifecycleState State);
+/// <summary>
+/// Kafelek aplikacji w snapshocie; <see cref="AppId"/> jest stabilnym kluczem fokusu UI (AD-16),
+/// a <see cref="Title"/> to podpis kafelka z <c>apps.json</c>.
+/// </summary>
+public sealed record AppSnapshot(string AppId, AppCategory Category, AppLifecycleState State, string Title);
 
 /// <summary>
 /// Żądanie fokusu dla UI (AD-16). <see cref="Target"/> to <see cref="DefaultTarget"/> albo <c>appId</c>;

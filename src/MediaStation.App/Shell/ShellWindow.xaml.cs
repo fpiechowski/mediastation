@@ -12,14 +12,7 @@ namespace MediaStation.App.Shell;
 /// </summary>
 public partial class ShellWindow : Window
 {
-#if SHELL_DEV_SERVER
-    // Debug: shell z Vite dev servera (AD-13), z HMR.
-    private static readonly Uri ShellUri = new("http://localhost:5173/");
-#else
-    // Release: shell z plików lokalnych <exe>/shell przez wirtualny host.
-    private const string ShellHost = "shell.mediastation.example";
-    private static readonly Uri ShellUri = new($"https://{ShellHost}/index.html");
-#endif
+    private static readonly Uri ShellUri = ShellOrigin.Uri;
 
     private readonly ShellBridge _bridge;
     private readonly string _userDataDir;
@@ -52,7 +45,7 @@ public partial class ShellWindow : Window
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.AreBrowserAcceleratorKeysEnabled = false;
             core.SetVirtualHostNameToFolderMapping(
-                ShellHost,
+                ShellOrigin.Host,
                 Path.Combine(AppContext.BaseDirectory, "shell"),
                 CoreWebView2HostResourceAccessKind.DenyCors);
 #endif

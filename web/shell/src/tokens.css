@@ -8,6 +8,10 @@
   --text: #ffffff;
   --text-2: #c4c7cc;
   --text-3: #9aa0a6;
+  --surface: #1e2024;
+  --line: #33363c;
+  --focus: #ffffff;
+  --focus-ink: #0f1012;
 
   /* typography */
   --font-family: 'Roboto Flex Variable', 'Roboto Flex', Roboto, 'Segoe UI', system-ui, sans-serif;
@@ -30,6 +34,12 @@
   --gutter: 112px;
   --title-safe-y: 54px;
   --bar-top: 56px;
+  --apps-top: 292px;
+  --tile-gap: 48px;
+  --tile-radius: 22px;
+  --tile-width: 320px;
+  --tile-height: 200px;
+  --elevation-lift: 0 28px 56px rgba(0, 0, 0, 0.6), 0 10px 20px rgba(0, 0, 0, 0.45);
 
   /* components.logo */
   --logo-size: 48px;
@@ -123,10 +133,53 @@ body {
   letter-spacing: var(--wordmark-tracking);
 }
 
-.placeholder {
+.placeholder .brand {
+  position: absolute;
+  top: var(--bar-top);
+  left: var(--gutter);
+}
+
+/* Rząd kafelków (DESIGN.md → components.focus-ring): fokus to biały obrys 5px, skala 1.08 i cień. */
+.tiles {
+  position: absolute;
+  top: var(--apps-top);
+  left: var(--gutter);
+  right: var(--gutter);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  gap: var(--tile-gap);
+  list-style: none;
+}
+
+.tile {
+  width: var(--tile-width);
+  height: var(--tile-height);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--tile-radius);
+  background: var(--surface);
+}
+
+.tile--focused {
+  outline: 5px solid var(--focus);
+  outline-offset: 0;
+  transform: scale(1.08);
+  box-shadow: var(--elevation-lift);
+}
+
+.tile__title {
+  font-size: var(--card-title-size);
+  font-weight: var(--card-title-weight);
+  line-height: var(--card-title-line);
+  letter-spacing: var(--card-title-tracking);
+}
+
+.tile__state {
+  font-size: var(--body-size);
+  color: var(--text-2);
 }
 
 /* components.config-error: pełny ekran na ground, logo w lewym górnym rogu. */

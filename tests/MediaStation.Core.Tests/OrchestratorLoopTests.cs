@@ -64,6 +64,7 @@ public class OrchestratorLoopTests
 
                 published.Set();
             },
+            _ => { },
             new NullLog());
 
         loop.Start();
@@ -178,7 +179,7 @@ public class OrchestratorLoopTests
             new FakeKeyInjection(),
             timers,
             log);
-        using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
+        using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, _ => { }, log);
         postsTo = loop;
         loop.Start();
         WaitFor(() => published.Count >= 1);
@@ -232,7 +233,7 @@ public class OrchestratorLoopTests
             new FakeKeyInjection(),
             timers,
             log);
-        using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
+        using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, _ => { }, log);
         postsTo = loop;
         loop.Start();
         WaitFor(() => published.Count >= 1);
@@ -275,7 +276,7 @@ public class OrchestratorLoopTests
             new FakeKeyInjection(),
             timers,
             log);
-        using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, log);
+        using var loop = new OrchestratorLoop(new CoreOrchestrator(TwoApps(), time), router.Dispatch, published.Enqueue, _ => { }, log);
         postsTo = loop;
         loop.Start();
         WaitFor(() => published.Count >= 1);
@@ -342,6 +343,7 @@ public class OrchestratorLoopTests
                 router.Dispatch(batch);
             },
             published.Enqueue,
+            _ => { },
             log);
         postsTo = loop;
         loop.Start();
@@ -415,6 +417,7 @@ public class OrchestratorLoopTests
                 router.Dispatch(batch);
             },
             published.Enqueue,
+            _ => { },
             log);
         postsTo = loop;
         loop.Start();
@@ -486,6 +489,7 @@ public class OrchestratorLoopTests
                 router.Dispatch(batch);
             },
             published.Enqueue,
+            _ => { },
             log);
         postsTo = loop;
         loop.Start();
@@ -550,6 +554,7 @@ public class OrchestratorLoopTests
                 router.Dispatch(batch);
             },
             published.Enqueue,
+            _ => { },
             log);
         postsTo = loop;
         loop.Start();
@@ -638,6 +643,76 @@ public class OrchestratorLoopTests
         Assert.Empty(failures);
     }
 
+    /// <summary>Snapshot kroku wychodzi przed Action z tego samego kroku (Home z pierwszego planu).</summary>
+    [Fact]
+    public void Snapshot_is_published_before_actions_of_the_same_step()
+    {
+        var order = new ConcurrentQueue<string>();
+        using var loop = new OrchestratorLoop(
+            new CoreOrchestrator(TwoApps(), new FakeTimeProvider(T0)),
+            _ => { },
+            snapshot => order.Enqueue("snapshot:" + snapshot.Rev),
+            action => order.Enqueue("action:" + action.Kind),
+            new NullLog());
+        loop.Start();
+        WaitFor(() => order.Count >= 1);
+        loop.Post(new LaunchApp("netflix"));
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        WaitFor(() => order.Count >= 3);
+
+        loop.Post(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        WaitFor(() => order.Count >= 5);
+
+        Assert.Equal(["snapshot:4", "action:Home"], order.Skip(3).ToArray());
+    }
+
+    [Fact]
+    public void Shell_actions_are_published_and_app_mode_actions_are_not()
+    {
+        var actions = new ConcurrentQueue<Action>();
+        var snapshots = new ConcurrentQueue<ShellSnapshot>();
+        using var loop = new OrchestratorLoop(
+            new CoreOrchestrator(TwoApps(), new FakeTimeProvider(T0)),
+            _ => { },
+            snapshots.Enqueue,
+            actions.Enqueue,
+            new NullLog());
+        loop.Start();
+        WaitFor(() => snapshots.Count >= 1);
+
+        var right = new Action(ActionKind.Right, ActionPhase.Press, ActionSource.Keyboard, 1);
+        loop.Post(right);
+        WaitFor(() => actions.Count >= 1);
+        loop.Post(new LaunchApp("netflix"));
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        WaitFor(() => snapshots.Count >= 3);
+        loop.Post(new Action(ActionKind.Left, ActionPhase.Press, ActionSource.Keyboard, 2));
+        var marker = new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Keyboard, 3);
+        loop.Post(marker);
+        WaitFor(() => actions.Count >= 2);
+
+        Assert.Equal([right, marker], actions.ToArray());
+    }
+
+    [Fact]
+    public void Ignored_intent_is_logged_as_warning()
+    {
+        var log = new RecordingLog();
+        using var loop = CreateLoop(out var published, out _, log);
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        loop.Post(new LaunchApp("nope"));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "intentIgnored"));
+
+        var entry = Assert.Single(log.Entries, entry => entry.Msg == "intentIgnored");
+        Assert.Equal(LogLevel.Warn, entry.Level);
+        Assert.Equal("LaunchApp", entry.Data!["intent"]);
+        Assert.Equal("nope", entry.Data["appId"]);
+        Assert.Equal("nieznany appId", entry.Data["reason"]);
+        Assert.Single(published);
+    }
+
     private static OrchestratorLoop CreateLoop(
         out ConcurrentQueue<ShellSnapshot> published,
         out ConcurrentQueue<Command> dispatched,
@@ -657,6 +732,7 @@ public class OrchestratorLoopTests
                 }
             },
             snapshots.Enqueue,
+            _ => { },
             log ?? new NullLog());
     }
 

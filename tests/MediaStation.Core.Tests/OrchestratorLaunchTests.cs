@@ -1,6 +1,7 @@
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
 using Microsoft.Extensions.Time.Testing;
+using MediaStation.Core.Orchestrator;
 using CoreOrchestrator = MediaStation.Core.Orchestrator.Orchestrator;
 using static MediaStation.Core.Tests.OrchestratorTestSupport;
 
@@ -46,6 +47,8 @@ public class OrchestratorLaunchTests
 
         Assert.Empty(ignored.Commands);
         Assert.Null(ignored.Snapshot);
+        var intent = Assert.IsType<IgnoredIntent>(ignored.IgnoredIntent);
+        Assert.Equal(("LaunchApp", "netflix"), (intent.Intent, intent.AppId));
         var next = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
         Assert.Equal(expectedRevAfterIgnored, next.Rev);
     }
@@ -59,6 +62,7 @@ public class OrchestratorLaunchTests
 
         Assert.Empty(result.Commands);
         Assert.Null(result.Snapshot);
+        Assert.Equal(new IgnoredIntent("LaunchApp", "nope", "nieznany appId"), result.IgnoredIntent);
         var next = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
         Assert.Equal(started.Rev + 1, next.Rev);
     }

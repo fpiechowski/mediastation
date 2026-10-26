@@ -95,7 +95,7 @@ public sealed partial class Orchestrator
         {
             NextTransitionId();
             commands.Add(new ShowShell(NextCmdId()));
-            commands.Add(new SetInputRouting(NextCmdId(), InputMode.Shell, null, PointerPolicy.Blocked, NextEpoch()));
+            commands.Add(Route(InputMode.Shell, null, PointerPolicy.Blocked));
             _focus = new FocusRequest(app.AppId, ++_focusSeq);
         }
 

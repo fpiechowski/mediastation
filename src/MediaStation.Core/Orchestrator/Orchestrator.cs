@@ -9,13 +9,24 @@ namespace MediaStation.Core.Orchestrator;
 
 /// <summary>
 /// Wynik jednego kroku Orchestratora: komendy do wykonawców i opcjonalnie nowy snapshot dla shella.
-/// <see cref="Snapshot"/> jest <c>null</c>, gdy komunikat nie zmienia widoku.
+/// <see cref="Snapshot"/> jest <c>null</c>, gdy komunikat nie zmienia widoku. <see cref="Actions"/> to Actions
+/// przeznaczone dla Shell (AD-8) — pętla publikuje je po snapshocie; <see cref="IgnoredIntent"/> niesie Intent,
+/// który Orchestrator odrzucił, żeby pętla (Core nie ma loga) zostawiła ślad w logu.
 /// </summary>
 public sealed record OrchestratorResult(IReadOnlyList<Command> Commands, ShellSnapshot? Snapshot)
 {
     /// <summary>Brak komend i brak snapshotu — komunikat zignorowany w tej story.</summary>
     public static OrchestratorResult None { get; } = new(Array.Empty<Command>(), null);
+
+    /// <summary>Actions dla Shell, w kolejności dostarczenia; domyślnie puste.</summary>
+    public IReadOnlyList<ActionMessage> Actions { get; init; } = Array.Empty<ActionMessage>();
+
+    /// <summary>Odrzucony Intent (nazwa, <c>appId</c>, powód) albo <c>null</c>.</summary>
+    public IgnoredIntent? IgnoredIntent { get; init; }
 }
+
+/// <summary>Intent odrzucony przez Orchestrator: nazwa Intentu, <c>appId</c> i powód do logu <c>intentIgnored</c>.</summary>
+public sealed record IgnoredIntent(string Intent, string AppId, string Reason);
 
 /// <summary>
 /// Jedyny właściciel stanu sesji (AD-3): czysty handler komunikatu na komendy i snapshot (AD-14, AD-16).
@@ -40,6 +51,7 @@ public sealed partial class Orchestrator
     private long _timerId;
     private long _epoch;
     private FocusRequest? _focus;
+    private InputMode _mode = InputMode.Shell;
     private List<ManagedWindow> _publishedWindows = [];
     private long _managedEpoch;
 
@@ -56,7 +68,7 @@ public sealed partial class Orchestrator
         foreach (var app in config.Apps.Apps)
         {
             var (type, pointer) = Describe(app);
-            var state = new AppState(app.Id, app.Category, type, pointer);
+            var state = new AppState(app.Id, app.Category, app.Title, type, pointer);
             _apps.Add(state);
             _appsById.Add(state.AppId, state);
         }
@@ -75,7 +87,7 @@ public sealed partial class Orchestrator
         {
             OrchestratorStarted => OnOrchestratorStarted(),
             SystemResumed => OnSystemResumed(),
-            ActionMessage action => OnHome(action),
+            ActionMessage action => OnAction(action),
             LaunchApp launch => OnLaunchApp(launch),
             CloseApp close => OnStop(close.AppId, restart: false),
             RestartApp restart => OnStop(restart.AppId, restart: true),
@@ -106,7 +118,7 @@ public sealed partial class Orchestrator
         for (var i = 0; i < _apps.Count; i++)
         {
             var app = _apps[i];
-            apps[i] = new AppSnapshot(app.AppId, app.Category, app.State);
+            apps[i] = new AppSnapshot(app.AppId, app.Category, app.State, app.Title);
         }
 
         return new ShellSnapshot(
@@ -127,6 +139,16 @@ public sealed partial class Orchestrator
 
     private long NextEpoch() => ++_epoch;
 
+    /// <summary>
+    /// Jedyne miejsce, w którym powstaje <see cref="SetInputRouting"/>: zapamiętuje tryb wejścia, żeby
+    /// <see cref="OnAction"/> wiedział, czy Actions należą do Shell (AD-8).
+    /// </summary>
+    private SetInputRouting Route(InputMode mode, AppType? appType, PointerPolicy pointer)
+    {
+        _mode = mode;
+        return new SetInputRouting(NextCmdId(), mode, appType, pointer, NextEpoch());
+    }
+
     /// <summary>Typ i polityka wskaźnika z rekordu <c>apps.json</c>, z których żyje routing i mapa routera (AD-11).</summary>
     private static (AppType Type, PointerPolicy Pointer) Describe(AppEntry app) => app switch
     {
@@ -136,11 +158,13 @@ public sealed partial class Orchestrator
         _ => throw new InvalidOperationException($"Nieznany typ aplikacji {app.GetType().FullName}."),
     };
 
-    private sealed class AppState(string appId, AppCategory category, AppType type, PointerPolicy pointer)
+    private sealed class AppState(string appId, AppCategory category, string title, AppType type, PointerPolicy pointer)
     {
         public string AppId { get; } = appId;
 
         public AppCategory Category { get; } = category;
+
+        public string Title { get; } = title;
 
         public AppType Type { get; } = type;
 
