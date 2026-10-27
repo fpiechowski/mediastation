@@ -89,3 +89,4 @@ Home zawsze przywraca ekran główny i nic nie gra z tła; sygnałem są success
 - Decision: bez nowego Refactor sweep dla 8–10; trzy pozycje nie uzasadniają osobnej story porządkowej (2026-10-27).
 - Decision: ponowny odbiór na UM760 po 8–10 jako `new-pass` do planu odbioru: S6 i S18–S21 (U1), S8–S9 według nowej reguły AD-8 (U2), nowy scenariusz z ręczną zmianą w mikserze (U3) i scenariusz „po Zamknij i Uruchom ponownie sesje aplikacji nie są wyciszone” (R9) (2026-10-27).
 - Decision: 8, 9 i 10 nie zależą od siebie, ale dotykają wspólnego kodu (8 i 9 WindowManager, 9 i 10 Orchestrator i testy Mute/Unmute), więc w pętli idą po kolei 8 → 9 → 10, bez `after`; set check 2026-10-27.
+- Decision: 9 podzielone na rekomendację set checku: 11 (kontrakt `ForegroundChanged{ hwnd, pid }`, pierwszy raport po starcie haka, `ReportForeground`) i 9 (polityka Alt+Tab) z `after = [11]`; kolejność w pętli 8 → 11 → 9 → 10; decyzja użytkownika (2026-10-27).
