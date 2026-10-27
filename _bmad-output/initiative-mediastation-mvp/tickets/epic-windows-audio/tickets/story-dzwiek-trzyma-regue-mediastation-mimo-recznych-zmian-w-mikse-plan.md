@@ -3,7 +3,7 @@ title: 'Dźwięk trzyma regułę MediaStation mimo ręcznych zmian w mikserze'
 type: 'feature'
 ticket: '10'
 created: '2026-10-27'
-status: 'built'
+status: built
 baseline_revision: 'dd14a6963436110cc80c1b8af663c01c6b227c5d'
 route: 'full'
 route_source: 'auto'
@@ -123,3 +123,5 @@ Review: 5 patches applied (2 medium, 3 low), 0 deferred, rest rejected as record
 Verification: `dotnet test` 1238 passed, 0 failed; `dotnet build -c Release` 0 errors, 0 warnings.
 
 Residual risks: live mixer check with Edge and `harness-audio.html` was not run (needs a manual mixer action); the real Core Audio paths (`IAudioSessionEvents` callbacks, own-GUID writes, handle ownership via `KeepControl`) are unexercised. `UnmuteProcessTree` and `StopApp` run on different executors, so completion ordering is by emission only. Operator-only hardware check, if wanted: on UM760 unmute the harness Edge in the mixer, expect `audioSessionOverridden muted:true` within ~1 s.
+
+Re-verified on re-dispatch (2026-10-27): `dotnet test` 1238 passed, 0 failed; `dotnet build -c Release` 0 errors, 0 warnings. Review already recorded above; no new changes.
