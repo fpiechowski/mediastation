@@ -12,8 +12,14 @@ internal static class WindowTreePicker
     /// <summary>Klasa okna głównego Chromium i Edge.</summary>
     public const string BrowserWindowClass = "Chrome_WidgetWin_1";
 
-    /// <summary>Zwraca pierwsze pasujące okno albo <c>null</c>, gdy drzewo nie ma jeszcze okna głównego.</summary>
-    public static WindowInfo? Pick(IEnumerable<WindowInfo> candidates, ISet<int> treePids)
+    /// <summary>
+    /// Zwraca pierwsze pasujące okno albo <c>null</c>, gdy drzewo nie ma jeszcze okna głównego.
+    /// <paramref name="windowClass"/> równe <c>null</c> przyjmuje dowolną klasę (Moonlight: SDL/Qt).
+    /// </summary>
+    public static WindowInfo? Pick(
+        IEnumerable<WindowInfo> candidates,
+        ISet<int> treePids,
+        string? windowClass = BrowserWindowClass)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(treePids);
@@ -22,7 +28,7 @@ internal static class WindowTreePicker
         {
             if (window.Visible
                 && !window.HasOwner
-                && string.Equals(window.ClassName, BrowserWindowClass, StringComparison.Ordinal)
+                && (windowClass is null || string.Equals(window.ClassName, windowClass, StringComparison.Ordinal))
                 && treePids.Contains(window.Pid))
             {
                 return window;

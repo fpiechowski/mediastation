@@ -345,3 +345,11 @@ location: architecture-mediastation.md AD-1
 source_spec: `tickets/epic-browserhost/tickets/spike-tryb-okna-przegladarki-i-zrodo-wersji-poza-cdp-plan.md`
 reason: Pomiar miał jeden monitor 1920x1080. Nakładka nad pełnoekranowym Edge jest pierwszą story epiki OSK (Deferred w spine), a zachowanie okna po wygaszeniu ekranu należy do WindowManager.
 status: open
+
+### DW-41: Home pressed while the shell is already the mode (app window raised by Alt+Tab or script) is logged as an action but sends no window commands, so the app stays on top.
+origin: spec-deferred 5fd06e4660a2
+location: src/MediaStation.Core/Orchestrator (Home in shell mode)
+source_spec: `tickets/epic-windows-audio/tickets/story-edge-i-chrome-w-trybie-okna-z-6-1-i-moonlight-borderless-prz-plan.md`
+severity: medium
+reason: Observed on UM760 while building 5.5: with the app restored outside MediaStation, presses 2-4 of -Restore failed 3 of 4 until the script resumed the app through the product (OK on the tile). Epic note says "powrót daje Home".
+status: open

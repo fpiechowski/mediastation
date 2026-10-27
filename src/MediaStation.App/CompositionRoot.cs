@@ -234,8 +234,8 @@ public static class CompositionRoot
         // Adaptery „brak hosta” odpowiadają w kolejce pętli, a pętla powstaje po routerze, więc delegat czyta ją leniwie.
         var hosts = new Dictionary<AppType, IAppHostPort>
         {
-            [AppType.Web] = CreateWebHost(log, config, message => postsTo?.Post(message)),
-            [AppType.Moonlight] = new MissingHostPort(log, message => postsTo?.Post(message)),
+            [AppType.Web] = CreateHarnessHost(log, config, AppType.Web, message => postsTo?.Post(message)),
+            [AppType.Moonlight] = CreateHarnessHost(log, config, AppType.Moonlight, message => postsTo?.Post(message)),
             [AppType.Native] = new MissingHostPort(log, message => postsTo?.Post(message)),
         };
 
@@ -346,33 +346,33 @@ public static class CompositionRoot
     }
 
     /// <summary>
-    /// Host aplikacji web: z <c>MEDIASTATION_DEV_HARNESS=1</c> dev harness (Edge/Chrome z osobnym profilem, bez CDP),
-    /// w przeciwnym razie adapter „brak hosta” jak dotąd.
+    /// Host aplikacji <paramref name="type"/> (<c>web</c> albo <c>moonlight</c>): z <c>MEDIASTATION_DEV_HARNESS=1</c>
+    /// dev harness (Edge/Chrome z osobnym profilem albo Moonlight, bez CDP), w przeciwnym razie adapter „brak hosta”.
     /// </summary>
-    private static IAppHostPort CreateWebHost(ILog log, LoadedConfig config, Action<IOrchestratorMessage> post)
+    private static IAppHostPort CreateHarnessHost(ILog log, LoadedConfig config, AppType type, Action<IOrchestratorMessage> post)
     {
         if (!HarnessBrowser.IsEnabled(Environment.GetEnvironmentVariable(HarnessBrowser.EnvVarName)))
         {
             return new MissingHostPort(log, post);
         }
 
-        var webApps = new Dictionary<string, WebApp>(StringComparer.Ordinal);
+        var apps = new Dictionary<string, AppEntry>(StringComparer.Ordinal);
         foreach (var entry in config.Apps.Apps)
         {
-            if (entry is WebApp web)
+            if (AppEntry.AppTypeOf(entry) == type)
             {
-                webApps.Add(web.Id, web);
+                apps.Add(entry.Id, entry);
             }
         }
 
-        log.Warn(Src, "devHarnessEnabled", new Dictionary<string, object?> { ["apps"] = webApps.Count });
-        return new DevHarnessWebHostPort(
+        log.Warn(Src, "devHarnessEnabled", new Dictionary<string, object?> { ["type"] = type.ToString(), ["apps"] = apps.Count });
+        return new DevHarnessHostPort(
             log,
             post,
-            webApps,
+            apps,
             new Win32WindowApi(),
             Win32ProcessSnapshot.ParentMap,
-            ProcessCommandLines.Browsers,
+            ProcessCommandLines.HarnessApps,
             Path.Combine(DataRoot, "profiles"));
     }
 

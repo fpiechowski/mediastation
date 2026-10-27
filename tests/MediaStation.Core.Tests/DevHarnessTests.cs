@@ -1,3 +1,4 @@
+using MediaStation.Core.Contracts;
 using MediaStation.App.Hosts.DevHarness;
 using MediaStation.App.Platform.Window;
 using MediaStation.Core.Config;
@@ -60,6 +61,7 @@ public class DevHarnessTests
                 @"--user-data-dir=C:\data\profiles\netflix",
                 "--no-first-run",
                 "--no-default-browser-check",
+                "--kiosk",
                 "--autoplay-policy=no-user-gesture-required",
                 "https://example.test/",
             ],
@@ -118,5 +120,91 @@ public class DevHarnessTests
 
         Assert.Equal("b.exe", HarnessBrowser.ResolveExecutable(candidates, path => path != "a.exe"));
         Assert.Null(HarnessBrowser.ResolveExecutable(candidates, _ => false));
+    }
+
+    [Fact]
+    public void Picker_without_class_takes_any_visible_ownerless_window_from_tree()
+    {
+        WindowInfo[] windows =
+        [
+            new(1, 10, "SDL_app", Visible: true, HasOwner: true),
+            new(2, 99, "SDL_app", Visible: true, HasOwner: false),
+            new(3, 10, "SDL_app", Visible: false, HasOwner: false),
+            new(4, 11, "SDL_app", Visible: true, HasOwner: false),
+        ];
+
+        Assert.Equal(4L, WindowTreePicker.Pick(windows, Tree, windowClass: null)?.Hwnd);
+        Assert.Null(WindowTreePicker.Pick(windows, Tree));
+    }
+
+    [Fact]
+    public void Moonlight_arguments_stream_host_app_borderless_and_mute()
+    {
+        Assert.Equal(
+            ["stream", "desktop", "Desktop", "--display-mode", "borderless", "--mute-on-focus-loss"],
+            HarnessMoonlight.BuildArguments("desktop", "Desktop"));
+    }
+
+    [Fact]
+    public void Moonlight_executable_comes_from_env_when_file_exists()
+    {
+        Assert.Equal(@"C:\M\Moonlight.exe", HarnessMoonlight.ResolveExecutable(@" ""C:\M\Moonlight.exe"" ", _ => true));
+        Assert.Null(HarnessMoonlight.ResolveExecutable(@"C:\M\Moonlight.exe", _ => false));
+        Assert.Null(HarnessMoonlight.ResolveExecutable(null, _ => true));
+        Assert.Null(HarnessMoonlight.ResolveExecutable("  ", _ => true));
+    }
+
+    [Theory]
+    [InlineData(@"""C:\M\Moonlight.exe"" stream desktop Desktop --display-mode borderless", true)]
+    [InlineData(@"C:\M\Moonlight.exe stream DESKTOP desktop", true)]
+    [InlineData(@"C:\M\Moonlight.exe stream desktop Desktop", true)]
+    [InlineData(@"C:\M\Moonlight.exe stream desktop ""Steam Big Picture"" --quit-after", true)]
+    [InlineData(@"C:\M\Moonlight.exe stream desktop Desktop2", false)]
+    [InlineData(@"C:\M\Moonlight.exe stream other Desktop", false)]
+    [InlineData(@"C:\M\Moonlight.exe", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void Moonlight_command_line_matcher(string? commandLine, bool expected)
+    {
+        var app = commandLine?.Contains("Steam", StringComparison.Ordinal) == true ? "Steam Big Picture" : "Desktop";
+        Assert.Equal(expected, HarnessMoonlight.CommandLineMatches(commandLine, "desktop", app));
+    }
+
+    [Fact]
+    public void Moonlight_roots_keep_only_matching_streams()
+    {
+        KeyValuePair<int, string>[] lines =
+        [
+            new(1, @"Moonlight.exe stream desktop Desktop"),
+            new(2, @"Moonlight.exe stream other Desktop"),
+            new(3, @"msedge.exe --user-data-dir=C:\p"),
+        ];
+
+        Assert.Equal([1], HarnessMoonlight.MatchingRoots(lines, "desktop", "Desktop"));
+    }
+
+    [Fact]
+    public void Launch_window_class_is_browser_class_for_web_and_any_for_moonlight()
+    {
+        var web = new WebApp("w", AppCategory.Video, "W", "w.png", "svc", BrowserKind.Edge, 9222);
+        var moon = new MoonlightApp("m", AppCategory.Game, "M", "m.png", "desktop", "Desktop");
+
+        Assert.Equal("Chrome_WidgetWin_1", HarnessLaunch.WindowClassOf(web));
+        Assert.Null(HarnessLaunch.WindowClassOf(moon));
+    }
+
+    [Fact]
+    public void Launch_roots_use_profile_for_web_and_stream_for_moonlight()
+    {
+        var web = new WebApp("w", AppCategory.Video, "W", "w.png", "svc", BrowserKind.Edge, 9222);
+        var moon = new MoonlightApp("m", AppCategory.Game, "M", "m.png", "desktop", "Desktop");
+        KeyValuePair<int, string>[] lines =
+        [
+            new(1, @"msedge.exe --user-data-dir=C:\p\w"),
+            new(2, @"Moonlight.exe stream desktop Desktop"),
+        ];
+
+        Assert.Equal([1], HarnessLaunch.MatchingRootsFor(web, lines, @"C:\p"));
+        Assert.Equal([2], HarnessLaunch.MatchingRootsFor(moon, lines, @"C:\p"));
     }
 }

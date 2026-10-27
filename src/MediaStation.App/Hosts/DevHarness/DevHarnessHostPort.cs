@@ -13,13 +13,13 @@ using MediaStation.Core.Ports;
 namespace MediaStation.App.Hosts.DevHarness;
 
 /// <summary>
-/// Host aplikacji web tylko dla dev harnessu (<c>MEDIASTATION_DEV_HARNESS=1</c>): uruchamia Edge/Chrome z osobnym
-/// profilem, znajduje jego okno główne w drzewie procesów i raportuje <see cref="AppWindowAttached"/>, a przy
+/// Host aplikacji <c>web</c> i <c>moonlight</c> tylko dla dev harnessu (<c>MEDIASTATION_DEV_HARNESS=1</c>): uruchamia
+/// Edge/Chrome z osobnym profilem albo <c>Moonlight.exe stream</c>, znajduje okno główne w drzewie procesów i raportuje <see cref="AppWindowAttached"/>, a przy
 /// zamknięciu procesu <see cref="ProcessExited"/>. Harness sam nie wynosi okna na wierzch (AD-14/15): robi to
 /// WindowManager po komendzie Orchestratora. Bez portu CDP. Praca idzie na zadaniach w tle, więc metody portu
 /// nie blokują pętli Orchestratora; żaden wyjątek nie przechodzi przez granicę portu (AD-4).
 /// </summary>
-internal sealed class DevHarnessWebHostPort : IAppHostPort
+internal sealed class DevHarnessHostPort : IAppHostPort
 {
     /// <summary>Źródło wpisów logu hosta.</summary>
     public const string Src = "host";
@@ -30,7 +30,7 @@ internal sealed class DevHarnessWebHostPort : IAppHostPort
 
     private readonly ILog _log;
     private readonly Action<IOrchestratorMessage> _post;
-    private readonly IReadOnlyDictionary<string, WebApp> _apps;
+    private readonly IReadOnlyDictionary<string, AppEntry> _apps;
     private readonly IWindowApi _windows;
     private readonly Func<IReadOnlyList<KeyValuePair<int, int>>> _processParents;
     private readonly Func<IReadOnlyList<KeyValuePair<int, string>>> _commandLines;
@@ -38,10 +38,10 @@ internal sealed class DevHarnessWebHostPort : IAppHostPort
     private readonly object _gate = new();
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
 
-    internal DevHarnessWebHostPort(
+    internal DevHarnessHostPort(
         ILog log,
         Action<IOrchestratorMessage> post,
-        IReadOnlyDictionary<string, WebApp> apps,
+        IReadOnlyDictionary<string, AppEntry> apps,
         IWindowApi windows,
         Func<IReadOnlyList<KeyValuePair<int, int>>> processParents,
         Func<IReadOnlyList<KeyValuePair<int, string>>> commandLines,
@@ -159,7 +159,8 @@ internal sealed class DevHarnessWebHostPort : IAppHostPort
             if (session is not null)
             {
                 // Własna sesja: albo startuje (Process jeszcze pusty i Start sam zaraportuje okno), albo żyje.
-                if (session.Process is { } own && !own.HasExited && FindWindow(own.Id) is { } ownWindow)
+                if (session.Process is { } own && !own.HasExited
+                    && FindWindow(own.Id, HarnessLaunch.WindowClassOf(_apps.GetValueOrDefault(command.AppId))) is { } ownWindow)
                 {
                     _post(new AppWindowAttached(command.AppId, ownWindow.Hwnd, own.Id));
                 }
@@ -167,10 +168,16 @@ internal sealed class DevHarnessWebHostPort : IAppHostPort
                 return;
             }
 
-            var roots = HarnessBrowser.MatchingRoots(_commandLines(), Path.Combine(_profilesDir, command.AppId));
+            if (!_apps.TryGetValue(command.AppId, out var entry))
+            {
+                return;
+            }
+
+            var roots = HarnessLaunch.MatchingRootsFor(entry, _commandLines(), _profilesDir);
+            var windowClass = HarnessLaunch.WindowClassOf(entry);
             foreach (var pid in roots)
             {
-                if (FindWindow(pid) is not { } window)
+                if (FindWindow(pid, windowClass) is not { } window)
                 {
                     continue;
                 }
@@ -213,17 +220,44 @@ internal sealed class DevHarnessWebHostPort : IAppHostPort
                 return;
             }
 
-            var candidates = HarnessBrowser.ExecutableCandidates(
-                app.Browser,
-                Environment.GetEnvironmentVariable("ProgramFiles"),
-                Environment.GetEnvironmentVariable("ProgramFiles(x86)"),
-                Environment.GetEnvironmentVariable("LocalAppData"));
-            var exe = HarnessBrowser.ResolveExecutable(candidates, File.Exists);
-            if (exe is null)
+            string? exe;
+            string[] launchArgs;
+            switch (app)
             {
-                FailWith(command, "browserNotFound");
-                return;
+                case WebApp web:
+                    var candidates = HarnessBrowser.ExecutableCandidates(
+                        web.Browser,
+                        Environment.GetEnvironmentVariable("ProgramFiles"),
+                        Environment.GetEnvironmentVariable("ProgramFiles(x86)"),
+                        Environment.GetEnvironmentVariable("LocalAppData"));
+                    exe = HarnessBrowser.ResolveExecutable(candidates, File.Exists);
+                    if (exe is null)
+                    {
+                        FailWith(command, "browserNotFound");
+                        return;
+                    }
+
+                    var url = HarnessBrowser.ResolveUrl(Environment.GetEnvironmentVariable(HarnessBrowser.UrlEnvVarName));
+                    launchArgs = [.. HarnessBrowser.BuildArguments(Path.Combine(_profilesDir, app.Id), url)];
+                    break;
+                case MoonlightApp moon:
+                    exe = HarnessMoonlight.ResolveExecutable(
+                        Environment.GetEnvironmentVariable(HarnessMoonlight.ExeEnvVarName),
+                        File.Exists);
+                    if (exe is null)
+                    {
+                        FailWith(command, "moonlightNotFound");
+                        return;
+                    }
+
+                    launchArgs = [.. HarnessMoonlight.BuildArguments(moon.Host, moon.App)];
+                    break;
+                default:
+                    FailWith(command, "unknownApp");
+                    return;
             }
+
+            var windowClass = HarnessLaunch.WindowClassOf(app);
 
             // Sesja jest zarejestrowana przed startem procesu, więc Stop z luki nie ginie; drugi start tej samej
             // aplikacji najpierw zamyka poprzednią sesję, zamiast ją osierocić.
@@ -241,8 +275,7 @@ internal sealed class DevHarnessWebHostPort : IAppHostPort
             }
 
             var info = new ProcessStartInfo(exe) { UseShellExecute = false };
-            var url = HarnessBrowser.ResolveUrl(Environment.GetEnvironmentVariable(HarnessBrowser.UrlEnvVarName));
-            foreach (var arg in HarnessBrowser.BuildArguments(Path.Combine(_profilesDir, app.Id), url))
+            foreach (var arg in launchArgs)
             {
                 info.ArgumentList.Add(arg);
             }
@@ -268,7 +301,7 @@ internal sealed class DevHarnessWebHostPort : IAppHostPort
 
             session.Process = started;
 
-            var window = session.Stopping ? null : WaitForWindow(session);
+            var window = session.Stopping ? null : WaitForWindow(session, windowClass);
             if (window is null || session.Stopping)
             {
                 // Sesję zdejmujemy tylko własną (reference): nowszy start mógł już wpisać następną.
@@ -320,13 +353,13 @@ internal sealed class DevHarnessWebHostPort : IAppHostPort
         });
     }
 
-    private WindowInfo? WaitForWindow(Session session)
+    private WindowInfo? WaitForWindow(Session session, string? windowClass)
     {
         var process = session.Process!;
         var deadline = Stopwatch.StartNew();
         while (deadline.Elapsed < WindowTimeout && !session.Stopping && !process.HasExited)
         {
-            if (FindWindow(process.Id) is { } window)
+            if (FindWindow(process.Id, windowClass) is { } window)
             {
                 return window;
             }
@@ -337,11 +370,12 @@ internal sealed class DevHarnessWebHostPort : IAppHostPort
         return null;
     }
 
-    private WindowInfo? FindWindow(int rootPid)
+    private WindowInfo? FindWindow(int rootPid, string? windowClass)
     {
         var tree = WindowTreePicker.Descendants(rootPid, _processParents());
-        return WindowTreePicker.Pick(_windows.EnumerateTopLevel(), tree);
+        return WindowTreePicker.Pick(_windows.EnumerateTopLevel(), tree, windowClass);
     }
+
 
     private void Unregister(string appId, Session session)
     {

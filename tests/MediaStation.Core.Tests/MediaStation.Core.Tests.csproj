@@ -54,6 +54,8 @@
     <Compile Include="..\..\src\MediaStation.App\Platform\Window\WindowTreePicker.cs" Link="App\WindowTreePicker.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Window\WindowCommandExecutor.cs" Link="App\WindowCommandExecutor.cs" />
     <Compile Include="..\..\src\MediaStation.App\Hosts\DevHarness\HarnessBrowser.cs" Link="App\HarnessBrowser.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Hosts\DevHarness\HarnessMoonlight.cs" Link="App\HarnessMoonlight.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Hosts\DevHarness\HarnessLaunch.cs" Link="App\HarnessLaunch.cs" />
     <Compile Include="..\..\src\MediaStation.App\Shell\ShellMessageGate.cs" Link="App\ShellMessageGate.cs" />
     <Compile Include="..\..\src\MediaStation.App\Shell\ShellNavigationPolicy.cs" Link="App\ShellNavigationPolicy.cs" />
     <Compile Include="..\..\src\MediaStation.App\Shell\ShellOutbox.cs" Link="App\ShellOutbox.cs" />

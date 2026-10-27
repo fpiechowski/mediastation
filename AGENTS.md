@@ -17,4 +17,5 @@
 ## Agent tooling (BMad)
 
 - The BMad skills are tracked in `.agents/skills/` (pinned by `skills-lock.json`); `_bmad/` holds the module config. `.claude/` and `.codex/` are git-ignored: they contain junctions with absolute paths and `bmad-loop` hooks that point at one user's `uv` install.
+- Run `bmad-loop` (`run`, `resume`, `resolve`) only from the PowerShell tool, never from Git Bash: psmux takes its pane shell from the inherited `SHELL` variable, so a Bash launch starts `pwsh -EncodedCommand` inside bash, the dev session crashes and the run pauses. Before the command run `Remove-Item Env:SHELL -ErrorAction SilentlyContinue`, and start it in the background.
 - On a fresh clone (e.g. UM760) run `powershell -NoProfile -ExecutionPolicy Bypass -File tools/link-agent-skills.ps1` to create the `.claude/skills` junctions. `bmad-loop` hooks are only needed for unattended loop runs; set them up with `bmad-loop-setup`.

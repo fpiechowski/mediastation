@@ -131,7 +131,7 @@ internal static class HarnessBrowser
         return null;
     }
 
-    /// <summary>Argumenty startu: osobny profil na aplikację, bez ekranów powitalnych, autoplay bez gestu i adres na końcu.</summary>
+    /// <summary>Argumenty startu: osobny profil na aplikację, bez ekranów powitalnych, tryb okna z 6.1 (<c>--kiosk</c>), autoplay bez gestu i adres na końcu.</summary>
     public static IReadOnlyList<string> BuildArguments(string profileDir, string url)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(profileDir);
@@ -142,6 +142,7 @@ internal static class HarnessBrowser
             ProfileArgument(profileDir),
             "--no-first-run",
             "--no-default-browser-check",
+            "--kiosk",
             "--autoplay-policy=no-user-gesture-required",
             url,
         ];
