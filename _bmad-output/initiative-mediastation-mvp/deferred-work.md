@@ -30,6 +30,7 @@ severity: medium
 reason: Guard `app.State != AppLifecycleState.Starting` w `OnAppWindowAttached` i `app.Hwnd = null` w `EnterFailed` pochodzą ze story 5 i nie zmieniły się w tej story; zmiana domyka kompensację tylko dla attachu w Starting. Skutek potwierdzony sondą: Home w Starting → TimerElapsed → AppWindowAttached daje brak komend i brak snapshotu, a kolejny Home nic nie robi. Rozwiązanie wymaga decyzji, czy Failed zachowuje Hwnd i minimalizuje spóźnione okno, czy zostawia to hostowi — to osobna story.
 owner: epic-browserhost (pierwszy prawdziwy host z `AppWindowAttached`), decyzja refinementu epiki 4, 2026-10-26
 status: open
+decision: 2026-10-27 Decide with epic-browserhost
 
 ### DW-5: Kolejność zwalniania adapterów w composition root (hub → pompa → power → timer → pętla) nie ma testu.
 
@@ -357,3 +358,4 @@ source_spec: `tickets/epic-windows-audio/tickets/story-edge-i-chrome-w-trybie-ok
 severity: medium
 reason: Observed on UM760 while building 5.5: with the app restored outside MediaStation, presses 2-4 of -Restore failed 3 of 4 until the script resumed the app through the product (OK on the tile). Epic note says "powrót daje Home".
 status: open
+decision: 2026-10-27 Home in shell mode re-asserts the shell — In OnHome, when no app is Foreground or Starting, emit ShowShell and, for Background apps with a known Hwnd, MinimizeWindow, without changing app state; add Orchestrator tests for Home in shell mode with a Background app and for no app at all, and check the epic-windows-audio -Restore scenario in the check script.
