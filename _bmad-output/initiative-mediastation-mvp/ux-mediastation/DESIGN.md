@@ -3,7 +3,7 @@ name: MediaStation
 description: Ciemny 10-foot UI na TV 1920×1080 w kanonie Google TV / Apple TV — kafelki aplikacji, wiersz „Do oceny”, biały fokus widoczny z kanapy.
 status: final
 created: 2026-10-16
-updated: 2026-10-26
+updated: 2026-10-27
 sources:
   - ../brief-mediastation/brief-mediastation.md
   - ../brief-mediastation/addendum.md
@@ -179,6 +179,10 @@ components:
     radius: '{rounded.full}'
     background: '{colors.accent}'
     halo: '0 0 0 4px {colors.accent-halo}'
+    position: 'poza przepływem (absolute) wewnątrz pigułki tab'
+    verticalAlign: 'środek kropki na środku wysokości pigułki (top 50%, translateY(-50%); przy 64px środek na 32px)'
+    right: 14px
+    note: 'Kropka z halo zajmuje 10–30px od prawej krawędzi, więc mieści się w padding-right 32px i nie nachodzi na napis. Pojawienie się i zniknięcie kropki nie zmienia szerokości pigułki ani położenia napisów, w każdym stanie zakładki (nieaktywna, aktywna, z fokusem).'
   tile:
     width: 544px
     height: 306px
@@ -473,7 +477,7 @@ Obrys fokusu przyjmuje promień elementu (`outline-offset: 0`) — w shellu i w 
 | **Tile** (`tile`, `tile-focused`, `tile-meta`) | 544×306, `{rounded.tile}`, gradient 160° od `{colors.tile-gradient-top}`, wordmark aplikacji `{typography.tile-mark}` na środku; pod spodem nazwa + linia stanu | Spoczynek: nazwa `{typography.tile-name-unfocused}`, `{colors.text-3}`. Fokus: ring, nazwa `{typography.tile-name}`, `{colors.text}`. Stany cyklu życia → chip + linia stanu (tabela niżej). Przykłady: [`mockups/key-home-video.html`](mockups/key-home-video.html) (Background), [`mockups/key-home-failed-appmenu.html`](mockups/key-home-failed-appmenu.html) (Failed, Starting) |
 | **Chip** (`chip`, `chip-*`) | Pigułka 44px w lewym dolnym rogu kafelka (inset 24px), tło `{colors.scrim}`, ikona 22px z **Material Symbols Rounded** + krótki tekst | Tylko krótka etykieta; pełny komunikat idzie do linii stanu (tabela niżej) |
 | **State dot** (`state-dot`) | Kropka 10px `{colors.accent}` przed linią stanu kafelka | Tylko Background („W tle · …”) |
-| **Tab** (`tab`, `tab-active`, `tab-focused`, `tab-running-dot`) | Pigułka 64px, padding 0 32px | Nieaktywna: tekst `{colors.text-3}`. Aktywna bez fokusu: tło `{colors.surface-2}`, tekst `{colors.text}`. Fokus: `focus-pill`. Kropka 12px `{colors.accent}` z halo `{colors.accent-halo}` = w zakładce działa coś w tle |
+| **Tab** (`tab`, `tab-active`, `tab-focused`, `tab-running-dot`) | Pigułka 64px, padding 0 32px | Nieaktywna: tekst `{colors.text-3}`. Aktywna bez fokusu: tło `{colors.surface-2}`, tekst `{colors.text}`. Fokus: `focus-pill`. Kropka 12px `{colors.accent}` z halo `{colors.accent-halo}` = w zakładce działa coś w tle. Położenie: po prawej stronie pigułki, 14px od prawej krawędzi, wycentrowana w pionie (środek kropki na środku wysokości pigułki), poza przepływem, w obrębie prawego paddingu; nic nie skacze, gdy kropka się pojawia albo znika |
 | **Rate row** (`rate-row`) | Nagłówek „Do oceny” `{typography.section-title}` + poziomy wiersz kart | Peek i scroll: geometria w Layout & Spacing, zachowanie w `EXPERIENCE.md` → Scroll Home. Pusty: wiersz znika |
 | **Card „Do oceny”** (`card-do-oceny`) | 820×288 (focused 940×408), `{rounded.card}`, `{colors.surface}`; QR po lewej; tytuł `{typography.card-title}` max 2 linie, podtytuł (`{colors.text-3}`), podpowiedź (`{colors.text-2}`, 1 linia), przyciski na dole. Ilustracja: [`mockups/key-home-video.html`](mockups/key-home-video.html) | Fokus na przyciskach karty, nie na całej karcie |
 | **QR** (`qr`) | Białe pole ok. 240px (focused ok. 360px), quiet zone ≥ 4 moduły, moduły w pełnych px, ECC L, `{rounded.qr}`, moduły `{colors.qr-ink}` | Statyczny; nigdy nie dostaje fokusu |

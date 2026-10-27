@@ -74,11 +74,11 @@
 
   /* Tabs */
   .tabs { position: absolute; top: var(--tabs-top); left: var(--gutter); display: flex; gap: 12px; }
-  .tab { height: 64px; padding: 0 32px; border-radius: var(--r-full); display: flex; align-items: center;
+  .tab { position: relative; height: 64px; padding: 0 32px; border-radius: var(--r-full); display: flex; align-items: center;
     gap: 12px; font-size: 30px; font-weight: 500; color: var(--text-3); }
   .tab.on { background: var(--surface-2); color: var(--text); }
   .tab.focus { background: var(--focus); color: var(--ground); }
-  .tab .run { width: 12px; height: 12px; border-radius: var(--r-full); background: var(--accent);
+  .tab .run { position: absolute; top: 50%; right: 14px; transform: translateY(-50%); width: 12px; height: 12px; border-radius: var(--r-full); background: var(--accent);
     box-shadow: 0 0 0 4px rgba(138,180,248,.18); }
 
   /* Tiles */

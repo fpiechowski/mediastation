@@ -2,7 +2,7 @@
 name: MediaStation
 status: final
 created: 2026-10-16
-updated: 2026-10-26
+updated: 2026-10-27
 sources:
   - ../brief-mediastation/brief-mediastation.md
   - ../brief-mediastation/addendum.md
@@ -27,7 +27,7 @@ sources:
 | Użytkownicy | Eliza — codzienna użytkowniczka, nietechniczna. Autor — konfiguruje i naprawia |
 | Form-factor | Jedna powierzchnia: TV Hisense 1920×1080, 10-foot UI, kanapa ~3 m, wieczór, słabe ciepłe światło |
 | Wejście | Pilot G20S Pro przez dongle USB 2.4G (strzałki, OK, Back, Home, przycisk Klawiatura), klawiatura, gamepad. Bez myszy, kursor ukryty. Żyroskop pilota w UI MediaStation tylko w OSK |
-| Model wejścia | InputHub → Actions `{kind: Up\|Down\|Left\|Right\|Ok\|Back\|Home\|Keyboard, phase: press\|repeat\|long}`; Orchestrator zmienia tryby `shell\|app\|osk` (AD-8) |
+| Model wejścia | InputHub → Actions `{kind: Up\|Down\|Left\|Right\|Ok\|Back\|Home\|Keyboard, phase: press\|repeat\|long}`; Orchestrator zmienia tryby `shell\|app\|osk` (AD-8); tryb idzie za oknem MediaStation na wierzchu, także po Alt+Tab (AD-8, AD-15, decyzja 2026-10-27) |
 | UI system | React w WebView2 (`web/shell`), brak design systemu — tokeny od zera w `DESIGN.md` |
 | Okna / platforma | Stały viewport 1920×1080, bez responsive i breakpointów; title-safe 5%. Shell w WebView2; Netflix w osobnym procesie Edge; OSK jako osobne okno topmost NOACTIVATE (fallback: OSK rysowana przez PageRuntime w stronie — otwarte w architekturze). Weryfikacja wizualna tylko w 1920×1080 |
 | Netflix | Osobny proces Edge (CDP); fokus rysuje PageRuntime, kontrakt ekranów od ServiceDriver (AD-7) |
@@ -39,7 +39,7 @@ sources:
 
 | Powierzchnia | Wejście | Zawartość |
 |---|---|---|
-| **Home** (Shell, tryb `shell`) | Zimny start, wybudzenie, klawisz Home, Back z korzenia aplikacji, awaria aplikacji na pierwszym planie (R7) | Header: logo + „MediaStation”, avatar + powitanie (dekoracja, bez kont), zegar; **przycisk aktualizacji tylko, gdy jest nowsza wersja**. Zakładki **Video / Audio / Game** |
+| **Home** (Shell, tryb `shell`) | Zimny start, wybudzenie, klawisz Home, Back z korzenia aplikacji, awaria aplikacji na pierwszym planie (R7), Alt+Tab na ekran główny (State Patterns → Przełączenie okna poza pilotem) | Header: logo + „MediaStation”, avatar + powitanie (dekoracja, bez kont), zegar; **przycisk aktualizacji tylko, gdy jest nowsza wersja**. Zakładki **Video / Audio / Game** |
 | Home → **Video** | Domyślna zakładka | Kafelki: Netflix, Plex. Pod nimi wiersz **„Do oceny”** (peek, znika, gdy pusty) |
 | Home → **Audio** | Zakładka | W MVP pusta: Empty state; aplikacje dojdą przez `apps.json` |
 | Home → **Game** | Zakładka | Jeden kafelek: Moonlight |
@@ -122,6 +122,24 @@ Chip + linia stanu: copy, ikony i wygląd ma jedno źródło — `DESIGN.md` →
 | Aplikacja pada na pierwszym planie (Foreground → Failed) | MediaStation sama wraca na Home, na zakładkę tej aplikacji; fokus staje na kafelku w stanie Failed, więc jedno OK otwiera AppMenu z fokusem na „Uruchom ponownie”. Bez dodatkowego dialogu |
 | Zerwane CDP przy żywym procesie Netflixa | Brak osobnego UI; BrowserHost robi reconnect z backoffem (AD-4, AD-10). Strona (PageRuntime + driver) nie ma wtedy kanału do hosta i tylko buforuje własne komunikaty (AD-6). D-pad nie jest buforowany: `action` do strony są odrzucane. Klawisz Home zawsze ratuje. Jeśli reconnect nie uda się w `cdpReconnectTimeout` (30 s, `settings.json`) → Failed i zachowanie jak wyżej (AD-10, AD-11) |
 
+### Przełączenie okna poza pilotem (Alt+Tab)
+
+Decyzja U2/DW-44 z odbioru epiki 5 (2026-10-27), przyjęta w AD-5, AD-8 i AD-15. Okno na wierzchu można zmienić poza pilotem: Alt+Tab na klawiaturze, skrypt, inna aplikacja. MediaStation czeka, aż okno na wierzchu się ustali (ok. 300 ms, `foregroundSettleMs`), i robi wtedy to samo, co po Home albo OK na kafelku, bez kroków okiennych, które użytkownik już zrobił. Do ustalenia pilot działa jak przed Alt+Tab, a chwilowe okna (sam przełącznik Alt+Tab, pulpit w przelocie) niczego nie zmieniają.
+
+| Co trafia na wierzch | Co widać | Czym steruje pilot |
+|---|---|---|
+| **Ekran główny** | Aplikacja, która była na pierwszym planie, przechodzi w tło jak po Home: Netflix pauzuje, wszystko się wycisza i minimalizuje. Ekran główny nie przeskakuje, fokus zostaje tam, gdzie był w shellu (zwykle ostatni kafelek). Kafelek opuszczonej aplikacji pokazuje Background („W tle · …”), na jej zakładce pojawia się kropka | Ekranem głównym, od razu, bez Home: strzałki, OK, Back jak na Home |
+| **Okno aplikacji w tle** (np. Netflix w Background) | Aplikacja wraca na pierwszy plan jak po OK na kafelku: odcisza się. Netflix stoi na pauzie, OK wznawia (nigdy autowznowienie). Jeśli na pierwszym planie była inna aplikacja, przechodzi w tło jak po Home (pauza, wyciszenie, minimalizacja) | Tą aplikacją według jej polityki (Netflix: D-pad przez PageRuntime; Moonlight i natywne: klawisze do aplikacji, Back według `back`); Home wraca na ekran główny |
+| **Obce okno** (Notatnik, pulpit, ręcznie otwarty Edge, UAC) | Nic się nie zmienia: aplikacja na pierwszym planie zostaje w swoim stanie i jest słyszalna, aplikacje w tle zostają wyciszone, tryb się nie zmienia | Pilot i klawiatura trafiają do obcego okna bez Actions MediaStation, więc PC działa normalnie. Tylko Home z pilota jest przechwytywany i pokazuje ekran główny |
+
+Szczegóły:
+- **Kafelek aplikacji, która trafiła na wierzch poza pilotem**, wygląda jak po OK na kafelku: stan Foreground, bez chipu i linii „W tle”; kropka znika z zakładki, jeśli w tej zakładce nic innego nie działa w tle. Po powrocie na ekran główny (Home albo Alt+Tab na shell) kafelek pokazuje znowu Background z chipem i linią według `DESIGN.md` → Stany kafelka.
+- Alt+Tab z aplikacji A na aplikację B: A przechodzi w tło (pauza, jeśli to `web`, wyciszenie, minimalizacja), B na pierwszy plan i jest słyszalna. Słychać zawsze tylko aplikację na wierzchu.
+- Otwarta OSK: Alt+Tab na ekran główny albo na okno aplikacji najpierw zamyka OSK, tak jak Home, więc tekst nie trafi do nowego okna. Alt+Tab na obce okno niczego nie zmienia; OSK zamyka Home.
+- Aplikacja w Starting: MediaStation nie reaguje na Alt+Tab, dopóki start się nie skończy, a potem dopasowuje się do okna, które jest wtedy na wierzchu.
+- Okno aplikacji w NotRunning, Stopping albo Failed na wierzchu: tylko wpis w logu, bez zmiany trybu i stanu kafelka; Home przywraca ekran główny.
+- Wznowienie odtwarzania zawsze robi użytkownik przez OK, także po Alt+Tab.
+
 ### Powierzchnie
 
 | Stan | Powierzchnia | Zachowanie |
@@ -150,7 +168,7 @@ Chip + linia stanu: copy, ikony i wygląd ma jedno źródło — `DESIGN.md` →
 **Model fokusu**
 - Jeden fokus, nawigacja przestrzenna D-padem (Góra/Dół/Lewo/Prawo); `phase: repeat` przewija wiersze.
 - Pamięć fokusu per zakładka i per wiersz, oparta na kluczach (`id` aplikacji, klucz tytułu w kolejce), nie na indeksach (AD-16).
-- Powrót na Home → ostatni kafelek. Zimny start/wybudzenie → pierwszy kafelek Video. Awaria na pierwszym planie → kafelek Failed.
+- Powrót na Home → ostatni kafelek. Zimny start/wybudzenie → pierwszy kafelek Video. Awaria na pierwszym planie → kafelek Failed. Alt+Tab na ekran główny → fokus tam, gdzie był w shellu, bez nowego `focusRequest`.
 - Góra z rzędu zakładek → przycisk aktualizacji, gdy jest widoczny; inaczej nic.
 - W Netflixie: w modalu akcje mają pierwszeństwo przed geometrią, fokus zawężony do dialogu; na `/watch` klawisze przepuszczane (OK pauza, ←/→ ±10 s).
 - Przejście fokusu ok. 150 ms ease-out.
@@ -180,7 +198,7 @@ Chip + linia stanu: copy, ikony i wygląd ma jedno źródło — `DESIGN.md` →
 | AppMenu | Zamyka menu, fokus na kafelek |
 | Home (shell) | Brak akcji |
 
-**Klawisz Home** — zawsze połykany przez MediaStation, zawsze ratuje: z aplikacji chowa ją (pause, jeśli aplikacja to wspiera → mute → minimize) i pokazuje Home. Z OSK/AppMenu: zamyka nakładkę i pokazuje Home. Działa też przy zerwanym CDP.
+**Klawisz Home** — zawsze połykany przez MediaStation, zawsze ratuje: z aplikacji chowa ją (pause, jeśli aplikacja to wspiera → mute → minimize) i pokazuje Home. Z OSK/AppMenu: zamyka nakładkę i pokazuje Home. Działa też przy zerwanym CDP i nad obcym oknem (tylko Home z pilota). Po Alt+Tab na okno MediaStation Home nie jest potrzebny: pilot steruje oknem na wierzchu (State Patterns → Przełączenie okna poza pilotem).
 
 **Pointer** — w `shell` zablokowany. W `osk` dozwolony (żyroskop; override AD-8): kursor przenosi ten sam jedyny fokus, pod wskaźnikiem jest `focus-pill`. Kursor jest ograniczony do okna OSK (`ClipCursor`), a kliknięcie poza OSK jest połykane (AD-8). W `app` wg polityki z `apps.json`: Moonlight i Plex/natywne — dozwolony; Netflix — D-pad.
 
@@ -297,6 +315,7 @@ Odrzucone (forge): Filmweb na TV, ocena z pilota, karta tylko dla profilu Elizy,
 | Komunikat po rollbacku | Snapshot musi nieść informację o rollbacku z wersją, która nie wystartowała (np. `update.rolledBack{ version }`), przekazaną przez `--supervise` przy starcie poprzedniej wersji. **Do dopisania w AD-17** | AD-17 |
 | OK na kafelku Failed | Shell otwiera AppMenu z fokusem na „Uruchom ponownie”; stan otwartego AppMenu trzyma Shell jako efemeryczny stan nawigacji, bez Intentu `OpenAppMenu`. Pozycje menu → Intents `RestartApp` i `CloseApp`. Home w trybie `shell` dociera do Shell jako Action i zamyka nakładkę | AD-8, AD-10, AD-16 |
 | Foreground → Failed | Orchestrator sam pokazuje Home, fokus na kafelku Failed przez `focusRequest{appId, seq}` (R7) | AD-10, AD-15, AD-16 |
+| Przełączenie z zewnątrz (Alt+Tab) | Na shell: aplikacja z pierwszego planu przechodzi w tło jak po Home, tryb `shell`, fokus shella bez zmian (bez `focusRequest`). Na okno aplikacji w Background: aktywacja jak po OK na kafelku, bez autowznowienia. Obce okno: bez zmiany trybu, stanu i dźwięku; działa tylko Home z pilota. OSK zamykana przed przełączeniem na shell albo aplikację (U2/DW-44, 2026-10-27) | AD-5, AD-8, AD-15 |
 | Fokus startowy | Zimny start, restart, wybudzenie → `focusRequest{default, seq}` (Video, pierwszy kafelek); UI stosuje każde nowe `seq` raz (R7, L31) | AD-10, AD-16 |
 | Zerwane CDP | Bez UI; D-pad niebuforowany; po `cdpReconnectTimeout` (30 s) → Failed (R8) | AD-7, AD-10, AD-11 |
 | Profil Netflixa | ServiceDriver/PageRuntime rozpoznaje `profiles` i fokusuje ostatnio używany profil, ale go nie wybiera (R9) | AD-7, AD-10 |
