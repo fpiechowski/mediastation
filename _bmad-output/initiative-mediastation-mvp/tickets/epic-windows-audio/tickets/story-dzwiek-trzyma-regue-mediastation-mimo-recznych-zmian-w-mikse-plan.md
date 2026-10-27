@@ -125,3 +125,11 @@ Verification: `dotnet test` 1238 passed, 0 failed; `dotnet build -c Release` 0 e
 Residual risks: live mixer check with Edge and `harness-audio.html` was not run (needs a manual mixer action); the real Core Audio paths (`IAudioSessionEvents` callbacks, own-GUID writes, handle ownership via `KeepControl`) are unexercised. `UnmuteProcessTree` and `StopApp` run on different executors, so completion ordering is by emission only. Operator-only hardware check, if wanted: on UM760 unmute the harness Edge in the mixer, expect `audioSessionOverridden muted:true` within ~1 s.
 
 Re-verified on re-dispatch (2026-10-27): `dotnet test` 1238 passed, 0 failed; `dotnet build -c Release` 0 errors, 0 warnings. Review already recorded above; no new changes.
+
+## Auto Run Result
+
+Status: built
+
+Summary: audio rule is a two-way target state. The engine reads real session state each scan, corrects the difference and logs `audioSessionOverridden`; end of rule or `Dispose` unmutes every assigned session; `CloseApp` and `RestartApp` send `UnmuteProcessTree` before `StopApp`. Implemented in `199144e`, re-verified on UM760 per earlier run: `dotnet test` 1238 passed, 0 failed; `dotnet build -c Release` 0 errors, 0 warnings. Review: 5 patches applied, 0 deferred.
+
+Residual risks: live mixer check with Edge and `harness-audio.html` not run (needs a manual mixer action); real Core Audio callbacks and own-GUID writes are not covered by automated tests.
