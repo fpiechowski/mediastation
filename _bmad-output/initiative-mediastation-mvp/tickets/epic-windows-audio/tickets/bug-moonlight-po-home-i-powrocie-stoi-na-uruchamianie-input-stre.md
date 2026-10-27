@@ -7,7 +7,7 @@ covers: [R2]
 after: []
 assignee: ""
 refined: true
-hitl: true
+hitl: false
 risk: high
 severity: P1
 ---
@@ -16,7 +16,7 @@ severity: P1
 
 ## Description
 
-Pierwsze OK na kafelku PC uruchamia strumień z hosta. Po Home (okno Moonlighta schowane na pasku) i ponownym OK na kafelku wraca okno Moonlighta, ale bez transmisji: widać tylko UI Moonlighta z zamrożonym komunikatem „Uruchamianie input stream establishment…”. Tak samo po ręcznym restarcie Moonlighta. Powinno być: po powrocie do kafelka PC strumień działa dalej, za każdym razem (R2, Done when 2). To jedyny powód, dla którego epika nie została zaakceptowana. Osoba potwierdza obraz strumienia po każdym powrocie.
+Pierwsze OK na kafelku PC uruchamia strumień z hosta. Po Home (okno Moonlighta schowane na pasku) i ponownym OK na kafelku wraca okno Moonlighta, ale bez transmisji: widać tylko UI Moonlighta z zamrożonym komunikatem „Uruchamianie input stream establishment…”. Tak samo po ręcznym restarcie Moonlighta. Powinno być: po powrocie do kafelka PC strumień działa dalej, za każdym razem (R2, Done when 2). To jedyny powód, dla którego epika nie została zaakceptowana. Działający strumień po powrocie dowodzi się automatycznie (log Moonlighta albo zrzuty okna); wzrokowo potwierdza go ponowny odbiór na UM760 (S6).
 
 ## Reproduction
 
@@ -41,8 +41,8 @@ Nie zdiagnozowano w odbiorze; nie wiadomo, czy przyczyna jest w kodzie epiki, cz
 
 1. **Strumień działa po powrocie**
    **Given** dev harness, kafelek PC i osiągalny host Sunshine
-   **When** po pierwszym OK na kafelku PC osoba cztery razy robi Home, potem OK na kafelku PC
-   **Then** po każdym powrocie widać działający strumień (potwierdza osoba), a log każdego cyklu ma `MinimizeWindow` i `ShowShell` po Home oraz `ActivateWindow` po OK, wszystkie `completed`; `appWindowAttached` dokładnie 1× w całym przebiegu i bez `warn`/`error` (dozwolone jak w S6: `appIconMissing`, `devHarnessEnabled`)
+   **When** po pierwszym OK na kafelku PC przebieg cztery razy robi Home, potem OK na kafelku PC (wstrzyknięte klawisze, jak `check-home-s10.ps1`)
+   **Then** po każdym powrocie strumień działa: log Moonlighta pokazuje, że połączenie przeszło etap „input stream establishment” i nie zostało zerwane, a gdy log tego nie pokazuje, dwa zrzuty okna Moonlighta w odstępie kilku sekund po powrocie się różnią (zapisane w planie); log MediaStation każdego cyklu ma `MinimizeWindow` i `ShowShell` po Home oraz `ActivateWindow` po OK, wszystkie `completed`; `appWindowAttached` dokładnie 1× w całym przebiegu i bez `warn`/`error` (dozwolone jak w S6: `appIconMissing`, `devHarnessEnabled`)
 2. **Opuszczone okno Moonlighta zostaje zminimalizowane**
    **Given** strumień schowany przez Home
    **When** sprawdzamy jego okno
@@ -65,7 +65,8 @@ Nie zdiagnozowano w odbiorze; nie wiadomo, czy przyczyna jest w kodzie epiki, cz
 
 ## Notes
 
-- Decision: `hitl: true`, bo obraz strumienia po powrocie potwierdza osoba; log nie odróżnia działającego strumienia od zamrożonego UI (2026-10-27).
+- Decision: `hitl: false`, żeby bug szedł w pętli: działający strumień dowodzi log Moonlighta albo różniące się zrzuty okna, a wzrokowe potwierdzenie przechodzi do ponownego odbioru S6 na UM760 (AGENTS.md: najmocniejszy dowód automatyczny); zastępuje `hitl: true` z tego samego dnia (2026-10-27).
+- Open question: gdzie Moonlight-qt zapisuje log na Windows i czy loguje etapy połączenia; ustala pierwszy krok buildu.
 - Decision: poprawka nie może odejść od minimalizacji (R1, AD-5); jeśli tylko to naprawia strumień, build zatrzymuje się na kryterium 4 (2026-10-27).
 - Risk high: blokuje akceptację epiki (Done when 2).
 - Check beyond criteria (risk high): po poprawce Home nad Edge i Chrome dalej 4/4 (S2, S4), bo odblokowanie foreground jest wspólne.

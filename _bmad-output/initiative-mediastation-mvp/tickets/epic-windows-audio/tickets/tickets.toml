@@ -90,17 +90,17 @@ risk = "low"
 references = ["deferred-work.md, DW-26, DW-34"]
 
 # ---- Po odbiorze na UM760 (2026-10-27, not accepted): U1–U3 z epic-windows-audio-um760-acceptance.md ----
-# 8 blokuje akceptację i idzie pierwszy. 9 i 10 czekają na decyzję bmad-architecture (AD-8, AD-15, AD-5 Audio); różny kod, mogą iść równolegle.
+# 8 blokuje akceptację i idzie pierwszy. 9 i 10 według architektury 36f9e2f (AD-5, AD-8, AD-15): 9 to Orchestrator i WindowManager, 10 to AudioRouter (plus jedna komenda przy zamykaniu w Orchestratorze); w pętli idą po kolei 8 → 9 → 10 (Decision w Notes epiki).
 
 [[entry]]
 id = 8
 type = "bug"
 title = "Moonlight po Home i powrocie stoi na „Uruchamianie input stream establishment…”"
 description = "U1 z odbioru (DW-43): pierwsze OK na kafelku PC uruchamia strumień, ale po Home i ponownym OK widać tylko UI Moonlighta z zamrożonym komunikatem, bez transmisji, także po ręcznym restarcie Moonlighta; log pokazuje poprawne komendy okienne. Reprodukcja, hipotezy i kryteria w pliku ticketu."
-verify = "Na maszynie z hostem Sunshine cztery cykle OK → Home → OK na kafelku PC pokazują za każdym razem działający strumień (potwierdza osoba), a log ma komendy okienne jak w S6; albo zapisany `Source conflict:` z dowodem, że przyczyna leży poza kodem epiki."
+verify = "Na maszynie z hostem Sunshine cztery cykle OK → Home → OK na kafelku PC pokazują za każdym razem działający strumień (log Moonlighta albo różniące się zrzuty okna), a log ma komendy okienne jak w S6; albo zapisany `Source conflict:` z dowodem, że przyczyna leży poza kodem epiki."
 covers = ["R2"]
 after = []
-hitl = true # obraz strumienia po powrocie potwierdza osoba
+hitl = false # dowód z logu Moonlighta albo zrzutów; wzrokowo ponowny odbiór S6
 risk = "high"
 references = ["tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md, Wyniki S6 i Uwagi użytkownika U1", "deferred-work.md, DW-43"]
 
@@ -108,24 +108,22 @@ references = ["tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md
 id = 9
 type = "story"
 title = "Pilot steruje tym, co jest na wierzchu, także po Alt+Tab"
-description = "U2 z odbioru (DW-44): po Alt+Tab ekran główny jest na wierzchu, ale tryb wejścia zostaje „aplikacja”, więc pilot i klawiatura nie sterują nim do czasu Home. Użytkownik chce, żeby routing wejścia szedł za oknem na wierzchu. To zmiana R3 i decyzji epiki z 2026-10-26; zakres (sam routing, czy też stan aplikacji i dźwięk) ustala decyzja AD-8/AD-15."
-verify = "`dotnet test` z testami nowej reguły `ForegroundChanged`; na bieżącej maszynie z dev harnessem Alt+Tab na shell daje sterowanie ekranem głównym z pilota bez Home, a Alt+Tab na okno aplikacji i na obce okno zachowuje się według nowej reguły AD-8 (log `foregroundChanged` i `inputRouting`)."
+description = "U2 z odbioru (DW-44), według polityki `ForegroundChanged` z AD-15 i przełączenia z zewnątrz z AD-5 (decyzja 2026-10-27). Kontrakt `ForegroundChanged{ hwnd, pid }`: PID okna odczytuje WindowManager w callbacku haka, a po starcie haka raz raportuje bieżące okno; nowa komenda `ReportForeground` daje świeże `ForegroundChanged` (do `MessageTypes` i schematów, AD-16). Orchestrator loguje każdą obserwację z właścicielem i (re)startuje timer ustalenia `foregroundSettleMs` (`settings.json`, domyślnie 300, zakres 100–2000, `TimerElapsed` związany z `transitionId`; restartuje go też wynik każdej komendy okiennej); ocenia tylko ostatnią obserwację, nie ocenia przy komendzie okiennej bez wyniku ani przy aplikacji w `Starting` i wtedy po ustaniu przyczyny (także po zmianie zbioru okien zarządzanych) wysyła `ReportForeground`. Właściciel zgodny z zamiarem (echo) nic nie zmienia; po `CommandFailed` komendy okiennej obserwacja niezgodna z zamiarem idzie tylko do logu (`foregroundTransitionFailed`). Różnica to przełączenie z zewnątrz z nowym `transitionId` i wpisem `foregroundSwitch{ owner, appId, transitionId }`: `shell` → opuszczenie aplikacji `Foreground` (`MuteProcessTree` → `MinimizeWindow`, bez `ShowShell`), tryb `shell`, bez `focusRequest`; `app` X w `Background` → opuszczenie poprzedniej aplikacji `Foreground`, potem `UnmuteProcessTree` X bez `restore` i foreground, tryb `app`; `SetInputRouting` dla nowego trybu. `app` w `NotRunning`, `Stopping`, `Failed` i `foreign` (także `hwnd` 0) tylko log. `MinimizeWindow` nie aktywuje innego okna (`SW_SHOWMINNOACTIVE`). Krok `HideOsk` dokłada epic-osk; `pause` dokłada epic-netflix-dpad. Logika ustalenia i decyzji w Core z testami na `FakeTimeProvider`."
+verify = "`dotnet test` przechodzi z testami: echo `ActivateWindow` i `ShowShell` bez zmian, ostatnia obserwacja wygrywa po `foregroundSettleMs`, brak oceny przy komendzie bez wyniku i w `Starting` z `ReportForeground` po ustaniu, `foregroundTransitionFailed` po `CommandFailed`, przełączenie na shell i na aplikację w `Background` z kolejnością AD-5, Alt+Tab z aplikacji A na B (A wyciszona i zminimalizowana, B odciszona, kafelek B w `Foreground` bez chipu w snapshocie), `foreign` i `hwnd` 0 bez zmian, stary `transitionId` nie ocenia. Na bieżącej maszynie z dev harnessem (Alt+Tab wstrzyknięty albo `SetForegroundWindow` ze skryptu): Edge na wierzchu, Alt+Tab na shell daje `foregroundSwitch owner:shell`, `audioRuleApplied muted:true`, `MinimizeWindow completed`, `inputRouting shell`, a wstrzyknięte strzałki ruszają fokus shella bez Home; Alt+Tab z shella na okno Edge w tle daje `foregroundSwitch owner:app`, `muted:false`, `inputRouting app`; Alt+Tab na Notatnik daje tylko `foregroundChanged owner:foreign`."
 covers = ["R3"]
 after = []
 hitl = false
-risk = "medium"
-unknown = "Czy po Alt+Tab za oknem na wierzchu idzie tylko routing wejścia, czy też stan aplikacji i dźwięk (sekwencja AD-5), i co przy obcym oknie? Rozstrzyga bmad-architecture (AD-8, AD-15)."
-references = ["tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md, Uwagi użytkownika U2", "deferred-work.md, DW-44", "architecture-mediastation/architecture-mediastation.md, AD-8, AD-15"]
+risk = "high"
+references = ["tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md, Uwagi użytkownika U2", "deferred-work.md, DW-44", "architecture-mediastation/architecture-mediastation.md, AD-5 (Przełączenie z zewnątrz), AD-8 (`mode` idzie za ustalonym oknem), AD-15 (Polityka `ForegroundChanged`)", "ux-mediastation/EXPERIENCE.md, State Patterns → Przełączenie okna poza pilotem (Alt+Tab)"]
 
 [[entry]]
 id = 10
 type = "story"
 title = "Dźwięk trzyma regułę MediaStation mimo ręcznych zmian w mikserze"
-description = "U3 z odbioru (DW-45): AudioRouter zna tylko wyciszenia, które sam zrobił, więc ręczna zmiana w mikserze Windows rozjeżdża stan (cisza mimo odciszonej reguły, tło słychać razem ze streamem). W czystym stanie dźwięk działa. Sposób uzgadniania ze stanem sesji ustala decyzja AD-5 (Audio)."
-verify = "`dotnet test` z testami uzgadniania reguły ze stanem sesji; na bieżącej maszynie z dev harnessem ręczne odciszenie aplikacji w tle i ręczne wyciszenie aplikacji na wierzchu w mikserze, potem Home i OK: słychać tylko aplikację na wierzchu (log `audioRuleApplied` i `audioSessionMuted`)."
-covers = ["R5", "R6"]
+description = "U3 z odbioru (DW-45), według reguły audio jako stanu docelowego z AD-5 (decyzja 2026-10-27). AudioRouter trzyma flagę wyciszenia każdej sesji drzewa z regułą równą regule w obie strony: `UnmuteProcessTree` odcisza także sesje wyciszone poza nim (mikser, poprzednia instancja), co zastępuje „odciszam tylko to, co sam wyciszyłem” (DW-37). Skan odczytuje rzeczywisty stan sesji drzew z regułą i poprawia różnicę przy każdej komendzie, przy nowej sesji i nowym urządzeniu oraz okresowo co ok. 1 s, dopóki istnieje reguła; powiadomienia o zmianie głośności sesji (`OnSimpleVolumeChanged`, `OnChannelVolumeChanged`) mogą go tylko przyspieszyć, a własne zmiany idą z własnym GUID-em kontekstu, więc nie wywołują skanu. Poprawka zmiany z zewnątrz daje `audioSessionOverridden{ rootPid, pid, muted }` raz na sesję i wartość reguły. Fallback `IChannelAudioVolume`: wyciszona = wszystkie kanały 0, poziomy sprzed wyciszenia tylko w pamięci, bez nich odciszenie ustawia 1.0. Koniec reguły (`ForgetProcessTree`, śmierć korzenia, zamknięcie MediaStation) raz odcisza każdą sesję ostatnio przypisaną do drzewa, a Orchestrator przy `CloseApp` i `RestartApp` wysyła `UnmuteProcessTree` przed zamknięciem procesu (AD-5, AD-10), bo nowa instancja dziedziczy wyciszenie. Callbacki Core Audio tylko zlecają skan wątkowi AudioRoutera. Głośność sesji i systemu oraz sesje spoza drzew z regułą zostają nietknięte. Logika uzgadniania poza typami COM, z testami."
+verify = "`dotnet test` przechodzi z testami: sesja drzewa wyciszona z zewnątrz przy regule odciszenia wraca do odciszenia i odwrotnie z jednym `audioSessionOverridden`, `UnmuteProcessTree` odcisza sesję spoza rejestru, własna zmiana z GUID-em nie wywołuje skanu, kanały bez zapamiętanych poziomów wracają na 1.0, `ForgetProcessTree` i zamknięcie MediaStation odciszają sesje drzewa, `CloseApp` i `RestartApp` wysyłają `UnmuteProcessTree` przed zamknięciem, sesje spoza drzew nietknięte. Na bieżącej maszynie z dev harnessem i `tools/fixtures/harness-audio.html`: ręczne odciszenie Edge w tle w mikserze (albo `ISimpleAudioVolume` ze skryptu) wraca do wyciszenia w ok. 1 s z `audioSessionOverridden muted:true`, ręczne wyciszenie aplikacji na wierzchu wraca do odciszenia z `muted:false`, a po zamknięciu aplikacji z AppMenu jej sesje nie są wyciszone."
+covers = ["R5", "R6", "R9"]
 after = []
 hitl = false
 risk = "medium"
-unknown = "Czy reguła MediaStation wygrywa z ręczną zmianą w mikserze i jak ją utrzymać: wymuszanie stanu wszystkich sesji drzewa przy każdym przejściu, nasłuch zmian sesji, czy uzgadnianie na żądanie? Rozstrzyga bmad-architecture (AD-5 Audio)."
-references = ["tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md, Uwagi użytkownika U3, Wyniki S19", "deferred-work.md, DW-45", "architecture-mediastation/architecture-mediastation.md, AD-5 (Audio)"]
+references = ["tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md, Uwagi użytkownika U3, Wyniki S19", "deferred-work.md, DW-45, DW-37", "architecture-mediastation/architecture-mediastation.md, AD-5 (Reguła audio to stan docelowy, Zamykanie aplikacji), AD-4, AD-14"]
