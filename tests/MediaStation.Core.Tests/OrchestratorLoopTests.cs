@@ -180,6 +180,53 @@ public class OrchestratorLoopTests
         Assert.Equal("netflix", entries[1].Data!["appId"]);
     }
 
+    [Fact]
+    public void Settled_foreground_logs_switch_and_failed_transition()
+    {
+        var log = new RecordingLog();
+        var dispatched = new ConcurrentQueue<Command>();
+        using var loop = new OrchestratorLoop(
+            new CoreOrchestrator(TwoApps(), new FakeTimeProvider(T0), new FixedForegroundLookup(shell: 0x500)),
+            batch =>
+            {
+                foreach (var command in batch)
+                {
+                    dispatched.Enqueue(command);
+                }
+            },
+            _ => { },
+            _ => { },
+            log);
+        loop.Start();
+        loop.Post(new LaunchApp("netflix"));
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        WaitFor(() => dispatched.OfType<ActivateWindow>().Any());
+        loop.Post(new CommandCompleted(dispatched.OfType<ActivateWindow>().Single().CmdId));
+
+        loop.Post(new ForegroundChanged(0x500, 10));
+        WaitFor(() => dispatched.OfType<ScheduleTimer>().Any(timer => timer.Owner == "foreground"));
+        loop.Post(new TimerElapsed(dispatched.OfType<ScheduleTimer>().Single(timer => timer.Owner == "foreground").TimerId));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "foregroundSwitch"));
+
+        var entry = Assert.Single(log.Entries, entry => entry.Msg == "foregroundSwitch");
+        Assert.Equal(LogLevel.Info, entry.Level);
+        Assert.Equal("shell", entry.Data!["owner"]);
+        Assert.Null(entry.Data["appId"]);
+        Assert.IsType<long>(entry.Data["transitionId"]);
+
+        // Netflix zszedł do tła, a Minimize z przełączenia jeszcze trwa: powrót na wierzch i porażka komendy.
+        loop.Post(new ForegroundChanged(0x1A2B, 4321));
+        WaitFor(() => dispatched.OfType<MinimizeWindow>().Any());
+        var minimize = dispatched.OfType<MinimizeWindow>().Last();
+        loop.Post(new CommandFailed(minimize.CmdId, ErrorCode.Unexpected));
+        WaitFor(() => log.Entries.Any(item => item.Msg == "foregroundTransitionFailed"));
+
+        var failed = Assert.Single(log.Entries, item => item.Msg == "foregroundTransitionFailed");
+        Assert.Equal(LogLevel.Warn, failed.Level);
+        Assert.Equal("app", failed.Data!["owner"]);
+        Assert.Equal("netflix", failed.Data["appId"]);
+    }
+
     private sealed class FixedForegroundLookup(long shell) : IForegroundLookup
     {
         public long ShellHwnd => shell;

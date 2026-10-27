@@ -18,6 +18,11 @@ public sealed partial class Orchestrator
     /// </summary>
     private OrchestratorResult OnTimerElapsed(TimerElapsed elapsed)
     {
+        if (_settleTimerId != 0 && elapsed.TimerId == _settleTimerId)
+        {
+            return OnSettled();
+        }
+
         if (_startTimers.Remove(elapsed.TimerId, out var appId))
         {
             return _appsById.TryGetValue(appId, out var app) && app.State == AppLifecycleState.Starting

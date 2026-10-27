@@ -111,7 +111,8 @@ public class ForegroundOwnerTests
         {
             var result = orchestrator.Handle(new ForegroundChanged(hwnd, 5));
 
-            Assert.Empty(result.Commands);
+            // Sama obserwacja nie zmienia widoku ani stanu: tylko timer ustalenia (AD-15).
+            Assert.All(result.Commands, command => Assert.True(command is ScheduleTimer or CancelTimer));
             Assert.Null(result.Snapshot);
             Assert.Empty(result.Actions);
         }

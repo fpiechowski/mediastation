@@ -124,6 +124,7 @@ public class ConfigValidationTests
         Assert.Equal(45, config.Settings.StoppingTimeout);
         Assert.Equal(15, config.Settings.CdpConnectTimeout);
         Assert.Equal(30, config.Settings.CdpReconnectTimeout);
+        Assert.Equal(300, config.Settings.ForegroundSettleMs);
         Assert.Equal("fpiechowski/mediastation", config.Settings.Update.Repo);
     }
 
@@ -135,7 +136,7 @@ public class ConfigValidationTests
                 Web(extra: """, "pointer": "allowed" """),
                 """{ "type": "moonlight", "id": "pc", "category": "game", "title": "PC", "icon": "i", "host": "h", "app": "a", "back": "home", "pointer": "blocked" }""",
                 """{ "type": "native", "id": "plex", "category": "video", "title": "P", "icon": "i", "exe": "p.exe", "args": ["--tv", "-f"], "back": "key:Escape" }"""),
-            settings: """{ "ratingPendingDays": 3, "startingTimeout": 60, "stoppingTimeout": 50, "cdpConnectTimeout": 20, "cdpReconnectTimeout": 45, "update": { "repo": "someone/fork" } }""");
+            settings: """{ "ratingPendingDays": 3, "startingTimeout": 60, "stoppingTimeout": 50, "cdpConnectTimeout": 20, "cdpReconnectTimeout": 45, "foregroundSettleMs": 500, "update": { "repo": "someone/fork" } }""");
 
         Assert.Equal(PointerPolicy.Allowed, Assert.IsType<WebApp>(config.Apps.Apps[0]).Pointer);
         var moonlight = Assert.IsType<MoonlightApp>(config.Apps.Apps[1]);
@@ -152,6 +153,7 @@ public class ConfigValidationTests
                 StoppingTimeout = 50,
                 CdpConnectTimeout = 20,
                 CdpReconnectTimeout = 45,
+                ForegroundSettleMs = 500,
                 Update = new UpdateSettings { Repo = "someone/fork" },
             },
             config.Settings);
@@ -1033,6 +1035,28 @@ public class ConfigValidationTests
     }
 
     [Theory]
+    [InlineData("100")]
+    [InlineData("2000")]
+    public void Foreground_settle_bounds_are_accepted(string value)
+    {
+        var config = Loaded(settings: $$"""{ "foregroundSettleMs": {{value}} }""");
+
+        Assert.Equal(int.Parse(value), config.Settings.ForegroundSettleMs);
+    }
+
+    [Theory]
+    [InlineData("99")]
+    [InlineData("2001")]
+    [InlineData("0")]
+    [InlineData("-300")]
+    public void Foreground_settle_outside_range_is_rejected(string value)
+    {
+        var error = SingleError(settings: $$"""{ "foregroundSettleMs": {{value}} }""");
+
+        Assert.Equal(new ConfigError(SettingsJson, "$.foregroundSettleMs", "wartość musi być z zakresu 100–2000"), error);
+    }
+
+    [Theory]
     [InlineData("startingTimeout")]
     [InlineData("stoppingTimeout")]
     public void Timeout_of_600_seconds_is_accepted(string field)
@@ -1302,7 +1326,7 @@ public class ConfigValidationTests
         Assert.Null(schema["required"]);
         Assert.False(schema["additionalProperties"]!.GetValue<bool>());
         Assert.Equal(
-            ["ratingPendingDays", "startingTimeout", "stoppingTimeout", "cdpConnectTimeout", "cdpReconnectTimeout", "update"],
+            ["ratingPendingDays", "startingTimeout", "stoppingTimeout", "cdpConnectTimeout", "cdpReconnectTimeout", "foregroundSettleMs", "update"],
             schema["properties"]!.AsObject().Select(p => p.Key));
         Assert.Equal("integer", schema["properties"]!["startingTimeout"]!["type"]!.GetValue<string>());
         Assert.Equal("integer", schema["properties"]!["stoppingTimeout"]!["type"]!.GetValue<string>());

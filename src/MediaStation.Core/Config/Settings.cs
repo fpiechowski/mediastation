@@ -22,6 +22,9 @@ public sealed record Settings
     /// <summary>Czas reconnectu zerwanego CDP przed przejściem w <c>Failed</c>, w sekundach (AD-10).</summary>
     public int CdpReconnectTimeout { get; init; } = 30;
 
+    /// <summary>Czas ustalenia okna na wierzchu po ostatnim <c>ForegroundChanged</c>, w milisekundach; 100–2000 (AD-15).</summary>
+    public int ForegroundSettleMs { get; init; } = 300;
+
     public UpdateSettings Update { get; init; } = new();
 }
 

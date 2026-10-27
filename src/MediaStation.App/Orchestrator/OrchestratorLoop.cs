@@ -108,6 +108,13 @@ public sealed class OrchestratorLoop : IDisposable
         _queue.Dispose();
     }
 
+    private static string OwnerName(ForegroundOwner owner) => owner switch
+    {
+        ForegroundOwner.Shell => "shell",
+        ForegroundOwner.App => "app",
+        _ => "foreign",
+    };
+
     private void Run()
     {
         foreach (var message in _queue.GetConsumingEnumerable())
@@ -134,13 +141,29 @@ public sealed class OrchestratorLoop : IDisposable
                     {
                         ["hwnd"] = foreground.Hwnd,
                         ["pid"] = foreground.Pid,
-                        ["owner"] = foreground.Owner switch
-                        {
-                            ForegroundOwner.Shell => "shell",
-                            ForegroundOwner.App => "app",
-                            _ => "foreign",
-                        },
+                        ["owner"] = OwnerName(foreground.Owner),
                         ["appId"] = foreground.AppId,
+                    });
+                }
+
+                if (result.ForegroundSwitch is { } switched)
+                {
+                    _log.Info(Src, "foregroundSwitch", new Dictionary<string, object?>
+                    {
+                        ["owner"] = OwnerName(switched.Owner),
+                        ["appId"] = switched.AppId,
+                        ["transitionId"] = switched.TransitionId,
+                    });
+                }
+
+                if (result.ForegroundTransitionFailed is { } mismatched)
+                {
+                    _log.Warn(Src, "foregroundTransitionFailed", new Dictionary<string, object?>
+                    {
+                        ["hwnd"] = mismatched.Hwnd,
+                        ["pid"] = mismatched.Pid,
+                        ["owner"] = OwnerName(mismatched.Owner),
+                        ["appId"] = mismatched.AppId,
                     });
                 }
 

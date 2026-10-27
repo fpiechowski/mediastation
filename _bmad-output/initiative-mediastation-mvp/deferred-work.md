@@ -423,3 +423,10 @@ location: tools/check-home-s10.ps1:New-RestoreAppsJson
 source_spec: `tickets/epic-windows-audio/tickets/bug-moonlight-po-home-i-powrocie-stoi-na-uruchamianie-input-stre-plan.md`
 reason: Seen on UM760 2026-10-27 with the generated one-tile apps.json (category `game`): `action ok` logged, no start for 40 s; the same tile in `video` starts at once. Could be shell default focus with a lone `game` row; check with a `game`-only config and OK from a fresh start. Unverified.
 status: open
+
+### DW-49: A window command whose result is lost keeps evaluation blocked until the next transitionId.
+origin: spec-deferred 6d67a13a710e
+location: src/MediaStation.Core/Orchestrator/Orchestrator.Foreground.cs (IsHardBlocked)
+source_spec: `tickets/epic-windows-audio/tickets/story-pilot-steruje-tym-co-jest-na-wierzchu-takze-po-alt-tab-plan.md`
+reason: Window-command results are tracked in a pending set cleared only by CommandCompleted/CommandFailed or a transitionId change; executors always answer (AD-4), so unverified. Settled by a test or run where the executor drops a result.
+status: open

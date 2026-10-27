@@ -32,6 +32,7 @@ public sealed partial class Orchestrator
         }
 
         _publishedWindows = current;
+        _windowsChanged = true;
         var commands = new List<Command>(result.Commands)
         {
             new SetManagedWindows(NextCmdId(), null, [.. current], ++_managedEpoch),

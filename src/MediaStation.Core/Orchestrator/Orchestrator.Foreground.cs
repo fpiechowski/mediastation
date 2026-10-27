@@ -1,14 +1,25 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using MediaStation.Core.Contracts;
 
 namespace MediaStation.Core.Orchestrator;
 
 public sealed partial class Orchestrator
 {
+    /// <summary>Jak skończyła się komenda okienna, na którą Orchestrator czekał (AD-15).</summary>
+    private enum WindowResult
+    {
+        None,
+        Completed,
+        Failed,
+    }
+
     /// <summary>
-    /// Zmiana okna na pierwszym planie (AD-8, AD-15) to fakt: Orchestrator rozpoznaje właściciela okna do logu i nic
-    /// więcej. <c>mode</c>, stan aplikacji i dźwięk zostają bez zmian, bo powrót na shell daje Home, a nie
-    /// samo przełączenie okna. Wynik nie ma komend ani snapshotu.
+    /// Zmiana okna na pierwszym planie (AD-8, AD-15): właściciel jest rozpoznawany od razu i logowany, ale decyzja
+    /// zapada dopiero po ustaleniu. Zapis ostatniej obserwacji restartuje timer <c>foregroundSettleMs</c>; gdy
+    /// ocena jest zablokowana (komenda okienna bez wyniku, aplikacja w <c>Starting</c>), stan prosi o
+    /// <see cref="ReportForeground"/> po ustaniu przyczyny.
     /// </summary>
     private OrchestratorResult OnForegroundChanged(ForegroundChanged changed)
     {
@@ -19,6 +30,189 @@ public sealed partial class Orchestrator
         }
 
         var observation = ForegroundOwnerResolver.Resolve(changed.Hwnd, changed.Pid, _foreground?.ShellHwnd ?? 0, apps);
-        return OrchestratorResult.None with { Foreground = observation };
+        _observation = observation;
+        if (IsHardBlocked())
+        {
+            _reportNeeded = true;
+        }
+
+        var commands = new List<Command>();
+        RestartSettleTimer(commands);
+        return new OrchestratorResult(commands, null) { Foreground = observation };
+    }
+
+    /// <summary>Komenda okienna bez wyniku (poza <see cref="ReportForeground"/>) albo aplikacja w <c>Starting</c> blokuje ocenę.</summary>
+    private bool IsHardBlocked() =>
+        _pendingWindow.Keys.Any(cmdId => !_reportCmds.Contains(cmdId))
+        || _apps.Exists(app => app.State == AppLifecycleState.Starting);
+
+    /// <summary>Anuluje poprzedni timer ustalenia (jeśli żyje) i planuje nowy na <c>foregroundSettleMs</c> od teraz.</summary>
+    private void RestartSettleTimer(List<Command> commands)
+    {
+        CancelSettleTimer(commands);
+        _settleTimerId = ++_timerId;
+        _settleTransition = _transitionId;
+        commands.Add(new ScheduleTimer(NextCmdId(), _settleTimerId, ForegroundTimerOwner, _time.GetUtcNow() + _foregroundSettle));
+    }
+
+    private void CancelSettleTimer(List<Command> commands)
+    {
+        if (_settleTimerId != 0)
+        {
+            commands.Add(new CancelTimer(NextCmdId(), _settleTimerId));
+            _settleTimerId = 0;
+        }
+    }
+
+    /// <summary>Zdejmuje wynik komendy okiennej ze zbioru oczekujących; <c>None</c> dla każdego innego komunikatu.</summary>
+    private WindowResult TakeWindowResult(IOrchestratorMessage message)
+    {
+        switch (message)
+        {
+            case CommandCompleted completed when _pendingWindow.Remove(completed.CmdId):
+                _reportCmds.Remove(completed.CmdId);
+                return WindowResult.Completed;
+            case CommandFailed failed when _pendingWindow.Remove(failed.CmdId):
+                _reportCmds.Remove(failed.CmdId);
+                return WindowResult.Failed;
+            default:
+                return WindowResult.None;
+        }
+    }
+
+    /// <summary>
+    /// Polityka ustalenia po każdym kroku (AD-15): komendy okienne z wyniku wchodzą do zbioru oczekujących
+    /// bieżącego <c>transitionId</c>, nowe przejście albo zmiana zbioru okien unieważnia oczekującą ocenę,
+    /// wynik komendy restartuje timer (porażka niezgodnej obserwacji kończy się logiem), a po ustaniu przyczyny
+    /// blokady wynik dostaje <see cref="ReportForeground"/>.
+    /// </summary>
+    private OrchestratorResult ApplyForegroundPolicy(OrchestratorResult result, long transitionBefore, WindowResult windowResult)
+    {
+        var commands = new List<Command>(result.Commands);
+        foreach (var command in result.Commands)
+        {
+            if (command is WindowCommand window)
+            {
+                _pendingWindow[window.CmdId] = _transitionId;
+            }
+        }
+
+        foreach (var cmdId in _pendingWindow.Where(pair => pair.Value != _transitionId).Select(pair => pair.Key).ToList())
+        {
+            _pendingWindow.Remove(cmdId);
+            _reportCmds.Remove(cmdId);
+        }
+
+        ForegroundObservation? failedObservation = null;
+        if (_observation is not null && (_transitionId != transitionBefore || _windowsChanged))
+        {
+            CancelSettleTimer(commands);
+            _observation = null;
+            _reportNeeded = true;
+        }
+        else if (windowResult == WindowResult.Failed && _observation is { } observed && WouldSwitch(observed))
+        {
+            failedObservation = observed;
+            CancelSettleTimer(commands);
+            _observation = null;
+            _reportNeeded = false;
+        }
+
+        if (_reportNeeded && _pendingWindow.Count == 0 && !_apps.Exists(app => app.State == AppLifecycleState.Starting))
+        {
+            var report = new ReportForeground(NextCmdId());
+            _pendingWindow[report.CmdId] = _transitionId;
+            _reportCmds.Add(report.CmdId);
+            commands.Add(report);
+            CancelSettleTimer(commands);
+            _observation = null;
+            _reportNeeded = false;
+        }
+
+        if (windowResult != WindowResult.None && _observation is not null)
+        {
+            RestartSettleTimer(commands);
+        }
+
+        return result with { Commands = commands, ForegroundTransitionFailed = failedObservation ?? result.ForegroundTransitionFailed };
+    }
+
+    /// <summary>Ustalenie: ocenia ostatnią obserwację, o ile jej timer jest bieżący i nic jej nie blokuje (AD-15).</summary>
+    private OrchestratorResult OnSettled()
+    {
+        _settleTimerId = 0;
+        if (_settleTransition != _transitionId || _observation is not { } observation)
+        {
+            return OrchestratorResult.None;
+        }
+
+        if (IsHardBlocked())
+        {
+            _observation = null;
+            _reportNeeded = true;
+            return OrchestratorResult.None;
+        }
+
+        if (_pendingWindow.Count > 0)
+        {
+            // Trwa tylko ReportForeground: jego wynik restartuje timer dla zachowanej obserwacji.
+            return OrchestratorResult.None;
+        }
+
+        _observation = null;
+        return Decide(observation);
+    }
+
+    /// <summary>Czy ustalona obserwacja wymaga przełączenia z zewnątrz (poza echem i obcym oknem).</summary>
+    private bool WouldSwitch(ForegroundObservation observation) => observation.Owner switch
+    {
+        ForegroundOwner.Shell => _apps.Exists(app => app.State == AppLifecycleState.Foreground),
+        ForegroundOwner.App => observation.AppId is { } appId
+            && _appsById.TryGetValue(appId, out var app)
+            && app.State == AppLifecycleState.Background,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Przełączenie z zewnątrz (AD-5): kroki okienne wykonał już użytkownik, więc bez <c>ShowShell</c>,
+    /// <c>ActivateWindow</c>, <c>restore</c> i fokusu UI. Echo, okno obce i aplikacja nieaktywna nie zmieniają nic.
+    /// </summary>
+    private OrchestratorResult Decide(ForegroundObservation observation)
+    {
+        if (!WouldSwitch(observation))
+        {
+            return OrchestratorResult.None;
+        }
+
+        var commands = new List<Command>();
+        var transitionId = NextTransitionId();
+        var previous = _apps.Find(app => app.State == AppLifecycleState.Foreground);
+        if (previous is not null)
+        {
+            previous.State = AppLifecycleState.Background;
+            commands.Add(new MuteProcessTree(NextCmdId(), previous.RootPid));
+            if (previous.Hwnd is { } hwnd)
+            {
+                commands.Add(new MinimizeWindow(NextCmdId(), hwnd));
+            }
+        }
+
+        if (observation.Owner == ForegroundOwner.Shell)
+        {
+            commands.Add(Route(InputMode.Shell, null, PointerPolicy.Blocked));
+        }
+        else
+        {
+            var app = _appsById[observation.AppId!];
+            app.ForegroundTransition = transitionId;
+            app.State = AppLifecycleState.Foreground;
+            commands.Add(new UnmuteProcessTree(NextCmdId(), app.RootPid));
+            commands.Add(Route(InputMode.App, app.Type, app.Pointer));
+        }
+
+        return new OrchestratorResult(commands, Snapshot())
+        {
+            ForegroundSwitch = new ForegroundSwitch(observation.Owner, observation.AppId, transitionId),
+        };
     }
 }

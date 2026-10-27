@@ -254,13 +254,14 @@ public class OrchestratorFailureTests
     }
 
     [Fact]
-    public void Foreground_changed_yields_nothing_and_first_start_still_has_rev_one()
+    public void Foreground_changed_yields_only_the_settle_timer_and_first_start_still_has_rev_one()
     {
         var orchestrator = Create();
 
         var result = orchestrator.Handle(new ForegroundChanged(1234, 8));
 
-        Assert.Empty(result.Commands);
+        var timer = Assert.IsType<ScheduleTimer>(Assert.Single(result.Commands));
+        Assert.Equal(T0.AddMilliseconds(300), timer.Due);
         Assert.Null(result.Snapshot);
         var started = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
         Assert.Equal(1, started.Rev);

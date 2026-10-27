@@ -26,7 +26,16 @@ public sealed record OrchestratorResult(IReadOnlyList<Command> Commands, ShellSn
 
     /// <summary>Właściciel okna z <see cref="ForegroundChanged"/> do wpisu w logu (<c>foregroundChanged</c>) albo <c>null</c>.</summary>
     public ForegroundObservation? Foreground { get; init; }
+
+    /// <summary>Przełączenie z zewnątrz po ustaleniu foreground (<c>foregroundSwitch</c> w logu, AD-15) albo <c>null</c>.</summary>
+    public ForegroundSwitch? ForegroundSwitch { get; init; }
+
+    /// <summary>Obserwacja niezgodna z zamiarem po porażce komendy okiennej (<c>foregroundTransitionFailed</c> w logu) albo <c>null</c>.</summary>
+    public ForegroundObservation? ForegroundTransitionFailed { get; init; }
 }
+
+/// <summary>Przełączenie z zewnątrz (AD-5, AD-15): właściciel okna na wierzchu, <c>appId</c> (tylko dla <c>app</c>) i nowy <c>transitionId</c>.</summary>
+public sealed record ForegroundSwitch(ForegroundOwner Owner, string? AppId, long TransitionId);
 
 /// <summary>Intent odrzucony przez Orchestrator: nazwa Intentu, <c>appId</c> i powód do logu <c>intentIgnored</c>.</summary>
 public sealed record IgnoredIntent(string Intent, string AppId, string Reason);
@@ -58,6 +67,17 @@ public sealed partial class Orchestrator
     private List<ManagedWindow> _publishedWindows = [];
     private long _managedEpoch;
     private readonly IForegroundLookup? _foreground;
+    private readonly TimeSpan _foregroundSettle;
+    private const string ForegroundTimerOwner = "foreground";
+
+    // Ustalenie foreground (AD-15): ostatnia obserwacja, jej timer, komendy okienne bez wyniku (cmdId → transitionId).
+    private ForegroundObservation? _observation;
+    private long _settleTimerId;
+    private long _settleTransition;
+    private readonly Dictionary<long, long> _pendingWindow = [];
+    private readonly HashSet<long> _reportCmds = [];
+    private bool _reportNeeded;
+    private bool _windowsChanged;
 
     /// <param name="foreground">Uchwyt shella i PID okna dla <see cref="ForegroundChanged"/>; bez niego okno jest rozpoznane tylko po <c>hwnd</c> aplikacji, a shell i dopasowanie po PID nie działają.</param>
     public Orchestrator(LoadedConfig config, TimeProvider time, IForegroundLookup? foreground = null)
@@ -67,6 +87,7 @@ public sealed partial class Orchestrator
 
         _time = time;
         _foreground = foreground;
+        _foregroundSettle = TimeSpan.FromMilliseconds(config.Settings.ForegroundSettleMs);
         _startingTimeout = TimeSpan.FromSeconds(config.Settings.StartingTimeout);
         _stoppingTimeout = TimeSpan.FromSeconds(config.Settings.StoppingTimeout);
         _apps = new List<AppState>(config.Apps.Apps.Count);
@@ -89,7 +110,10 @@ public sealed partial class Orchestrator
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        return WithManagedWindows(message switch
+        var transitionBefore = _transitionId;
+        _windowsChanged = false;
+        var windowResult = TakeWindowResult(message);
+        var result = WithManagedWindows(message switch
         {
             OrchestratorStarted => OnOrchestratorStarted(),
             SystemResumed => OnSystemResumed(),
@@ -106,6 +130,7 @@ public sealed partial class Orchestrator
             ForegroundChanged changed => OnForegroundChanged(changed),
             _ => OrchestratorResult.None,
         });
+        return ApplyForegroundPolicy(result, transitionBefore, windowResult);
     }
 
     /// <summary>

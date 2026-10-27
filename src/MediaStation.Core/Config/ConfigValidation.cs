@@ -522,6 +522,9 @@ public static class ConfigValidation
         }
     }
 
+    private const int MinForegroundSettleMs = 100;
+    private const int MaxForegroundSettleMs = 2000;
+
     private static void CheckSettings(Settings settings, FileErrors errors)
     {
         CheckPositive(settings.RatingPendingDays, JsonErrorPath.Property("$", "ratingPendingDays"), errors);
@@ -531,6 +534,13 @@ public static class ConfigValidation
         CheckPositive(settings.CdpReconnectTimeout, JsonErrorPath.Property("$", "cdpReconnectTimeout"), errors);
         CheckAtMost(settings.StartingTimeout, MaxTimeoutSeconds, "startingTimeout", errors);
         CheckAtMost(settings.StoppingTimeout, MaxTimeoutSeconds, "stoppingTimeout", errors);
+
+        if (settings.ForegroundSettleMs is < MinForegroundSettleMs or > MaxForegroundSettleMs)
+        {
+            errors.Add(
+                JsonErrorPath.Property("$", "foregroundSettleMs"),
+                $"wartość musi być z zakresu {MinForegroundSettleMs}–{MaxForegroundSettleMs}");
+        }
 
         if (settings.CdpConnectTimeout > 0
             && settings.StartingTimeout > 0

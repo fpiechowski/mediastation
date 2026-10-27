@@ -4,6 +4,7 @@
   "stoppingTimeout": 45,
   "cdpConnectTimeout": 15,
   "cdpReconnectTimeout": 30,
+  "foregroundSettleMs": 300,
   "update": {
     "repo": "fpiechowski/mediastation"
   }
