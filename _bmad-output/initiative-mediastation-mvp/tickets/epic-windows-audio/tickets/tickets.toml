@@ -139,3 +139,16 @@ after = []
 hitl = false
 risk = "medium"
 references = ["tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md, Uwagi użytkownika U3, Wyniki S19", "deferred-work.md, DW-45, DW-37", "architecture-mediastation/architecture-mediastation.md, AD-5 (Reguła audio to stan docelowy, Zamykanie aplikacji), AD-4, AD-14"]
+
+[[entry]]
+id = 12
+type = "bug"
+title = "Moonlight uruchomiony przez MediaStation zawiesza się na ustanawianiu połączenia"
+description = "Moonlight uruchomiony ręcznie poza MediaStation łączy się poprawnie, ale uruchomiony przez MediaStation kończy się zwisem na ustanawianiu połączenia z komputerem. Ticket rozdziela błąd startu procesu/harnessu od błędu powrotu po Home z ticketu 8."
+verify = "Na UM760 z tym samym hostem Sunshine ręczne uruchomienie i uruchomienie przez MediaStation kończą handshake i pokazują strumień; log porównawczy zawiera pełną linię polecenia, środowisko, katalog roboczy, PID, etap połączenia oraz brak timeoutu."
+covers = ["R2", "R8"]
+after = [8]
+hitl = false
+risk = "high"
+severity = "P1"
+references = ["tickets/epic-windows-audio/tickets/bug-moonlight-po-home-i-powrocie-stoi-na-uruchamianie-input-stre.md, rozdzielenie startu od powrotu po Home", "tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md, S6 i U1", "deferred-work.md, DW-43, DW-47, DW-48"]
