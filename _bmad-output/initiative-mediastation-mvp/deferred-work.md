@@ -105,7 +105,8 @@ location: tools/check-home-s10.ps1 Get-BrowserWindows
 source_spec: `tickets/epic-input/tickets/story-home-zawsze-zawieszony-ui-i-skrypt-s10-plan.md`
 severity: low
 reason: Niesprawdzone bez prawdziwego Edge i pilota; rozstrzygnie to przebieg na UM760 (porównanie z `EnumWindows` po klasie `Chrome_WidgetWin_1`). Nota 3.10: ticket zamienił `MainWindowHandle` na `EnumWindows` i liczy każde widoczne okno najwyższego poziomu klasy `Chrome_WidgetWin_*` jako osobne `pid:handle`, więc drugie okno w istniejącym procesie jest widoczne; rozstrzygnięcie na UM760 to nadal porównanie z żywym `msedge` po klasie i brak fałszywych `browser window` z tooltipów.
-status: open
+status: done 2026-10-27
+resolution: already resolved: tools/check-home-s10.ps1 enumerates windows via EnumWindows by Chrome_WidgetWin_* class and skips owned windows (Test-HasOwner, lines 235-264); UM760 acceptance 3 (S13, HEAD 08eaade) passed Edge 16/16 and 4/4, see DW-29 resolution (07a5cde).
 
 ### DW-14: Kontrola `target not foreground` po PID może odrzucić poprawny press Edge przy wielu procesach `msedge` lub innym profilu.
 origin: spec-deferred 94e635089e98
@@ -113,7 +114,8 @@ location: tools/check-home-s10.ps1 Measure-Press
 source_spec: `tickets/epic-input/tickets/story-home-zawsze-zawieszony-ui-i-skrypt-s10-plan.md`
 severity: low
 reason: Niesprawdzone na ALDER; potwierdzić na UM760 przy odbiorze epiku. Nota 3.10: ticket porównuje foreground z dokładnym uchwytem okna celu (nie z PID), a reguła żyje w czystym `Test-TargetForeground` pokrytym `-SelfTest`; dwa nazwane wyjątki powłoki to ghost `dwm` tylko dla `shell-hung` i okno desktopu `Progman`/`WorkerW` należące do procesu `explorer` tylko dla `desktop`. UM760 ma potwierdzić, że press na Edge przy wielu procesach/profilach przechodzi, a inne okno tego samego procesu nie.
-status: open
+status: done 2026-10-27
+resolution: already resolved: tools/check-home-s10.ps1 compares foreground with the exact target window handle in Test-TargetForeground (-SelfTest covered); UM760 acceptance 3 (S13, HEAD 08eaade) passed Edge 16/16 and 4/4, see DW-29 resolution (07a5cde).
 
 ### DW-15: `Get-BrowserWindows` i `Find-WindowProcess` nie odróżniają okien najwyższego poziomu z właścicielem (`GW_OWNER`) od okien bez właściciela.
 origin: review 3.10, 2026-10-22
@@ -121,7 +123,8 @@ location: tools/check-home-s10.ps1 — `Get-BrowserWindowIds` / `Find-WindowProc
 source_spec: `tickets/epic-input/tickets/story-refactor-sweep-plan.md`
 severity: medium (unverified)
 reason: Diff 3.10 zastąpił `Process.MainWindowHandle` (pierwsze widoczne okno najwyższego poziomu **bez właściciela**) enumeracją `EnumWindows`, która nie niesie informacji o właścicielu, a filtr klasy `Chrome_WidgetWin_*` przepuszcza także `Chrome_WidgetWin_0`, używane przez Chromium dla okien niebędących oknami przeglądarki. Gdyby w oknie pomiaru pojawiło się widoczne okno z właścicielem (tooltip/popup) albo widoczne `Chrome_WidgetWin_0`, S10 zaliczyłoby poprawny press jako `browser window` lub `target not foreground` (fałszywy FAIL) albo wybrało zły uchwyt celu. Osiągalności nie wykazano: na ALDER jedyne widoczne okno przeglądarki to `Chrome_WidgetWin_1` bez właściciela, a `Find-WindowProcess` dla MediaStation zwrócił ten sam uchwyt co `MainWindowHandle` w stanie normalnym i zawieszonym. Rozstrzyga przebieg S10 na UM760 z Edge i Moonlightem: porównanie zbioru `pid:handle` i uchwytu celu z `MainWindowHandle` oraz brak fałszywych `browser window`. Naprawa: pole `Owner` (`GetWindow(hwnd, GW_OWNER)`) w `Get-TopLevelWindows` i pomijanie okien z właścicielem w obu miejscach.
-status: open
+status: done 2026-10-27
+resolution: already resolved: tools/check-home-s10.ps1:235-243 Test-HasOwner reads the GW_OWNER field and is applied at lines 264, 299 and 385 (window enumeration, Select-EdgeWindow, Find-WindowProcess), so owned windows are skipped.
 
 ### DW-16: S10 nie odróżnia okien najwyższego poziomu z właścicielem (`GW_OWNER`) od okien bez właściciela: `EnumWindows` w `Get-BrowserWindowIds` i `Find-WindowProcess` przepuszcza widoczne okna z właścicielem
 
@@ -293,7 +296,8 @@ source_spec: `tickets/epic-home-screen/epic-home-screen-um760-acceptance.md`, S1
 severity: low
 reason: Przy aplikacji działającej od S5 skrypt zobaczył 9 snapshotów (rev 1–7 sprzed wybudzeń) i `seq 1 instead of 2`, choć oba wybudzenia dały poprawne `focusRequest{default}` z rosnącym `seq`; powtórka na świeżo uruchomionej aplikacji przeszła. Naprawa: liczyć snapshoty i `seq` względem ostatniego snapshotu przed pierwszym `powerSignalInjected`, albo odmówić startu z jasnym komunikatem, gdy aplikacja ma historię. Do tego czasu plany odbioru uruchamiają S18 na świeżej aplikacji.
 owner: epic-windows-audio, story 7 (Refactor sweep, zamknięta lista), 2026-10-26
-status: open
+status: done 2026-10-27
+resolution: already resolved: tools/inject-power.ps1:205-215 Get-WakeSnapshotProblems treats snapshots before the first powerSignalInjected marker as history and takes the last as baseline, with seq asserted as baseline+1 and +2.
 
 ### DW-35: Granica most/okno shella (4.3/4.11) i przyrost `tokens.css` (6 commitów) nie przeszły review na poziomie całej epiki.
 origin: retro epiki 4, 2026-10-26 (F5/A3)
