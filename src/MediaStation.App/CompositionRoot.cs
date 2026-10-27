@@ -216,7 +216,11 @@ public static class CompositionRoot
         var bridge = new ShellBridge(snapshot, log, app.Dispatcher, static () => Environment.TickCount64, intent => postsTo?.Post(intent));
         var window = new ShellWindow(bridge, WebView2UserDataDir, IconsDir, log);
         app.MainWindow = window;
+        // Jedyny wyjątek od R4 (AD-14, AD-15): pierwsze pokazanie shella przy starcie, bez Activate i Topmost;
+        // każde późniejsze wyniesienie shella robi WindowManager (`ShowShell`), a przed nim nie ma jeszcze uchwytu do wpisania.
+#pragma warning disable RS0030
         window.Show();
+#pragma warning restore RS0030
 
         // Przy błędzie configu Orchestrator nie startuje: shell dostaje ConfigError, a proces żyje.
         if (result.Config is not { } config)

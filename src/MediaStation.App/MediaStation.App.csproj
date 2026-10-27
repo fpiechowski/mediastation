@@ -14,6 +14,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
     <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.363" PrivateAssets="all" />
     <PackageReference Include="System.Management" Version="10.0.14" />
@@ -21,6 +22,8 @@
 
   <ItemGroup>
     <AdditionalFiles Include="Platform\System\NativeMethods.txt" />
+    <!-- R4 (AD-14, AD-15): wywołania okienne tylko w Platform/Window; RS0030 + TreatWarningsAsErrors łamią build. Wyjątek folderu: Platform/Window/.editorconfig. -->
+    <AdditionalFiles Include="BannedSymbols.txt" />
   </ItemGroup>
 
   <ItemGroup>
