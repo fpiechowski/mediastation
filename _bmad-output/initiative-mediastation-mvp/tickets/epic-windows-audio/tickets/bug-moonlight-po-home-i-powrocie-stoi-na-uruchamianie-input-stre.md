@@ -69,4 +69,4 @@ Nie zdiagnozowano w odbiorze; nie wiadomo, czy przyczyna jest w kodzie epiki, cz
 - Decision: poprawka nie może odejść od minimalizacji (R1, AD-5); jeśli tylko to naprawia strumień, build zatrzymuje się na kryterium 4 (2026-10-27).
 - Risk high: blokuje akceptację epiki (Done when 2).
 - Check beyond criteria (risk high): po poprawce Home nad Edge i Chrome dalej 4/4 (S2, S4), bo odblokowanie foreground jest wspólne.
-- Assumption: na maszynie budowy jest host Sunshine w LAN (192.168.0.64 z odbioru); bez niego reprodukcja jest `nie dotyczy` z powodem w planie, a strumień sprawdza ponowny odbiór na UM760.
+- Decision: host Sunshine 192.168.0.64 jest dostępny na maszynie budowy, więc reprodukcja i kryterium 1 idą na żywym strumieniu; potwierdzenie użytkownika (2026-10-27).
