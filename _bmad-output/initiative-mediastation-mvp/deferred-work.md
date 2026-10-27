@@ -369,3 +369,38 @@ source_spec: `plan-dw-decision-dw-41-home-in-shell-mode.md`
 severity: low
 reason: Orchestrator.Home.cs Foreground branch returns OrchestratorResult.None when Hwnd is null; pre-existing and outside DW-41's intent (no Foreground app).
 status: open
+
+### DW-43: Moonlight po Home i powrocie zawiesza się na „Uruchamianie input stream establishment…”, bez transmisji (log pokazuje poprawne komendy okienne).
+origin: odbiór epiki 5 na UM760, 2026-10-27, S6 (user: fail), `tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md`
+location: dev harness Moonlight (`Hosts/DevHarness/`) i przywrócenie okna Moonlight (`Platform/Window`), przyczyna niezbadana
+source_spec: `tickets/epic-windows-audio/epic-windows-audio.md`, Done when 2, R2
+severity: high
+reason: Za pierwszym OK strumień startuje; po Home (okno zminimalizowane) i ponownym OK wraca UI Moonlighta z zamrożonym komunikatem, także po ręcznym restarcie Moonlighta. Użytkownik uznał to za fail i nie zaakceptował epiki. Nie zdiagnozowano w odbiorze (nieznane, czy winny jest kod epiki, czy zachowanie Moonlight-qt po minimalizacji).
+owner: bmad-build (bug epiki 5), potem ponowny odbiór S6 i S18–S21
+status: open
+
+### DW-44: Po Alt+Tab ekran główny jest na wierzchu, ale tryb wejścia zostaje „aplikacja”, więc pilot i klawiatura go nie sterują do czasu Home.
+origin: odbiór epiki 5 na UM760, 2026-10-27, przerwa przed S18
+location: src/MediaStation.Core/Orchestrator (routing wejścia a foreground), AD-8
+source_spec: `tickets/epic-windows-audio/epic-windows-audio.md`, Notes (polityka `ForegroundChanged`, 2026-10-26)
+severity: medium
+reason: Zgodne z AD-8 (zmiana okna poza MediaStation nie zmienia trybu), ale użytkownik chce, żeby pilot działał także po Alt+Tab. To zmiana wymagań, nie błąd wykonania.
+owner: bmad-architecture (zmiana AD-8)
+status: open
+
+### DW-45: AudioRouter widzi tylko wyciszenia, które sam zainicjował; ręczne zmiany w mikserze Windows i Alt+Tab rozjeżdżają jego stan.
+origin: odbiór epiki 5 na UM760, 2026-10-27, S19 (1. podejście) i przerwa przed S18
+location: src/MediaStation.App/Platform/Audio/AudioRouterEngine.cs (ledger własnych wyciszeń)
+source_spec: `tickets/epic-windows-audio/epic-windows-audio.md`, R5, R6, Done when 4
+severity: medium
+reason: Po ręcznych zmianach w mikserze użytkownik miał ciszę mimo odciszonej reguły (Moonlight) i słyszał Edge razem ze streamem (po ręcznym odciszeniu Edge). W czystym stanie dźwięk działał (S19 powtórka, S20, S21, S23, S24). Do rozważenia: uzgadnianie ze stanem sesji audio przy każdym przejściu.
+owner: bmad-architecture
+status: open
+
+### DW-46: Kropka „działa w tle” przy zakładce Video jest w prawym górnym rogu pigułki; użytkownik woli ją wycentrowaną w pionie.
+origin: odbiór epiki 5 na UM760, 2026-10-27, S3
+location: web/shell (zakładka, `tab-running-dot`, `DESIGN.md`)
+source_spec: `tickets/epic-home-screen/epic-home-screen.md`, R2
+severity: low
+reason: Kosmetyka ekranu głównego z epiki 4, zauważona przy odbiorze epiki 5; nie blokuje.
+status: open
