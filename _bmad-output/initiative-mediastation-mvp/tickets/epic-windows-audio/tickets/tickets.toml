@@ -88,3 +88,44 @@ after = [1, 2, 3, 4, 5, 6]
 hitl = false
 risk = "low"
 references = ["deferred-work.md, DW-26, DW-34"]
+
+# ---- Po odbiorze na UM760 (2026-10-27, not accepted): U1–U3 z epic-windows-audio-um760-acceptance.md ----
+# 8 blokuje akceptację i idzie pierwszy. 9 i 10 czekają na decyzję bmad-architecture (AD-8, AD-15, AD-5 Audio); różny kod, mogą iść równolegle.
+
+[[entry]]
+id = 8
+type = "bug"
+title = "Moonlight po Home i powrocie stoi na „Uruchamianie input stream establishment…”"
+description = "U1 z odbioru (DW-43): pierwsze OK na kafelku PC uruchamia strumień, ale po Home i ponownym OK widać tylko UI Moonlighta z zamrożonym komunikatem, bez transmisji, także po ręcznym restarcie Moonlighta; log pokazuje poprawne komendy okienne. Reprodukcja, hipotezy i kryteria w pliku ticketu."
+verify = "Na maszynie z hostem Sunshine cztery cykle OK → Home → OK na kafelku PC pokazują za każdym razem działający strumień (potwierdza osoba), a log ma komendy okienne jak w S6; albo zapisany `Source conflict:` z dowodem, że przyczyna leży poza kodem epiki."
+covers = ["R2"]
+after = []
+hitl = true # obraz strumienia po powrocie potwierdza osoba
+risk = "high"
+references = ["tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md, Wyniki S6 i Uwagi użytkownika U1", "deferred-work.md, DW-43"]
+
+[[entry]]
+id = 9
+type = "story"
+title = "Pilot steruje tym, co jest na wierzchu, także po Alt+Tab"
+description = "U2 z odbioru (DW-44): po Alt+Tab ekran główny jest na wierzchu, ale tryb wejścia zostaje „aplikacja”, więc pilot i klawiatura nie sterują nim do czasu Home. Użytkownik chce, żeby routing wejścia szedł za oknem na wierzchu. To zmiana R3 i decyzji epiki z 2026-10-26; zakres (sam routing, czy też stan aplikacji i dźwięk) ustala decyzja AD-8/AD-15."
+verify = "`dotnet test` z testami nowej reguły `ForegroundChanged`; na bieżącej maszynie z dev harnessem Alt+Tab na shell daje sterowanie ekranem głównym z pilota bez Home, a Alt+Tab na okno aplikacji i na obce okno zachowuje się według nowej reguły AD-8 (log `foregroundChanged` i `inputRouting`)."
+covers = ["R3"]
+after = []
+hitl = false
+risk = "medium"
+unknown = "Czy po Alt+Tab za oknem na wierzchu idzie tylko routing wejścia, czy też stan aplikacji i dźwięk (sekwencja AD-5), i co przy obcym oknie? Rozstrzyga bmad-architecture (AD-8, AD-15)."
+references = ["tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md, Uwagi użytkownika U2", "deferred-work.md, DW-44", "architecture-mediastation/architecture-mediastation.md, AD-8, AD-15"]
+
+[[entry]]
+id = 10
+type = "story"
+title = "Dźwięk trzyma regułę MediaStation mimo ręcznych zmian w mikserze"
+description = "U3 z odbioru (DW-45): AudioRouter zna tylko wyciszenia, które sam zrobił, więc ręczna zmiana w mikserze Windows rozjeżdża stan (cisza mimo odciszonej reguły, tło słychać razem ze streamem). W czystym stanie dźwięk działa. Sposób uzgadniania ze stanem sesji ustala decyzja AD-5 (Audio)."
+verify = "`dotnet test` z testami uzgadniania reguły ze stanem sesji; na bieżącej maszynie z dev harnessem ręczne odciszenie aplikacji w tle i ręczne wyciszenie aplikacji na wierzchu w mikserze, potem Home i OK: słychać tylko aplikację na wierzchu (log `audioRuleApplied` i `audioSessionMuted`)."
+covers = ["R5", "R6"]
+after = []
+hitl = false
+risk = "medium"
+unknown = "Czy reguła MediaStation wygrywa z ręczną zmianą w mikserze i jak ją utrzymać: wymuszanie stanu wszystkich sesji drzewa przy każdym przejściu, nasłuch zmian sesji, czy uzgadnianie na żądanie? Rozstrzyga bmad-architecture (AD-5 Audio)."
+references = ["tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md, Uwagi użytkownika U3, Wyniki S19", "deferred-work.md, DW-45", "architecture-mediastation/architecture-mediastation.md, AD-5 (Audio)"]

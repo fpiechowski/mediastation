@@ -377,6 +377,7 @@ source_spec: `tickets/epic-windows-audio/epic-windows-audio.md`, Done when 2, R2
 severity: high
 reason: Za pierwszym OK strumień startuje; po Home (okno zminimalizowane) i ponownym OK wraca UI Moonlighta z zamrożonym komunikatem, także po ręcznym restarcie Moonlighta. Użytkownik uznał to za fail i nie zaakceptował epiki. Nie zdiagnozowano w odbiorze (nieznane, czy winny jest kod epiki, czy zachowanie Moonlight-qt po minimalizacji).
 owner: bmad-build (bug epiki 5), potem ponowny odbiór S6 i S18–S21
+ticket: `tickets/epic-windows-audio/tickets/tickets.toml` entry 8 (bug 5.8), 2026-10-27
 status: open
 
 ### DW-44: Po Alt+Tab ekran główny jest na wierzchu, ale tryb wejścia zostaje „aplikacja”, więc pilot i klawiatura go nie sterują do czasu Home.
@@ -386,6 +387,7 @@ source_spec: `tickets/epic-windows-audio/epic-windows-audio.md`, Notes (polityka
 severity: medium
 reason: Zgodne z AD-8 (zmiana okna poza MediaStation nie zmienia trybu), ale użytkownik chce, żeby pilot działał także po Alt+Tab. To zmiana wymagań, nie błąd wykonania.
 owner: bmad-architecture (zmiana AD-8)
+ticket: entry 9 w epic-windows-audio (5.9), czeka na decyzję bmad-architecture, 2026-10-27
 status: open
 
 ### DW-45: AudioRouter widzi tylko wyciszenia, które sam zainicjował; ręczne zmiany w mikserze Windows i Alt+Tab rozjeżdżają jego stan.
@@ -395,6 +397,7 @@ source_spec: `tickets/epic-windows-audio/epic-windows-audio.md`, R5, R6, Done wh
 severity: medium
 reason: Po ręcznych zmianach w mikserze użytkownik miał ciszę mimo odciszonej reguły (Moonlight) i słyszał Edge razem ze streamem (po ręcznym odciszeniu Edge). W czystym stanie dźwięk działał (S19 powtórka, S20, S21, S23, S24). Do rozważenia: uzgadnianie ze stanem sesji audio przy każdym przejściu.
 owner: bmad-architecture
+ticket: entry 10 w epic-windows-audio (5.10), czeka na decyzję bmad-architecture, 2026-10-27
 status: open
 
 ### DW-46: Kropka „działa w tle” przy zakładce Video jest w prawym górnym rogu pigułki; użytkownik woli ją wycentrowaną w pionie.
@@ -403,4 +406,5 @@ location: web/shell (zakładka, `tab-running-dot`, `DESIGN.md`)
 source_spec: `tickets/epic-home-screen/epic-home-screen.md`, R2
 severity: low
 reason: Kosmetyka ekranu głównego z epiki 4, zauważona przy odbiorze epiki 5; nie blokuje.
+ticket: `_bmad-output/backlog/bug-kropka-w-tle-przy-zakladce-nie-jest-wycentrowana-w-pionie.md` (backlog 5), 2026-10-27
 status: open
