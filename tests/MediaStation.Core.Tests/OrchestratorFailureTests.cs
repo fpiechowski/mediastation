@@ -268,9 +268,23 @@ public class OrchestratorFailureTests
 
     // ── Failed: co pokazuje, co ignoruje i jak z niego wyjść ──────────────────
 
+    [Fact]
+    public void Failed_app_does_not_stop_home_from_reasserting_the_shell()
+    {
+        var (orchestrator, _) = Started();
+        Foreground(orchestrator, "netflix");
+        orchestrator.Handle(new CdpLost("netflix"));
+        orchestrator.Handle(new ProcessExited("netflix"));
+
+        var result = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 2));
+
+        Assert.IsType<ShowShell>(Assert.Single(result.Commands));
+        var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(snapshot, "netflix"));
+    }
+
     [Theory]
     [InlineData("launch")]
-    [InlineData("home")]
     [InlineData("processExited")]
     [InlineData("cdpLost")]
     [InlineData("attached")]
@@ -284,7 +298,6 @@ public class OrchestratorFailureTests
         IOrchestratorMessage ignored = message switch
         {
             "launch" => new LaunchApp("netflix"),
-            "home" => new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 2),
             "processExited" => new ProcessExited("netflix"),
             "cdpLost" => new CdpLost("netflix"),
             _ => new AppWindowAttached("netflix", 0x77, 7),

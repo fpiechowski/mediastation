@@ -357,5 +357,15 @@ location: src/MediaStation.Core/Orchestrator (Home in shell mode)
 source_spec: `tickets/epic-windows-audio/tickets/story-edge-i-chrome-w-trybie-okna-z-6-1-i-moonlight-borderless-prz-plan.md`
 severity: medium
 reason: Observed on UM760 while building 5.5: with the app restored outside MediaStation, presses 2-4 of -Restore failed 3 of 4 until the script resumed the app through the product (OK on the tile). Epic note says "powrót daje Home".
-status: open
+status: done 2026-10-27
+resolution: resolved by sweep bundle dw-decision-dw-41
+resolution-undo: c53354fb5b41cdd93673be0e91c73922c9e0aaaf5e98332af8b6a188489cb9b7 2026-10-27 7374617475733a206f70656e
 decision: 2026-10-27 Home in shell mode re-asserts the shell — In OnHome, when no app is Foreground or Starting, emit ShowShell and, for Background apps with a known Hwnd, MinimizeWindow, without changing app state; add Orchestrator tests for Home in shell mode with a Background app and for no app at all, and check the epic-windows-audio -Restore scenario in the check script.
+
+### DW-42: Home on a Foreground app with no known Hwnd still returns no commands (no ShowShell).
+origin: spec-deferred c6eca4ee9cc4
+location: src/MediaStation.Core/Orchestrator/Orchestrator.Home.cs:58
+source_spec: `plan-dw-decision-dw-41-home-in-shell-mode.md`
+severity: low
+reason: Orchestrator.Home.cs Foreground branch returns OrchestratorResult.None when Hwnd is null; pre-existing and outside DW-41's intent (no Foreground app).
+status: open

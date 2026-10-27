@@ -39,7 +39,9 @@ public sealed partial class Orchestrator
     /// bez routingu i bez anulowania timeoutu, a okno, które pojawi się później, dostanie kompensację w
     /// <see cref="OnAppWindowAttached"/>. Home jest decyzją o pierwszym planie także wtedy, gdy nie ma czego chować
     /// (np. aplikacja w <c>Stopping</c>), więc zawsze podbija <c>transitionId</c>: restart podjęty wcześniej
-    /// nie wróci na wierzch po potwierdzonym stopie.
+    /// nie wróci na wierzch po potwierdzonym stopie. Gdy nic nie jest <c>Foreground</c> ani <c>Starting</c>,
+    /// Home w trybie shell ponownie potwierdza shell: <see cref="MinimizeWindow"/> dla okien <c>Background</c>
+    /// ze znanym <c>hwnd</c> i <see cref="ShowShell"/>, bez zmiany stanu aplikacji i bez routingu.
     /// </summary>
     private OrchestratorResult OnHome(ActionMessage action)
     {
@@ -66,11 +68,23 @@ public sealed partial class Orchestrator
             return new OrchestratorResult([mute, minimize, showShell, routing], Snapshot());
         }
 
-        if (!_apps.Exists(candidate => candidate.State == AppLifecycleState.Starting))
+        if (_apps.Exists(candidate => candidate.State == AppLifecycleState.Starting))
         {
-            return OrchestratorResult.None;
+            return new OrchestratorResult([new ShowShell(NextCmdId())], Snapshot());
         }
 
-        return new OrchestratorResult([new ShowShell(NextCmdId())], Snapshot());
+        // Shell jest już trybem, ale okno aplikacji mogło wrócić na wierzch poza MediaStation (Alt+Tab, skrypt):
+        // Home potwierdza shell na wierzchu i chowa znane okna Background, bez zmiany stanu aplikacji (DW-41).
+        var commands = new List<Command>();
+        foreach (var background in _apps.Where(candidate => candidate.State == AppLifecycleState.Background))
+        {
+            if (background.Hwnd is { } backgroundHwnd)
+            {
+                commands.Add(new MinimizeWindow(NextCmdId(), backgroundHwnd));
+            }
+        }
+
+        commands.Add(new ShowShell(NextCmdId()));
+        return new OrchestratorResult(commands, Snapshot());
     }
 }

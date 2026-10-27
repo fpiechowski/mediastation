@@ -35,16 +35,16 @@ public class OrchestratorHomeTests
     }
 
     [Fact]
-    public void Home_when_shell_is_on_top_is_ignored()
+    public void Home_in_shell_mode_with_no_app_only_reasserts_the_shell()
     {
         var (orchestrator, started) = Started();
 
         var result = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 2));
 
-        Assert.Empty(result.Commands);
-        Assert.Null(result.Snapshot);
-        var next = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
-        Assert.Equal(started.Rev + 1, next.Rev);
+        Assert.Equal(new ShowShell(4), Assert.Single(result.Commands));
+        var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
+        Assert.Equal(started.Rev + 1, snapshot.Rev);
+        Assert.Equal(AppLifecycleState.NotRunning, StateOf(snapshot, "netflix"));
     }
 
     /// <summary>
@@ -166,19 +166,26 @@ public class OrchestratorHomeTests
         Assert.Equal(AppLifecycleState.Foreground, StateOf(snapshot, "netflix"));
     }
 
+    /// <summary>
+    /// Okno <c>Background</c> wyciągnięte na wierzch poza MediaStation (Alt+Tab, skrypt): Home w trybie shell
+    /// chowa je ponownie i potwierdza shell, a stan aplikacji zostaje <c>Background</c> (DW-41).
+    /// </summary>
     [Fact]
-    public void Home_when_app_is_already_background_is_ignored()
+    public void Home_when_app_is_already_background_minimizes_it_again_and_shows_shell()
     {
         var (orchestrator, _) = Started();
         var background = Background(orchestrator, "netflix");
 
         var result = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 3));
 
-        Assert.Empty(result.Commands);
-        Assert.Null(result.Snapshot);
-        var next = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
-        Assert.Equal(background.Rev + 1, next.Rev);
-        Assert.Equal(AppLifecycleState.Background, StateOf(next, "netflix"));
+        Assert.Collection(
+            result.Commands,
+            command => Assert.IsType<MinimizeWindow>(command),
+            command => Assert.IsType<ShowShell>(command));
+        Assert.Equal(0x1A2B, Assert.IsType<MinimizeWindow>(result.Commands[0]).Hwnd);
+        var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
+        Assert.Equal(background.Rev + 1, snapshot.Rev);
+        Assert.Equal(AppLifecycleState.Background, StateOf(snapshot, "netflix"));
     }
 
     [Theory]

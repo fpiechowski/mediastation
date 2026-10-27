@@ -114,8 +114,7 @@ public class OrchestratorActionTests
         var result = orchestrator.Handle(home);
 
         Assert.Equal([home], result.Actions);
-        Assert.Empty(result.Commands);
-        Assert.Null(result.Snapshot);
+        Assert.IsType<ShowShell>(Assert.Single(result.Commands));
     }
 
     [Fact]

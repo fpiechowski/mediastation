@@ -158,14 +158,15 @@ public class OrchestratorStopTests
     public void Restart_decided_before_home_or_wake_in_stopping_loses_its_window(string newer)
     {
         var (orchestrator, _) = Started();
+        var shift = newer == "home" ? 1 : 0;
         Background(orchestrator, "netflix");
         orchestrator.Handle(new RestartApp("netflix"));
 
         if (newer == "home")
         {
             var home = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 3));
-            Assert.Empty(home.Commands);
-            Assert.Null(home.Snapshot);
+            Assert.IsType<ShowShell>(Assert.Single(home.Commands));
+            Assert.NotNull(home.Snapshot);
         }
         else
         {
@@ -180,11 +181,11 @@ public class OrchestratorStopTests
 
         Assert.Collection(
             stopped.Commands,
-            command => Assert.Equal(new ForgetProcessTree(17, 4321), command),
-            command => Assert.Equal(new StartApp(18, "netflix"), command),
-            command => Assert.Equal(new ScheduleTimer(19, 3, "netflix", T0.AddSeconds(30)), command),
-            command => Assert.Equal(new CancelTimer(20, 2), command),
-            command => AssertManaged(command, 21, 2));
+            command => Assert.Equal(new ForgetProcessTree(17 + shift, 4321), command),
+            command => Assert.Equal(new StartApp(18 + shift, "netflix"), command),
+            command => Assert.Equal(new ScheduleTimer(19 + shift, 3, "netflix", T0.AddSeconds(30)), command),
+            command => Assert.Equal(new CancelTimer(20 + shift, 2), command),
+            command => AssertManaged(command, 21 + shift, 2));
         var starting = Assert.IsType<ShellSnapshot>(stopped.Snapshot);
         Assert.Equal(AppLifecycleState.Starting, StateOf(starting, "netflix"));
 
@@ -192,10 +193,10 @@ public class OrchestratorStopTests
 
         Assert.Collection(
             attached.Commands,
-            command => Assert.Equal(new MuteProcessTree(22, 4321), command),
-            command => Assert.Equal(new MinimizeWindow(23, 0x1A2B), command),
-            command => Assert.Equal(new CancelTimer(24, 3), command),
-            command => AssertManaged(command, 25, 3, (0x1A2B, 4321)));
+            command => Assert.Equal(new MuteProcessTree(22 + shift, 4321), command),
+            command => Assert.Equal(new MinimizeWindow(23 + shift, 0x1A2B), command),
+            command => Assert.Equal(new CancelTimer(24 + shift, 3), command),
+            command => AssertManaged(command, 25 + shift, 3, (0x1A2B, 4321)));
         var background = Assert.IsType<ShellSnapshot>(attached.Snapshot);
         Assert.Equal(AppLifecycleState.Background, StateOf(background, "netflix"));
         Assert.Equal(starting.FocusRequest, background.FocusRequest);
