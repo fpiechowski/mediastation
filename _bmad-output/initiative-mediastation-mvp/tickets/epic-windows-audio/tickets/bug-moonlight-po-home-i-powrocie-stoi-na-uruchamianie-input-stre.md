@@ -6,7 +6,7 @@ parent: epic-windows-audio
 covers: [R2]
 after: []
 assignee: ""
-refined: false
+refined: true
 hitl: true
 risk: high
 severity: P1
@@ -16,7 +16,7 @@ severity: P1
 
 ## Description
 
-Pierwsze OK na kafelku PC uruchamia strumień z hosta. Po Home (okno Moonlighta schowane na pasku) i ponownym OK na kafelku wraca okno Moonlighta, ale bez transmisji: widać tylko UI Moonlighta z zamrożonym komunikatem „Uruchamianie input stream establishment…”. Tak samo po ręcznym restarcie Moonlighta. Powinno być: po powrocie do kafelka PC strumień działa dalej, za każdym razem (R2, Done when 2). To jedyny powód, dla którego epika nie została zaakceptowana.
+Pierwsze OK na kafelku PC uruchamia strumień z hosta. Po Home (okno Moonlighta schowane na pasku) i ponownym OK na kafelku wraca okno Moonlighta, ale bez transmisji: widać tylko UI Moonlighta z zamrożonym komunikatem „Uruchamianie input stream establishment…”. Tak samo po ręcznym restarcie Moonlighta. Powinno być: po powrocie do kafelka PC strumień działa dalej, za każdym razem (R2, Done when 2). To jedyny powód, dla którego epika nie została zaakceptowana. Osoba potwierdza obraz strumienia po każdym powrocie.
 
 ## Reproduction
 
@@ -41,8 +41,8 @@ Nie zdiagnozowano w odbiorze; nie wiadomo, czy przyczyna jest w kodzie epiki, cz
 
 1. **Strumień działa po powrocie**
    **Given** dev harness, kafelek PC i osiągalny host Sunshine
-   **When** osoba robi cztery cykle: OK na kafelku PC, Home, OK na kafelku PC
-   **Then** po każdym powrocie widać działający strumień (potwierdza osoba), a log każdego cyklu ma `MinimizeWindow` i `ShowShell` po Home oraz `ActivateWindow` po OK, wszystkie `completed`, bez nowego `appWindowAttached` i bez `warn`/`error`
+   **When** po pierwszym OK na kafelku PC osoba cztery razy robi Home, potem OK na kafelku PC
+   **Then** po każdym powrocie widać działający strumień (potwierdza osoba), a log każdego cyklu ma `MinimizeWindow` i `ShowShell` po Home oraz `ActivateWindow` po OK, wszystkie `completed`; `appWindowAttached` dokładnie 1× w całym przebiegu i bez `warn`/`error` (dozwolone jak w S6: `appIconMissing`, `devHarnessEnabled`)
 2. **Opuszczone okno Moonlighta zostaje zminimalizowane**
    **Given** strumień schowany przez Home
    **When** sprawdzamy jego okno
@@ -51,10 +51,10 @@ Nie zdiagnozowano w odbiorze; nie wiadomo, czy przyczyna jest w kodzie epiki, cz
    **Given** zestaw testów
    **When** się wykonuje
    **Then** test, który nie przechodzi na defekcie i przechodzi po poprawce, pokrywa znalezioną przyczynę (w części poza Win32), a jeden test pokrywa każdy powiązany przypadek, którego poprawka dotknęła
-4. **Albo: przyczyna jest poza kodem epiki, z dowodem**
+4. **Albo: przyczyna jest poza kodem epiki albo zmiana nie jest potrzebna, z dowodem**
    **Given** reprodukcja
-   **When** diagnoza pokazuje, że Moonlight sam zrywa strumień przy minimalizacji albo przy utracie fokusu
-   **Then** w Notes epiki jest `Source conflict:` z dowodem (log Moonlighta, przebieg z i bez poszczególnych kroków), a decyzja trafia do `bmad-architecture`; to zastępuje 1–3
+   **When** diagnoza pokazuje, że Moonlight sam zrywa strumień przy minimalizacji albo przy utracie fokusu, albo reprodukcja na bieżącym kodzie nie występuje
+   **Then** w pierwszym przypadku w Notes epiki jest `Source conflict:` z dowodem (log Moonlighta, przebieg z i bez poszczególnych kroków), a decyzja trafia do `bmad-architecture`; w drugim dowód (przebieg z kryterium 1) jest w planie; to zastępuje 1–3
 
 ## References
 
@@ -67,5 +67,6 @@ Nie zdiagnozowano w odbiorze; nie wiadomo, czy przyczyna jest w kodzie epiki, cz
 
 - Decision: `hitl: true`, bo obraz strumienia po powrocie potwierdza osoba; log nie odróżnia działającego strumienia od zamrożonego UI (2026-10-27).
 - Decision: poprawka nie może odejść od minimalizacji (R1, AD-5); jeśli tylko to naprawia strumień, build zatrzymuje się na kryterium 4 (2026-10-27).
+- Risk high: blokuje akceptację epiki (Done when 2).
 - Check beyond criteria (risk high): po poprawce Home nad Edge i Chrome dalej 4/4 (S2, S4), bo odblokowanie foreground jest wspólne.
 - Assumption: na maszynie budowy jest host Sunshine w LAN (192.168.0.64 z odbioru); bez niego reprodukcja jest `nie dotyczy` z powodem w planie, a strumień sprawdza ponowny odbiór na UM760.
