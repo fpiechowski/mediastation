@@ -47,3 +47,4 @@ Okno OSK w `Shell/`, tryb `osk` w InputHub, `TextSink` (`web` w BrowserHost, `fo
 - Waits on epic-browserhost because: story 1 ustala tryb okna, od którego zależy nakładka; `Input.insertText`.
 - Waits on epic-netflix-dpad because: `textFocus` z drivera i obsługa `osk` w PageRuntime.
 - Decision: ledger DW-6, DW-10, DW-11, DW-17, DW-22 i DW-25 przypisane tej epice; treść jest w `deferred-work.md` (refinement epiki 4, 2026-10-26).
+- Update: spike 6.1 (`2ea151f`, 2026-10-27, UM760) rozstrzygnął tryb okna przeglądarki: `--kiosk` (AD-1), a źródło wersji poza CDP: `FileVersion` binarki i `Last Version` w `user-data-dir` (AD-13). Pytania o tryb okna w tych Notes są zamknięte; DW-38 (2026-10-27). Otwarte zostaje pytanie o nakładkę OSK nad pełnoekranowym Edge w `--kiosk` (DW-40).

@@ -319,7 +319,8 @@ location: src/MediaStation.App/Platform/Audio/AudioRouterEngine.cs
 source_spec: `tickets/epic-windows-audio/tickets/story-audiorouter-wyciszenie-drzewa-procesow-od-rootpid-i-nowe-ses-plan.md`
 severity: medium
 reason: ISimpleAudioVolume mute persists for the life of the browser session; after supervised restart and adoption, UnmuteProcessTree finds no ledger entries. Settle by deciding in story 3 whether an explicit Unmute forces unmute of in-tree sessions outside the ledger.
-status: open
+status: done 2026-10-27
+resolution: story 5.3 (`b955fc4`): adopcja wysyła `MuteProcessTree`, a silnik przy wyciszaniu sesji spoza rejestru zapisuje ją w rejestrze (`AudioRouterEngine.Mute`), więc następne `UnmuteProcessTree` ją odcisza; sprawdzone w kodzie przez PO.
 
 ### DW-38: Notatki w plikach ticketów (epic-browserhost, epic-osk, epic-windows-audio) nadal opisują tryb okna i źródło wersji jako otwarte pytania.
 origin: spec-deferred 2373b289ca6d
@@ -327,7 +328,8 @@ location: tickets/epic-browserhost/epic-browserhost.md:43-44
 source_spec: `tickets/epic-browserhost/tickets/spike-tryb-okna-przegladarki-i-zrodo-wersji-poza-cdp-plan.md`
 severity: low
 reason: Edge-case-hunter wskazał epic-browserhost.md (Notes: dwa Open question), epic-osk.md i epic-windows-audio.md ("czeka na story 1"). Workflow zabrania zapisu w plikach ticketów, więc to zadanie dla Sofii po oznaczeniu 6.1 jako done.
-status: open
+status: done 2026-10-27
+resolution: Update z rozstrzygnięciem AD-1/AD-13 dopisany w Notes epic-browserhost, epic-osk i epic-windows-audio.
 
 ### DW-39: Gdy BrowserHost padnie po starcie przeglądarki, a przed zalogowaniem BrowserVersionChanged, następny start widzi from==to i zmiana wersji ginie.
 origin: spec-deferred 7a8458976315
