@@ -12,6 +12,12 @@ internal static class HarnessMoonlight
     /// <summary>Zmienna ze ścieżką do <c>Moonlight.exe</c>; brak albo nieistniejący plik to <c>moonlightNotFound</c>.</summary>
     public const string ExeEnvVarName = "MEDIASTATION_HARNESS_MOONLIGHT";
 
+    /// <summary>
+    /// Klasa okna strumienia (SDL). Moonlight-qt najpierw pokazuje okno łączenia Qt (<c>Qt6…QWindowIcon</c>, „Uruchamianie
+    /// input stream establishment…”), które po starcie strumienia się ukrywa; tylko okno SDL niesie obraz (bug 5.8).
+    /// </summary>
+    public const string StreamWindowClass = "SDL_app";
+
     /// <summary>Argumenty startu: <c>stream &lt;host&gt; &lt;app&gt;</c> w trybie borderless z wyciszeniem po utracie fokusu.</summary>
     public static IReadOnlyList<string> BuildArguments(string host, string app)
     {

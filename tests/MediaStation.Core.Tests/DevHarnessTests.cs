@@ -184,13 +184,29 @@ public class DevHarnessTests
     }
 
     [Fact]
-    public void Launch_window_class_is_browser_class_for_web_and_any_for_moonlight()
+    public void Launch_window_class_is_browser_class_for_web_and_stream_class_for_moonlight()
     {
         var web = new WebApp("w", AppCategory.Video, "W", "w.png", "svc", BrowserKind.Edge, 9222);
         var moon = new MoonlightApp("m", AppCategory.Game, "M", "m.png", "desktop", "Desktop");
 
         Assert.Equal("Chrome_WidgetWin_1", HarnessLaunch.WindowClassOf(web));
-        Assert.Null(HarnessLaunch.WindowClassOf(moon));
+        Assert.Equal("SDL_app", HarnessLaunch.WindowClassOf(moon));
+    }
+
+    [Fact]
+    public void Moonlight_picker_skips_the_qt_connecting_window_and_waits_for_the_sdl_stream_window()
+    {
+        var moon = new MoonlightApp("m", AppCategory.Game, "M", "m.png", "desktop", "Desktop");
+        var moonClass = HarnessLaunch.WindowClassOf(moon);
+        WindowInfo qt = new(1, 10, "Qt6120QWindowIcon", Visible: true, HasOwner: false);
+        WindowInfo sdl = new(2, 10, "SDL_app", Visible: true, HasOwner: false);
+
+        // Pierwsze ~5 s strumienia widać tylko okno Qt: nie jest oknem aplikacji, więc nic nie jest podpinane.
+        Assert.Null(WindowTreePicker.Pick([qt], Tree, moonClass));
+
+        // Po starcie strumienia okno Qt jest ukryte albo dalej widoczne: wybór zawsze pada na okno SDL.
+        Assert.Equal(2L, WindowTreePicker.Pick([qt, sdl], Tree, moonClass)?.Hwnd);
+        Assert.Equal(2L, WindowTreePicker.Pick([qt with { Visible = false }, sdl], Tree, moonClass)?.Hwnd);
     }
 
     [Fact]

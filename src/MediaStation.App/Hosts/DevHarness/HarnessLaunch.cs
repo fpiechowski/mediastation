@@ -8,9 +8,12 @@ namespace MediaStation.App.Hosts.DevHarness;
 /// <summary>Czyste decyzje hosta harnessu zależne od typu wpisu: klasa okna głównego i wybór procesów do adopcji.</summary>
 internal static class HarnessLaunch
 {
-    /// <summary>Klasa okna głównego: przeglądarka ma <c>Chrome_WidgetWin_1</c>, Moonlight (SDL/Qt) dowolną (<c>null</c>).</summary>
+    /// <summary>
+    /// Klasa okna głównego: przeglądarka ma <c>Chrome_WidgetWin_1</c>, Moonlight okno strumienia SDL
+    /// (<see cref="HarnessMoonlight.StreamWindowClass"/>), a nie okno łączenia Qt, które znika po starcie strumienia.
+    /// </summary>
     public static string? WindowClassOf(AppEntry? app) =>
-        app is MoonlightApp ? null : WindowTreePicker.BrowserWindowClass;
+        app is MoonlightApp ? HarnessMoonlight.StreamWindowClass : WindowTreePicker.BrowserWindowClass;
 
     /// <summary>PID-y kandydatów do adopcji: Moonlight po <c>host</c>/<c>app</c>, reszta po profilu <c>profiles\&lt;id&gt;</c>.</summary>
     public static IReadOnlyList<int> MatchingRootsFor(

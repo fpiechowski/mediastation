@@ -408,3 +408,18 @@ severity: low
 reason: Kosmetyka ekranu głównego z epiki 4, zauważona przy odbiorze epiki 5; nie blokuje.
 ticket: `_bmad-output/backlog/bug-kropka-w-tle-przy-zakladce-nie-jest-wycentrowana-w-pionie.md` (backlog 5), 2026-10-27
 status: open
+
+### DW-47: Production Moonlight host (epic-moonlight-native) must pick the SDL stream window (`SDL_app`), not the first visible window of the process, or it reproduces bug 5.8.
+origin: spec-deferred dccc73e9da61
+location: src/MediaStation.App/Hosts/DevHarness/HarnessMoonlight.cs:StreamWindowClass
+source_spec: `tickets/epic-windows-audio/tickets/bug-moonlight-po-home-i-powrocie-stoi-na-uruchamianie-input-stre-plan.md`
+severity: medium
+reason: Moonlight-qt shows a Qt connecting window (`Qt6120QWindowIcon`) for ~4-6 s before the `SDL_app` stream window; the dev harness fix is in `Hosts/DevHarness` only. Blind hunter finding; the future host does not exist yet.
+status: open
+
+### DW-48: With only a `game` category tile in apps.json the injected OK did not start the tile (restore pass 0/4, no StartApp); cause not diagnosed.
+origin: spec-deferred dd29815a18e8
+location: tools/check-home-s10.ps1:New-RestoreAppsJson
+source_spec: `tickets/epic-windows-audio/tickets/bug-moonlight-po-home-i-powrocie-stoi-na-uruchamianie-input-stre-plan.md`
+reason: Seen on UM760 2026-10-27 with the generated one-tile apps.json (category `game`): `action ok` logged, no start for 40 s; the same tile in `video` starts at once. Could be shell default focus with a lone `game` row; check with a `game`-only config and OK from a fresh start. Unverified.
+status: open

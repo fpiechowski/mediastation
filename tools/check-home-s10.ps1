@@ -481,10 +481,12 @@ function New-RestoreAppsJson {
     )
 
     # One tile per target. The desktop target uses an Edge tile: the app only has to exist before MinimizeAll.
+    # Every tile is in the `video` category: with a lone `game` tile the injected OK did not start it (0/4, no StartApp), so the
+    # moonlight target never ran; a lone `game` category is not what this pass checks (bug 5.8).
     $id = "restore-$Target"
     switch ($Target) {
         'moonlight' {
-            $entry = [ordered]@{ type = 'moonlight'; id = $id; category = 'game'; title = 'Restore'; icon = 'restore.png'; host = $MoonlightHostName; app = $MoonlightAppName }
+            $entry = [ordered]@{ type = 'moonlight'; id = $id; category = 'video'; title = 'Restore'; icon = 'restore.png'; host = $MoonlightHostName; app = $MoonlightAppName }
         }
         'chrome' {
             $entry = [ordered]@{ type = 'web'; id = $id; category = 'video'; title = 'Restore'; icon = 'restore.png'; service = 'netflix'; browser = 'chrome'; cdpPort = 9222 }
