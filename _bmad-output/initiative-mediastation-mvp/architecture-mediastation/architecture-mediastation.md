@@ -120,18 +120,29 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 - **Prevents:** ukryte decyzje produktowe w warstwie Windows lub CDP; nieskorelowane wyniki
 - **Rule:**
   - Każdy Command ma `cmdId`. Wykonawca odpowiada `CommandCompleted{cmdId}` albo `CommandFailed{cmdId, errorCode}` (`ErrorCode` to enum w Core) i raportuje fakty jako Events (`ProcessExited`, `CdpLost`, `ForegroundChanged`…).
-  - Wykonawca nie zmienia aktywnej aplikacji, nie wycisza z własnej inicjatywy, nie wywołuje innych wykonawców i nie przepuszcza wyjątków przez granicę portu.
+  - Wykonawca nie zmienia aktywnej aplikacji, nie wycisza z własnej inicjatywy, nie wywołuje innych wykonawców i nie przepuszcza wyjątków przez granicę portu. Utrzymywanie reguły audio zadanej Commandem (poprawka zmian z miksera, AD-5) nie jest własną inicjatywą.
   - Tylko BrowserHost rozmawia z CDP: jeden klient CDP na przeglądarkę.
 
 ### AD-5: Kolejność przy przełączaniu aplikacji
 
 - **Binds:** Orchestrator, AppHosts, WindowManager, AudioRouter
-- **Prevents:** dźwięk z tła, okno ukryte zamiast zminimalizowanego, utrata licencji przy wznowieniu
+- **Prevents:** dźwięk z tła, okno ukryte zamiast zminimalizowanego, utrata licencji przy wznowieniu; dwie sekwencje przełączania (Home/kafelek i Alt+Tab) o różnych skutkach; stan audio rozjechany z mikserem Windows (cisza mimo odciszenia, tło grające ze streamem)
 - **Rule:**
-  - Opuszczanie aplikacji: `pause` (web, przez stronę) → `mute` drzewa procesów → `minimize`. **Nigdy `SW_HIDE`** dla przeglądarki [ADOPTED].
+  - Opuszczanie aplikacji: `pause` (web, przez stronę) → `mute` drzewa procesów → `minimize`. **Nigdy `SW_HIDE`** dla przeglądarki [ADOPTED]. `minimize` nie aktywuje innego okna (`SW_SHOWMINNOACTIVE`), więc nie kradnie okna wybranego przez użytkownika i nie wywołuje fałszywego `ForegroundChanged`.
+  - **Zamykanie aplikacji:** `unmute` drzewa → `prepareClose` / zamknięcie (AD-10). Windows zapamiętuje wyciszenie sesji aplikacji i nowa instancja je dziedziczy, także poza MediaStation, więc wyciszenie musi zniknąć, zanim zniknie proces. Zamknięcie MediaStation odcisza każde drzewo z regułą.
   - Aktywacja: `restore` → foreground z odblokowaniem (Alt lub `AttachThreadInput`) [ADOPTED] → `unmute`.
+  - **Przełączenie z zewnątrz [decyzja 2026-10-27, odbiór epiki 5 na UM760, U2/DW-44]:** ustalona zmiana foreground (AD-15) uruchamia tę samą sekwencję bez kroków okiennych, które użytkownik już wykonał. Właściciel `shell`: opuszczenie aplikacji `Foreground` (`pause` → `mute` → `minimize`, bez `ShowShell`), tryb `shell`. Właściciel `app` X w `Background`: opuszczenie poprzedniej aplikacji `Foreground` (jeśli jest), potem aktywacja X bez `restore` i bez foreground (`unmute`, tryb `app`). W trybie `osk` przełączenie z zewnątrz zaczyna się od `HideOsk` (i `osk{active:false}` dla strony, AD-7, AD-9), tak jak Home, więc tekst nie trafi do nowego okna na wierzchu. Wznowienie odtwarzania nadal robi użytkownik.
   - Wznowienie odtwarzania nie jest automatyczne: robi je użytkownik przez OK. Ścieżka: `action{ok}` (AD-8), który driver na zapauzowanym `/watch` zamienia na `video.play()`. Przy `page-error` driver przeładowuje `/watch/<id>` [ADOPTED].
   - Audio: słychać tylko aktywną aplikację. AudioRouter wycisza całe drzewo procesów od `rootPid` (AD-15), z `IChannelAudioVolume` jako fallbackiem, i ponawia regułę, gdy w drzewie powstanie nowa sesja audio.
+  - **Reguła audio to stan docelowy i wygrywa z mikserem Windows [decyzja 2026-10-27, odbiór epiki 5 na UM760, U3/DW-45]:**
+    - flaga wyciszenia każdej sesji w drzewie z regułą jest równa regule, w obie strony. `UnmuteProcessTree` odcisza każdą sesję drzewa, także wyciszoną poza AudioRouterem (mikser, poprzednia instancja; zastępuje „odciszam tylko to, co sam wyciszyłem” z DW-37);
+    - każdy skan odczytuje rzeczywisty stan sesji drzew z regułą i poprawia różnicę. Skan idzie przy każdej komendzie, przy powiadomieniu o nowej sesji i urządzeniu oraz okresowo co ~1 s, dopóki istnieje jakakolwiek reguła. Okres jest gwarancją (zmiana w mikserze cofnięta w ok. 1 s), a powiadomienia o zmianie głośności sesji mogą go tylko skracać;
+    - własne zmiany AudioRouter ustawia z własnym GUID-em kontekstu zdarzenia, a powiadomienia z tym GUID-em nie wywołują skanu, więc nie ma pętli;
+    - poprawka sesji zmienionej z zewnątrz daje wpis `audioSessionOverridden{ rootPid, pid, muted }` (raz na sesję i wartość reguły, bez zalewu logu, gdy aplikacja sama przestawia swoją sesję), a nie Event Core: to utrzymanie reguły zadanej Commandem, nie decyzja wykonawcy (AD-4). Skan działa na wątku AudioRoutera (AD-2, AD-14);
+    - **fallback `IChannelAudioVolume`** (sesja bez `ISimpleAudioVolume`): „wyciszona” znaczy wszystkie kanały = 0. AudioRouter pamięta poziomy sprzed wyciszenia tylko w pamięci, a przy odciszeniu bez zapamiętanych poziomów (np. po awarii poprzedniej instancji) ustawia kanały na 1.0. Zmianę takiej sesji z zewnątrz zgłasza `OnChannelVolumeChanged`, nie `OnSimpleVolumeChanged`;
+    - **koniec reguły odcisza:** gdy reguła drzewa znika (`ForgetProcessTree`, śmierć korzenia, zamknięcie MediaStation), AudioRouter raz odcisza każdą sesję ostatnio przypisaną do tego drzewa, więc przeżywający potomek nie zostaje wyciszony na zawsze. Po awarii MediaStation wyciszenie odziedziczone przez nową instancję aplikacji poprawia reguła następnej instancji (adopcja, aktywacja); poza MediaStation to zaakceptowane ryzyko (Deferred);
+    - callbacki powiadomień Core Audio tylko zlecają skan wątkowi AudioRoutera i niczego nie blokują;
+    - poziom głośności sesji, głośność systemu (endpoint) i sesje spoza drzew z regułą (dźwięki systemu, obce aplikacje) należą do użytkownika i AudioRouter ich nie dotyka. Wyciszenie aktywnej aplikacji w mikserze wraca w ok. 1 s; do ściszenia służy głośność systemu.
   - Moonlight startuje z `--display-mode borderless --mute-on-focus-loss` [ADOPTED], a AudioRouter i tak obejmuje go regułą.
 
 ### AD-6: Page bundle = PageRuntime + ServiceDriver, niezależny od transportu [ADOPTED hedge]
@@ -183,7 +194,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 ### AD-8: Wejście = Actions, routing z lokalną kopią trybu
 
 - **Binds:** InputHub, Orchestrator, ShellBridge, Shell UI, OSK, PageRuntime
-- **Prevents:** dwie ścieżki D-pada w webie; dwa źródła stanu AppMenu (Shell i Orchestrator) i AppMenu, którego Home nie zamyka; hook czekający na Orchestrator (Windows usuwa hook po `LowLevelHooksTimeout`); zawieszone klawisze; podwójne Actions; pętla własnych `SendInput`; UI czytający surowe klawisze; powtórzenie zaobserwowanego na UM760 milczenia hooka przy rejestracji Raw Input klawiatury w tym samym procesie; przycisk Klawiatura bez żadnego przycisku pilota z VK; podwójna Action Home/Back przez mapowanie ich usage HID obok VK
+- **Prevents:** dwie ścieżki D-pada w webie; dwa źródła stanu AppMenu (Shell i Orchestrator) i AppMenu, którego Home nie zamyka; hook czekający na Orchestrator (Windows usuwa hook po `LowLevelHooksTimeout`); zawieszone klawisze; podwójne Actions; pętla własnych `SendInput`; UI czytający surowe klawisze; powtórzenie zaobserwowanego na UM760 milczenia hooka przy rejestracji Raw Input klawiatury w tym samym procesie; przycisk Klawiatura bez żadnego przycisku pilota z VK; podwójna Action Home/Back przez mapowanie ich usage HID obok VK; pilot martwy po Alt+Tab, bo `mode` nie pasuje do okna na wierzchu
 - **Rule:**
   - InputHub zamienia źródła na **Actions** `{ kind: Up|Down|Left|Right|Ok|Back|Home|Keyboard, phase: press|repeat|long, source, tsMono }`. Nie ma `kind` dla AppMenu: AppMenu otwiera Shell z OK (reguła AppMenu niżej), więc `ActionKind.AppMenu` znika z kontraktu, a `"appMenu"` w `input.json` jest odrzucane jak każda nieznana wartość enumu. `Keyboard` daje przycisk pilota z `input.json` (wybrany w `--calibrate-input`) i klawisz konfigurowalny dla klawiatury i pada.
   - **Jedno naciśnięcie daje jedną Action.** Wyzwalaczem jest VK z hooka LL, a Raw Input służy tylko do identyfikacji urządzenia. Jedyny wyjątek to wyzwalacz HID usage dla `Keyboard` (reguła niżej). Autorepeat systemu nie daje kolejnej Action.
@@ -209,7 +220,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
     - **Nasze lub zarządzane** to shell, OSK i okna z `AppWindowAttached` (AD-15), dopasowane po `hwnd` najwyższego okna (`GA_ROOT`) foreground, a gdy to nie pasuje, po `rootPid`. Okno otwarte przez użytkownika poza Orchestratorem nie jest zarządzane.
     - Orchestrator wysyła zbiór komendą `SetManagedWindows{ oskHwnd?, apps[{ hwnd, rootPid }], epoch }` (własny licznik `epoch`, przyjmowany tylko gdy większy), a InputHub trzyma lokalną kopię (`ManagedWindows`). Uchwytu shella nie niesie komenda: Core go nie zna, więc App wpisuje go sam (`ManagedWindows.SetShell`) po utworzeniu okna. **Hook sprawdza foreground sam przy key-down** (`GetForegroundWindow` i lookup w kopii), bez czekania na Orchestrator i bez WinEvent, żeby nie było wyścigu po Alt+Tab. Key-up idzie za decyzją key-down. Foreground nieznane lub chwilowe (brak okna, secure desktop) liczy się jako obce.
     - Pad XInput jest odpytywany i nie połyka, a jego Actions podlegają tej samej bramce: kombinacja `gamepadHome` poza naszymi oknami nic nie robi [ASSUMPTION].
-    - `mode` opisuje stan MediaStation i nie zmienia się, gdy użytkownik przełączy okno; bramka tylko rozstrzyga, czy tabela poniżej w ogóle obowiązuje.
+    - **`mode` idzie za ustalonym oknem na wierzchu [decyzja 2026-10-27, odbiór epiki 5 na UM760, U2/DW-44; zastępuje „`mode` nie zmienia się, gdy użytkownik przełączy okno”].** Gdy po Alt+Tab na wierzchu ustali się shell albo okno aplikacji zarządzanej, Orchestrator robi przełączenie z zewnątrz (AD-5, AD-15) i wysyła `SetInputRouting` dla nowego trybu, więc pilot steruje oknem na wierzchu bez Home. Okno obce nie zmienia `mode`, stanu ani dźwięku. Bramka foreground się nie zmienia: nad obcym oknem klawisze przechodzą bez Action, Home z `remote` działa. Między Alt+Tab a ustaleniem (AD-15) obowiązuje poprzedni `mode`.
   - Tabela routingu (obowiązuje przy foreground nasze lub zarządzane; Home z `remote` także poza nim):
 
     | Tryb / typ aktywnej aplikacji | D-pad, OK | Back | Home | Keyboard | Mysz/żyroskop |
@@ -294,7 +305,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
       - `moonlight`: `{ host, app }`;
       - `native`: `{ exe, args }`.
     - `input.json` zawiera mapowanie wejścia.
-    - `settings.json` zawiera wartości polityk, m.in. `ratingPendingDays` (domyślnie 7), `cdpReconnectTimeout` (domyślnie 30 s) i pozostałe timeouty.
+    - `settings.json` zawiera wartości polityk, m.in. `ratingPendingDays` (domyślnie 7), `cdpReconnectTimeout` (domyślnie 30 s), `foregroundSettleMs` (domyślnie 300, zakres 100–2000, AD-15) i pozostałe timeouty.
   - `appId` to jedyny identyfikator aplikacji w całym systemie: profil `profiles\<appId>`, logi, stan.
   - `cdpPort` mieści się w zakresie 9220–9239 i jest unikalny.
   - Walidacja przy starcie. Błąd konfiguracji daje czytelny ekran błędu w shellu, a nie crash.
@@ -373,17 +384,25 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
   - Commands są fire-and-forget. Orchestrator nigdy nie czeka (`await`) w handlerze i nie wykonuje blokujących wywołań Win32 na swoim wątku.
   - Każde przełączenie ma `transitionId`, a nowsza decyzja zastępuje poprzednią. Wyniki ze starego `transitionId` są ignorowane, a gdy trzeba, Orchestrator wysyła komendy kompensujące (np. `minimize` dla aplikacji, która dokończyła start po Home).
   - Hosty nigdy same nie przywracają okna ani nie przenoszą go na wierzch, także po starcie.
-  - Czas wchodzi do Core wyłącznie przez `TimeProvider`. Każdy timeout (Back, `Starting`, potwierdzenie `pause`, `prepareClose`, dobowe sprawdzenie `pending`) to `TimerElapsed`, zaplanowany przez Orchestrator.
+  - Czas wchodzi do Core wyłącznie przez `TimeProvider`. Każdy timeout (Back, `Starting`, potwierdzenie `pause`, `prepareClose`, dobowe sprawdzenie `pending`, ustalenie foreground z AD-15) to `TimerElapsed`, zaplanowany przez Orchestrator.
   - Kolejka snapshotów do Shell trzyma tylko najnowszy snapshot (latest-wins), więc zawieszony UI nie blokuje core.
 
 ### AD-15: Tożsamość okien i procesów, jeden właściciel foreground
 
-- **Binds:** AppHosts, WindowManager, AudioRouter, Shell, OSK
-- **Prevents:** dwa komponenty szukające tego samego okna różnymi metodami; brak korzenia drzewa procesów po adopcji; konkurencyjne `SetForegroundWindow`
+- **Binds:** AppHosts, WindowManager, AudioRouter, Shell, OSK, Orchestrator, InputHub
+- **Prevents:** dwa komponenty szukające tego samego okna różnymi metodami; brak korzenia drzewa procesów po adopcji; konkurencyjne `SetForegroundWindow`; pętla, w której echo własnej komendy okiennej uruchamia kolejne przełączenie; miganie stanu na przejściowych oknach Alt+Tab
 - **Rule:**
   - AppHost po starcie albo adopcji raportuje `AppWindowAttached{ appId, hwnd, rootPid }`. WindowManager i AudioRouter działają tylko na `hwnd` i `rootPid` podanych w Command.
   - **WindowManager to jedyny kod**, który zmienia widoczność, Z-order i foreground dowolnego okna, w tym shella i OSK.
-  - WindowManager raportuje `ForegroundChanged`, także gdy okno na wierzchu zmieni się bez jego udziału, a Orchestrator decyduje, co dalej. Przełączenie przez użytkownika na obce okno (Alt+Tab) nie wymusza powrotu do shella; wraca się Home z pilota [ASSUMPTION].
+  - WindowManager raportuje `ForegroundChanged`, także gdy okno na wierzchu zmieni się bez jego udziału, a Orchestrator decyduje, co dalej.
+  - **Polityka `ForegroundChanged` [decyzja 2026-10-27, odbiór epiki 5 na UM760, U2/DW-44; zastępuje [ASSUMPTION] „Alt+Tab nie zmienia stanu, wraca się Home” i Decision epiki 5 z 2026-10-26]:**
+    - **Kontrakt:** `ForegroundChanged{ hwnd, pid }`. PID procesu okna odczytuje WindowManager w callbacku haka, w chwili zdarzenia, a Orchestrator nie woła Win32, żeby go poznać (AD-14). Po starcie haka WindowManager raz raportuje bieżące okno na wierzchu, więc stan startowy i adopcja też mają obserwację.
+    - **Ustalenie:** każde `ForegroundChanged` jest logowane z właścicielem (`shell` / `app` + `appId` / `foreign`) i (re)startuje timer ustalenia `foregroundSettleMs` (`settings.json`, domyślnie ~300 ms, `TimerElapsed`, AD-14). Ocenia się tylko ostatnią obserwację. Timer restartuje też wynik każdej komendy okiennej (`CommandCompleted` / `CommandFailed`), bo echo z haka WinEvent może przyjść po wyniku. Timer jest związany z `transitionId`: nowe przejście (Home, Intent, przełączenie z zewnątrz) unieważnia oczekującą ocenę.
+    - **Kiedy nie oceniać:** gdy jakakolwiek komenda okienna bieżącego `transitionId` nie dostała jeszcze wyniku albo gdy którakolwiek aplikacja jest w `Starting`. Gdy przyczyna minie (wynik ostatniej komendy okiennej, wyjście ze `Starting`, zmiana zbioru okien zarządzanych), Orchestrator wysyła `ReportForeground`, a WindowManager odpowiada świeżym `ForegroundChanged`, które startuje ustalenie. Zapisana wcześniej obserwacja nigdy nie jest oceniana, a żadna zmiana nie zostaje bez oceny.
+    - **Echo to no-op:** właściciel zgodny z zamiarem Orchestratora (`shell`, gdy nic nie jest `Foreground`; `app` X, gdy X jest `Foreground`) niczego nie zmienia. Tak echo `ActivateWindow` i `ShowShell` nie wraca jako decyzja. W trybie `osk` zamiarem jest właściciel okna pod OSK (shell albo aplikacja docelowa), bo okno OSK (`WS_EX_NOACTIVATE`) nie staje się foreground.
+    - **Nieudane przejście nie jest przełączeniem z zewnątrz:** po `CommandFailed` komendy okiennej bieżącego `transitionId` obserwacja niezgodna z zamiarem, zapisana do tej chwili, trafia tylko do logu (`foregroundTransitionFailed`). Przełączenie z zewnątrz może wywołać dopiero `ForegroundChanged`, które przyjdzie po tej porażce.
+    - **Różnica to przełączenie z zewnątrz** z nowym `transitionId` (AD-5), logowane jako `foregroundSwitch{ owner, appId, transitionId }`: `shell` → opuszczenie aplikacji `Foreground`; `app` X w `Background` → aktywacja X. Właściciel `app` w `NotRunning`, `Stopping` albo `Failed` jest tylko logowany.
+    - **`foreign` niczego nie zmienia** (tryb, stan, dźwięk), także chwilowe okna: przełącznik Alt+Tab, pulpit, UAC i secure desktop (`hwnd` 0).
   - Orchestrator publikuje do InputHub zbiór okien zarządzanych (`SetManagedWindows`, AD-8) przy każdej zmianie zbioru: `AppWindowAttached` (start i adopcja), zamknięcie albo awaria aplikacji i zmiana okna OSK. Okno shella zapisuje App.
 
 ### AD-16: Jedno źródło kontraktów Shell ↔ Core i page ↔ host
@@ -539,6 +558,7 @@ flowchart TB
 | OSK w trakcie sesji streamu Moonlight | Działa bez gwarancji. Wymagałaby wykrywania sesji i przekazania tekstu do hosta |
 | Undo po „Pomiń” / „Ocenione” | Rekordy nie są usuwane (AD-12), więc undo to tylko zmiana `status` |
 | Mechanizm ustalenia `lastInSeason` i `seriesId` | Wewnętrzna sprawa drivera. Kontrakt jest stały |
+| Wyciszenie odziedziczone przez aplikację uruchomioną poza MediaStation po awarii MediaStation | Zaakceptowane ryzyko (AD-5): następna instancja MediaStation poprawia je przy adopcji i aktywacji. Wraca, jeśli odbiór pokaże to w praktyce |
 
 **Otwarte pytania z miejscem rozstrzygnięcia:**
 - **Tryb okna przeglądarki** (`--app` / `--start-fullscreen` / `--kiosk`): rozstrzygnięty spike'iem 6.1 (2026-10-27, UM760) w AD-1: `--kiosk`. Źródło wersji przeglądarki poza CDP: rozstrzygnięte w AD-13 (`FileVersion` binarki i `Last Version` w `user-data-dir`).
