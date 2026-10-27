@@ -320,3 +320,26 @@ source_spec: `tickets/epic-windows-audio/tickets/story-audiorouter-wyciszenie-dr
 severity: medium
 reason: ISimpleAudioVolume mute persists for the life of the browser session; after supervised restart and adoption, UnmuteProcessTree finds no ledger entries. Settle by deciding in story 3 whether an explicit Unmute forces unmute of in-tree sessions outside the ledger.
 status: open
+
+### DW-38: Notatki w plikach ticketów (epic-browserhost, epic-osk, epic-windows-audio) nadal opisują tryb okna i źródło wersji jako otwarte pytania.
+origin: spec-deferred 2373b289ca6d
+location: tickets/epic-browserhost/epic-browserhost.md:43-44
+source_spec: `tickets/epic-browserhost/tickets/spike-tryb-okna-przegladarki-i-zrodo-wersji-poza-cdp-plan.md`
+severity: low
+reason: Edge-case-hunter wskazał epic-browserhost.md (Notes: dwa Open question), epic-osk.md i epic-windows-audio.md ("czeka na story 1"). Workflow zabrania zapisu w plikach ticketów, więc to zadanie dla Sofii po oznaczeniu 6.1 jako done.
+status: open
+
+### DW-39: Gdy BrowserHost padnie po starcie przeglądarki, a przed zalogowaniem BrowserVersionChanged, następny start widzi from==to i zmiana wersji ginie.
+origin: spec-deferred 7a8458976315
+location: architecture-mediastation.md AD-13 (Aktualizacja przeglądarki)
+source_spec: `tickets/epic-browserhost/tickets/spike-tryb-okna-przegladarki-i-zrodo-wersji-poza-cdp-plan.md`
+severity: low
+reason: Last Version zapisuje przeglądarka przy starcie, a zdarzenie loguje BrowserHost. Do rozstrzygnięcia w story BrowserHost (np. log from/to przed launchem albo własny zapis ostatnio zalogowanej wersji).
+status: open
+
+### DW-40: Kiosk nie był sprawdzony przy kilku monitorach, po zmianie rozdzielczości lub wyłączeniu TV, ani z nakładką OSK nad oknem.
+origin: spec-deferred 645cbb60e6a4
+location: architecture-mediastation.md AD-1
+source_spec: `tickets/epic-browserhost/tickets/spike-tryb-okna-przegladarki-i-zrodo-wersji-poza-cdp-plan.md`
+reason: Pomiar miał jeden monitor 1920x1080. Nakładka nad pełnoekranowym Edge jest pierwszą story epiki OSK (Deferred w spine), a zachowanie okna po wygaszeniu ekranu należy do WindowManager.
+status: open

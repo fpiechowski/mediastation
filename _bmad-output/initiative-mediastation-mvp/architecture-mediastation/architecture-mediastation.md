@@ -7,7 +7,7 @@ paradigm: 'hexagonal (ports & adapters) z jednowątkowym actor core (Orchestrato
 scope: 'MediaStation MVP: pełnoekranowy shell TV na Windows 11 (UM760), sterowanie Netflixem w Edge przez CDP, wejście z pilota/klawiatury/gamepada, audio focus, Moonlight, aplikacje natywne, „Do oceny”'
 status: final
 created: '2026-10-16'
-updated: '2026-10-26'
+updated: '2026-10-27'
 binds: [brief-mediastation, forge-filmweb-rating-prompt, ux-mediastation]
 sources:
   - ../brief-mediastation/brief-mediastation.md
@@ -79,7 +79,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 - **Binds:** BrowserHost, page bundle, smoke test
 - **Prevents:** powrót do Playwrighta, spatial navigation albo flag, które zmieniają DRM, jakość lub ślad automatyzacji
 - **Rule:**
-  - BrowserHost uruchamia `msedge.exe`/`chrome.exe` z flagami `--user-data-dir=<profiles\<appId>> --remote-debugging-port=<cdpPort> --no-first-run --no-default-browser-check --autoplay-policy=no-user-gesture-required`, plus jedną flagą trybu okna. Tę flagę ustala pierwsza story epiki BrowserHost (otwarte pytanie), zanim ruszą stories WindowManager i OSK.
+  - BrowserHost uruchamia `msedge.exe`/`chrome.exe` z flagami `--user-data-dir=<profiles\<appId>> --remote-debugging-port=<cdpPort> --no-first-run --no-default-browser-check --autoplay-policy=no-user-gesture-required`, plus jedną flagą trybu okna: **`--kiosk`** (spike 6.1, UM760, Edge 156.0.4314.42). Okno zajmuje cały monitor bez ramki, paska tytułu, zakładek i paska adresu (także po najechaniu na górną krawędź). `f` włącza pełny ekran HTML, `Escape` go wyłącza i nie wychodzi z kiosku. `ShowWindow(SW_MINIMIZE)` i `SW_RESTORE` wystarczają (bez `SW_HIDE`): odtwarzanie biegnie w zminimalizowanym oknie, a po przywróceniu okno znów pokrywa monitor. Okno na wierzch nadal wynosi WindowManager (`SetForegroundWindow` z odblokowaniem, S10), bo okno zasłonięte przez inną aplikację zgłasza `visibilityState=hidden`, a Netflix wtedy nie startuje odtwarzania. Kiosk zamyka się przez `CloseMainWindow` bez błędów. Odrzucone: `--app` (okno 945×1012 z paskiem tytułu, `f` i `Escape` przełączają między małym oknem a pełnym ekranem, nie do trybu pełnoekranowego) i `--start-fullscreen` (najechanie na górną krawędź odsłania zakładki i pasek adresu, po poprzednim zamknięciu, także przez `CloseMainWindow`, pojawia się dymek „Przywróć strony”). DRM i jakość: w pomiarze (jedno konto, jeden tytuł, jeden monitor, bez HDR) Netflix grał 1920×1080 w każdym z trzech trybów. System kluczy zmienił się z PlayReady (HEVC) na Widevine `SW_SECURE_DECODE` (H.264) w trakcie spike'a, także w tym samym trybie `--app`, więc nie da się go przypisać fladze, a przyczyna zmiany nie jest ustalona (szczegóły w planie spike'a 6.1). Smoke (AD-13) loguje system kluczy przy każdym przebiegu.
   - Steruje surowym CDP po WebSocket: `Page.addScriptToEvaluateOnNewDocument`, `Runtime.addBinding` ponawiany po każdej nawigacji głównej ramki, `Input.dispatchKeyEvent`, `Input.insertText`, `Browser.getVersion`.
   - Zakazane: `Runtime.enable`, Playwright, `--enable-spatial-navigation`, flagi Playwrighta, `--remote-allow-origins`, nasłuch poza `127.0.0.1`.
   - Plan awaryjny C (rozszerzenie) uruchamiamy, gdy przeglądarka zablokuje `--remote-debugging-port` dla niestandardowych profili albo serwis zacznie reagować na CDP. Przejście zmienia tylko most (AD-6).
@@ -357,7 +357,7 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
     - używa prawdziwego BrowserHost i drivera: start, `hello`, profil, odtworzenie ≥ 1080p bez błędu DRM, pauza, reguła Back;
     - zwraca raport i kod wyjścia.
   - **Aktualizacja przeglądarki i dostępność CDP:**
-    - przed każdym startem przeglądarki (nie przy adopcji) BrowserHost odczytuje wersję przeglądarki ze źródła poza CDP i ją loguje. Poprzednią wersję czyta z `profiles\<appId>\`, nie z `data/` ani `config/`. Różnica daje wpis w logu (nie Event Core) `BrowserVersionChanged{ appId, from, to }`. Źródło obu wersji ustala story epiki BrowserHost;
+    - przed każdym startem przeglądarki (nie przy adopcji) BrowserHost odczytuje wersję przeglądarki ze źródła poza CDP i ją loguje. Poprzednią wersję czyta z `profiles\<appId>\`, nie z `data/` ani `config/`. Różnica daje wpis w logu (nie Event Core) `BrowserVersionChanged{ appId, from, to }`. Źródła (spike 6.1, UM760): bieżąca wersja to `FileVersion` pliku `msedge.exe` / `chrome.exe` użytego do startu (po rozwiązaniu ścieżki, tej samej co do uruchomienia), a poprzednia to plik `Last Version` w katalogu głównym `user-data-dir` (`profiles\<appId>\Last Version`, jedna linia tekstu, zapisywana przy każdym starcie przeglądarki, więc BrowserHost czyta ją przed startem). Brak, pusty albo niesparsowany plik (oraz nieczytelna wersja binarki) oznacza brak wersji do porównania: log z `unknown` i bez zdarzenia. Obie wersje porównujemy po sparsowaniu do `System.Version`, nie jako tekst. Profile nieuruchomione od aktualizacji Edge zachowały `155.0.4283.45`, gdy binarka miała `156.0.4314.42`. Rejestr `BLBeacon` i nazwa katalogu wersji w `Application\` dają to samo, ale nie są potrzebne;
     - przed startem BrowserHost sprawdza, czy `cdpPort` jest wolny i czy żaden proces nie używa `profiles\<appId>`. Jeśli nie, odpowiada `CommandFailed` z `PortInUse` albo `ProfileInUse` i niczego nie uruchamia;
     - `AppWindowAttached` (AD-15) nie czeka na CDP, więc żywa przeglądarka bez CDP jest wyciszana i minimalizowana jak każda nieaktywna aplikacja (AD-5);
     - BrowserHost czeka na port CDP najwyżej `cdpConnectTimeout` (`settings.json`, krótszy niż timeout `Starting`; walidacja przy starcie). Gdy uruchomiony proces (`rootPid`) żyje, a port nie przyjął połączenia, BrowserHost odpowiada `CommandFailed{ cmdId, errorCode: CdpUnavailable }`, odróżnialnym od timeoutu startu i od `ProcessExited`. Wpis w logu niesie wersję przeglądarki. Timeout `Starting` w Orchestratorze (AD-14) zostaje zabezpieczeniem. Kafelek pokazuje zwykły `Failed`;
@@ -541,7 +541,7 @@ flowchart TB
 | Mechanizm ustalenia `lastInSeason` i `seriesId` | Wewnętrzna sprawa drivera. Kontrakt jest stały |
 
 **Otwarte pytania z miejscem rozstrzygnięcia:**
-- **Tryb okna przeglądarki** (`--app` / `--start-fullscreen` / `--kiosk`): pierwsza story epiki BrowserHost, przed stories WindowManager i OSK.
+- **Tryb okna przeglądarki** (`--app` / `--start-fullscreen` / `--kiosk`): rozstrzygnięty spike'iem 6.1 (2026-10-27, UM760) w AD-1: `--kiosk`. Źródło wersji przeglądarki poza CDP: rozstrzygnięte w AD-13 (`FileVersion` binarki i `Last Version` w `user-data-dir`).
 - **Przycisk Klawiatura na G20S Pro (dongle USB 2.4G):** rozstrzygnięty 2026-10-25 w AD-8: przycisk asystenta głosowego (usage `0x00CF`) przez wyzwalacz `hid`. Raport zwolnienia zmierzony na UM760 2026-10-26 (AD-8). Bluetooth nie jest wymagany.
 - **OSK nad pełnoekranowym Plexem i polskie znaki przez `SendInput` w Plexie i UI Moonlighta:** story „OSK w Plexie i UI Moonlighta” w epice Moonlight & native.
 - **Nakładka nad pełnoekranowym Edge:** pierwsza story epiki OSK.
