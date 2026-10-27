@@ -14,7 +14,7 @@ namespace MediaStation.App.Platform.Audio;
 /// i budzi wątek <c>audio-router</c> (MTA, AD-14), więc pętla Orchestratora nigdy nie woła COM. Wątek trzyma regułę
 /// drzewa w <see cref="AudioRouterEngine"/>, odpowiada <see cref="CommandCompleted"/> albo
 /// <see cref="CommandFailed"/> (<see cref="ErrorCode.AudioUnavailable"/>) i sam skanuje sesje po notyfikacji
-/// nowej sesji lub urządzenia oraz co sekundę, dopóki jakieś drzewo jest wyciszone. Wyjątki są łapane na granicy (AD-4).
+/// nowej sesji lub urządzenia oraz co sekundę, dopóki istnieje reguła albo przypisana sesja. Wyjątki są łapane na granicy (AD-4).
 /// </summary>
 internal sealed class Win32AudioRouterPort : IAudioRouterPort, IDisposable
 {
@@ -201,7 +201,7 @@ internal sealed class Win32AudioRouterPort : IAudioRouterPort, IDisposable
                     continue;
                 }
 
-                sweepDue = schedule.NextDelay(engine.LastSweepUnresolved, engine.AnyMuted || engine.HasMutedSessions) is { } delay
+                sweepDue = schedule.NextDelay(engine.LastSweepUnresolved, engine.NeedsSweeping) is { } delay
                     ? Environment.TickCount64 + (long)delay.TotalMilliseconds
                     : null;
             }

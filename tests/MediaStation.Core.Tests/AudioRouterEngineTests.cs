@@ -187,7 +187,7 @@ public class AudioRouterEngineTests
         var error = engine.Execute(new MuteProcessTree(1, 100));
 
         Assert.Equal(ErrorCode.AudioUnavailable, error);
-        Assert.True(engine.AnyMuted);
+        Assert.True(engine.AnyRule);
         Assert.Single(log.Entries, entry => entry.Msg == "audioUnavailable");
         Assert.DoesNotContain(log.Entries, entry => entry.Msg == "audioRuleApplied");
 
@@ -260,7 +260,7 @@ public class AudioRouterEngineTests
 
         engine.Sweep();
 
-        Assert.False(engine.AnyMuted);
+        Assert.False(engine.AnyRule);
         Assert.False(reused.Muted);
     }
 
@@ -276,7 +276,7 @@ public class AudioRouterEngineTests
         engine.Sweep();
 
         Assert.False(survivor.Muted);
-        Assert.False(engine.HasMutedSessions);
+        Assert.False(engine.HasAssignedSessions);
     }
 
     [Fact]
@@ -290,15 +290,14 @@ public class AudioRouterEngineTests
         var error = engine.Execute(new UnmuteProcessTree(2, 100));
 
         Assert.Equal(ErrorCode.AudioUnavailable, error);
-        Assert.False(engine.AnyMuted);
-        Assert.True(engine.HasMutedSessions);
+        Assert.True(engine.AnyRule);
+        Assert.True(engine.HasAssignedSessions);
         Assert.True(session.Muted);
 
         backend.EnumerateThrows = false;
         engine.Sweep();
 
         Assert.False(session.Muted);
-        Assert.False(engine.HasMutedSessions);
     }
 
     [Fact]
@@ -382,8 +381,8 @@ public class AudioRouterEngineTests
 
         Assert.Null(error);
         Assert.False(ours.Muted);
-        Assert.False(engine.AnyMuted);
-        Assert.False(engine.HasMutedSessions);
+        Assert.False(engine.AnyRule);
+        Assert.False(engine.HasAssignedSessions);
         var forgotten = Assert.Single(log.Entries, entry => entry.Msg == "audioRuleForgotten");
         Assert.Equal(100, forgotten.Data!["rootPid"]);
     }
@@ -428,7 +427,7 @@ public class AudioRouterEngineTests
 
         Assert.Equal(ErrorCode.AudioUnavailable, error);
         Assert.DoesNotContain(log.Entries, entry => entry.Msg == "audioRuleForgotten");
-        Assert.False(engine.AnyMuted);
+        Assert.False(engine.AnyRule);
 
         backend.EnumerateThrows = false;
         var reborn = backend.Add("reborn", pid: 300 + 0);
@@ -437,7 +436,7 @@ public class AudioRouterEngineTests
         Assert.False(sweep.Unavailable);
         Assert.False(ours.Muted);
         Assert.False(reborn.Muted);
-        Assert.False(engine.HasMutedSessions);
+        Assert.False(engine.HasAssignedSessions);
     }
 
     [Fact]
@@ -478,6 +477,205 @@ public class AudioRouterEngineTests
         Assert.Null(engine.Execute(new UnmuteProcessTree(2, 100)));
 
         Assert.Equal(2, created);
+    }
+
+    [Fact]
+    public void Mixer_unmute_under_a_mute_rule_is_corrected_with_one_overridden_entry()
+    {
+        var (engine, backend, log) = Create();
+        var session = backend.Add("a", pid: 300);
+        engine.Execute(new MuteProcessTree(1, 100));
+
+        session.Muted = false;
+        engine.Sweep();
+        engine.Sweep();
+        session.Muted = false;
+        engine.Sweep();
+
+        Assert.True(session.Muted);
+        var overridden = Assert.Single(log.Entries, entry => entry.Msg == "audioSessionOverridden");
+        Assert.Equal(100, overridden.Data!["rootPid"]);
+        Assert.Equal(300, overridden.Data["pid"]);
+        Assert.Equal(true, overridden.Data["muted"]);
+    }
+
+    [Fact]
+    public void Mixer_mute_under_an_unmute_rule_is_corrected_and_reported_per_rule_value()
+    {
+        var (engine, backend, log) = Create();
+        var session = backend.Add("a", pid: 300);
+        engine.Execute(new UnmuteProcessTree(1, 100));
+
+        session.Muted = true;
+        engine.Sweep();
+
+        Assert.False(session.Muted);
+        var overridden = Assert.Single(log.Entries, entry => entry.Msg == "audioSessionOverridden");
+        Assert.Equal(false, overridden.Data!["muted"]);
+
+        // Zmiana wartości reguły to zwykłe zastosowanie, a nowe nadpisanie znów dostaje wpis.
+        engine.Execute(new MuteProcessTree(2, 100));
+        Assert.Single(log.Entries, entry => entry.Msg == "audioSessionOverridden");
+        session.Muted = false;
+        engine.Sweep();
+
+        Assert.True(session.Muted);
+        Assert.Equal(2, log.Entries.Count(entry => entry.Msg == "audioSessionOverridden"));
+    }
+
+    [Fact]
+    public void Rule_change_by_command_is_not_reported_as_an_override()
+    {
+        var (engine, backend, log) = Create();
+        var session = backend.Add("a", pid: 300);
+        engine.Execute(new MuteProcessTree(1, 100));
+
+        engine.Execute(new UnmuteProcessTree(2, 100));
+
+        Assert.False(session.Muted);
+        Assert.DoesNotContain(log.Entries, entry => entry.Msg == "audioSessionOverridden");
+    }
+
+    [Fact]
+    public void Session_muted_outside_the_engine_is_unmuted_by_an_unmute_rule_without_an_override_entry()
+    {
+        var (engine, backend, log) = Create();
+        var inherited = backend.Add("a", pid: 300);
+        inherited.Muted = true;
+        var foreign = backend.Add("b", pid: 900);
+        foreign.Muted = true;
+        var system = backend.Add("sys", pid: 0);
+        system.Muted = true;
+
+        engine.Execute(new UnmuteProcessTree(1, 100));
+
+        Assert.False(inherited.Muted);
+        Assert.True(foreign.Muted);
+        Assert.True(system.Muted);
+        Assert.DoesNotContain(log.Entries, entry => entry.Msg == "audioSessionOverridden");
+    }
+
+    [Fact]
+    public void Channel_fallback_without_remembered_levels_unmutes_to_full_volume()
+    {
+        var (engine, backend, _) = Create();
+        var session = backend.Add("a", pid: 300);
+        session.SimpleVolume = false;
+        session.Channels = [0f, 0f];
+
+        engine.Execute(new UnmuteProcessTree(1, 100));
+
+        Assert.Equal([1f, 1f], session.Channels);
+    }
+
+    [Fact]
+    public void Channel_fallback_raised_from_outside_is_muted_again_and_levels_are_remembered_anew()
+    {
+        var (engine, backend, log) = Create();
+        var session = backend.Add("a", pid: 300);
+        session.SimpleVolume = false;
+        session.Channels = [0.8f, 0.8f];
+        engine.Execute(new MuteProcessTree(1, 100));
+
+        session.Channels = [0.4f, 0.6f];
+        engine.Sweep();
+
+        Assert.Equal([0f, 0f], session.Channels);
+        var overridden = Assert.Single(log.Entries, entry => entry.Msg == "audioSessionOverridden");
+        Assert.Equal(true, overridden.Data!["muted"]);
+
+        engine.Execute(new UnmuteProcessTree(2, 100));
+
+        Assert.Equal([0.4f, 0.6f], session.Channels);
+    }
+
+    [Fact]
+    public void Forget_unmutes_a_session_muted_from_outside_and_empties_the_registry()
+    {
+        var (engine, backend, _) = Create();
+        var session = backend.Add("a", pid: 300);
+        var foreign = backend.Add("b", pid: 900);
+        engine.Execute(new UnmuteProcessTree(1, 100));
+        session.Muted = true;
+        foreign.Muted = true;
+
+        engine.Execute(new ForgetProcessTree(2, 100));
+
+        Assert.False(session.Muted);
+        Assert.True(foreign.Muted);
+        Assert.False(engine.HasAssignedSessions);
+        var calls = session.SetCalls;
+        engine.Sweep();
+        Assert.Equal(calls, session.SetCalls);
+    }
+
+    [Fact]
+    public void Dispose_unmutes_assigned_sessions_but_not_foreign_ones()
+    {
+        var (engine, backend, _) = Create();
+        var session = backend.Add("a", pid: 300);
+        var foreign = backend.Add("b", pid: 900);
+        foreign.Muted = true;
+        engine.Execute(new UnmuteProcessTree(1, 100));
+        session.Muted = true;
+
+        engine.Dispose();
+
+        Assert.False(session.Muted);
+        Assert.True(foreign.Muted);
+    }
+
+    [Fact]
+    public void Compliant_sessions_are_not_touched_by_repeated_sweeps()
+    {
+        var (engine, backend, _) = Create();
+        var session = backend.Add("a", pid: 300);
+        engine.Execute(new MuteProcessTree(1, 100));
+        var calls = session.SetCalls;
+
+        engine.Sweep();
+        engine.Sweep();
+
+        Assert.Equal(calls, session.SetCalls);
+        Assert.True(engine.AnyRule);
+        Assert.True(engine.HasAssignedSessions);
+    }
+
+    [Fact]
+    public void Needs_sweeping_while_a_rule_or_assigned_session_exists()
+    {
+        var (engine, backend, _) = Create();
+        backend.Add("a", pid: 300);
+        Assert.False(engine.NeedsSweeping);
+
+        engine.Execute(new UnmuteProcessTree(1, 100));
+        Assert.True(engine.NeedsSweeping);
+
+        engine.Execute(new ForgetProcessTree(2, 100));
+        Assert.False(engine.NeedsSweeping);
+    }
+
+    [Fact]
+    public void Empty_or_partial_process_snapshot_keeps_a_muted_child_muted()
+    {
+        var (engine, backend, _) = Create();
+        var child = backend.Add("a", pid: 300);
+        engine.Execute(new MuteProcessTree(1, 100));
+        Assert.True(child.Muted);
+
+        backend.Processes = [];
+        engine.Sweep();
+        Assert.True(child.Muted);
+        Assert.True(engine.HasAssignedSessions);
+
+        // Korzeń żyje, ale potomka chwilowo brak w migawce.
+        backend.Processes = [new KeyValuePair<int, int>(1, 0), new KeyValuePair<int, int>(100, 1)];
+        engine.Sweep();
+        Assert.True(child.Muted);
+
+        backend.Processes = Processes;
+        engine.Sweep();
+        Assert.True(child.Muted);
     }
 
     private static (AudioRouterEngine Engine, FakeBackend Backend, RecordingLog Log) Create()
@@ -535,6 +733,16 @@ public class AudioRouterEngineTests
         public int SetCalls { get; private set; }
 
         public bool Disposed { get; private set; }
+
+        public bool? TryGetMute()
+        {
+            if (Throws)
+            {
+                throw new InvalidOperationException("sesja zniknęła");
+            }
+
+            return SimpleVolume ? Muted : null;
+        }
 
         public bool TrySetMute(bool mute)
         {

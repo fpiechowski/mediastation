@@ -47,8 +47,9 @@ public class OrchestratorStopTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new StopApp(15, "netflix"), command),
-            command => Assert.Equal(new ScheduleTimer(16, 2, "netflix", T0.AddSeconds(45)), command));
+            command => Assert.Equal(new UnmuteProcessTree(15, 4321), command),
+            command => Assert.Equal(new StopApp(16, "netflix"), command),
+            command => Assert.Equal(new ScheduleTimer(17, 2, "netflix", T0.AddSeconds(45)), command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(background.Rev + 1, snapshot.Rev);
         Assert.Equal(AppLifecycleState.Stopping, StateOf(snapshot, "netflix"));
@@ -61,13 +62,13 @@ public class OrchestratorStopTests
         Background(orchestrator, "netflix");
         var stopping = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new CloseApp("netflix")).Snapshot);
 
-        var result = orchestrator.Handle(new CommandCompleted(15));
+        var result = orchestrator.Handle(new CommandCompleted(16));
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new ForgetProcessTree(17, 4321), command),
-            command => Assert.Equal(new CancelTimer(18, 2), command),
-            command => AssertManaged(command, 19, 2));
+            command => Assert.Equal(new ForgetProcessTree(18, 4321), command),
+            command => Assert.Equal(new CancelTimer(19, 2), command),
+            command => AssertManaged(command, 20, 2));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(stopping.Rev + 1, snapshot.Rev);
         Assert.Equal(AppLifecycleState.NotRunning, StateOf(snapshot, "netflix"));
@@ -84,15 +85,15 @@ public class OrchestratorStopTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new ForgetProcessTree(17, 4321), command),
-            command => Assert.Equal(new CancelTimer(18, 2), command),
-            command => AssertManaged(command, 19, 2));
+            command => Assert.Equal(new ForgetProcessTree(18, 4321), command),
+            command => Assert.Equal(new CancelTimer(19, 2), command),
+            command => AssertManaged(command, 20, 2));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(stopping.Rev + 1, snapshot.Rev);
         Assert.Equal(AppLifecycleState.NotRunning, StateOf(snapshot, "netflix"));
 
         // Korelacja stopu jest już zużyta: spóźniony wynik komendy nie zmienia stanu drugi raz.
-        var late = orchestrator.Handle(new CommandCompleted(15));
+        var late = orchestrator.Handle(new CommandCompleted(16));
         Assert.Empty(late.Commands);
         Assert.Null(late.Snapshot);
     }
@@ -107,8 +108,9 @@ public class OrchestratorStopTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new StopApp(15, "netflix"), command),
-            command => Assert.Equal(new ScheduleTimer(16, 2, "netflix", T0.AddSeconds(45)), command));
+            command => Assert.Equal(new UnmuteProcessTree(15, 4321), command),
+            command => Assert.Equal(new StopApp(16, "netflix"), command),
+            command => Assert.Equal(new ScheduleTimer(17, 2, "netflix", T0.AddSeconds(45)), command));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(background.Rev + 1, snapshot.Rev);
         Assert.Equal(AppLifecycleState.Stopping, StateOf(snapshot, "netflix"));
@@ -121,15 +123,15 @@ public class OrchestratorStopTests
         Background(orchestrator, "netflix");
         var stopping = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new RestartApp("netflix")).Snapshot);
 
-        var result = orchestrator.Handle(new CommandCompleted(15));
+        var result = orchestrator.Handle(new CommandCompleted(16));
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new ForgetProcessTree(17, 4321), command),
-            command => Assert.Equal(new StartApp(18, "netflix"), command),
-            command => Assert.Equal(new ScheduleTimer(19, 3, "netflix", T0.AddSeconds(30)), command),
-            command => Assert.Equal(new CancelTimer(20, 2), command),
-            command => AssertManaged(command, 21, 2));
+            command => Assert.Equal(new ForgetProcessTree(18, 4321), command),
+            command => Assert.Equal(new StartApp(19, "netflix"), command),
+            command => Assert.Equal(new ScheduleTimer(20, 3, "netflix", T0.AddSeconds(30)), command),
+            command => Assert.Equal(new CancelTimer(21, 2), command),
+            command => AssertManaged(command, 22, 2));
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(stopping.Rev + 1, snapshot.Rev);
         Assert.Equal(AppLifecycleState.Starting, StateOf(snapshot, "netflix"));
@@ -137,13 +139,13 @@ public class OrchestratorStopTests
         var attached = orchestrator.Handle(new AppWindowAttached("netflix", 0x99, 7));
         Assert.Collection(
             attached.Commands,
-            command => Assert.Equal(new ActivateWindow(22, 0x99), command),
-            command => Assert.Equal(new UnmuteProcessTree(23, 7), command),
+            command => Assert.Equal(new ActivateWindow(23, 0x99), command),
+            command => Assert.Equal(new UnmuteProcessTree(24, 7), command),
             command => Assert.Equal(
-                new SetInputRouting(24, InputMode.App, AppType.Web, PointerPolicy.Blocked, 4),
+                new SetInputRouting(25, InputMode.App, AppType.Web, PointerPolicy.Blocked, 4),
                 command),
-            command => Assert.Equal(new CancelTimer(25, 3), command),
-            command => AssertManaged(command, 26, 3, (0x99, 7)));
+            command => Assert.Equal(new CancelTimer(26, 3), command),
+            command => AssertManaged(command, 27, 3, (0x99, 7)));
         Assert.Equal(AppLifecycleState.Foreground, StateOf(Assert.IsType<ShellSnapshot>(attached.Snapshot), "netflix"));
     }
 
@@ -177,15 +179,15 @@ public class OrchestratorStopTests
                 Assert.IsType<ShellSnapshot>(resumed.Snapshot).FocusRequest);
         }
 
-        var stopped = orchestrator.Handle(new CommandCompleted(15));
+        var stopped = orchestrator.Handle(new CommandCompleted(16));
 
         Assert.Collection(
             stopped.Commands,
-            command => Assert.Equal(new ForgetProcessTree(17 + shift, 4321), command),
-            command => Assert.Equal(new StartApp(18 + shift, "netflix"), command),
-            command => Assert.Equal(new ScheduleTimer(19 + shift, 3, "netflix", T0.AddSeconds(30)), command),
-            command => Assert.Equal(new CancelTimer(20 + shift, 2), command),
-            command => AssertManaged(command, 21 + shift, 2));
+            command => Assert.Equal(new ForgetProcessTree(18 + shift, 4321), command),
+            command => Assert.Equal(new StartApp(19 + shift, "netflix"), command),
+            command => Assert.Equal(new ScheduleTimer(20 + shift, 3, "netflix", T0.AddSeconds(30)), command),
+            command => Assert.Equal(new CancelTimer(21 + shift, 2), command),
+            command => AssertManaged(command, 22 + shift, 2));
         var starting = Assert.IsType<ShellSnapshot>(stopped.Snapshot);
         Assert.Equal(AppLifecycleState.Starting, StateOf(starting, "netflix"));
 
@@ -193,10 +195,10 @@ public class OrchestratorStopTests
 
         Assert.Collection(
             attached.Commands,
-            command => Assert.Equal(new MuteProcessTree(22 + shift, 4321), command),
-            command => Assert.Equal(new MinimizeWindow(23 + shift, 0x1A2B), command),
-            command => Assert.Equal(new CancelTimer(24 + shift, 3), command),
-            command => AssertManaged(command, 25 + shift, 3, (0x1A2B, 4321)));
+            command => Assert.Equal(new MuteProcessTree(23 + shift, 4321), command),
+            command => Assert.Equal(new MinimizeWindow(24 + shift, 0x1A2B), command),
+            command => Assert.Equal(new CancelTimer(25 + shift, 3), command),
+            command => AssertManaged(command, 26 + shift, 3, (0x1A2B, 4321)));
         var background = Assert.IsType<ShellSnapshot>(attached.Snapshot);
         Assert.Equal(AppLifecycleState.Background, StateOf(background, "netflix"));
         Assert.Equal(starting.FocusRequest, background.FocusRequest);
@@ -213,17 +215,37 @@ public class OrchestratorStopTests
 
         Assert.Collection(
             result.Commands,
-            command => Assert.Equal(new ForgetProcessTree(17, 4321), command),
-            command => Assert.Equal(new StartApp(18, "netflix"), command),
-            command => Assert.Equal(new ScheduleTimer(19, 3, "netflix", T0.AddSeconds(30)), command),
-            command => Assert.Equal(new CancelTimer(20, 2), command),
-            command => AssertManaged(command, 21, 2));
+            command => Assert.Equal(new ForgetProcessTree(18, 4321), command),
+            command => Assert.Equal(new StartApp(19, "netflix"), command),
+            command => Assert.Equal(new ScheduleTimer(20, 3, "netflix", T0.AddSeconds(30)), command),
+            command => Assert.Equal(new CancelTimer(21, 2), command),
+            command => AssertManaged(command, 22, 2));
         Assert.Equal(AppLifecycleState.Starting, StateOf(Assert.IsType<ShellSnapshot>(result.Snapshot), "netflix"));
 
         // Korelacja stopu jest już zużyta: spóźniony wynik komendy nie startuje aplikacji drugi raz.
-        var late = orchestrator.Handle(new CommandCompleted(15));
+        var late = orchestrator.Handle(new CommandCompleted(16));
         Assert.Empty(late.Commands);
         Assert.Null(late.Snapshot);
+    }
+
+    /// <summary>Bez <c>RootPid</c> (Failed po timeoucie startu, przed attach) nie ma czego odciszać: StopApp idzie pierwszy.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Close_or_restart_without_root_pid_sends_stop_app_first_without_unmute(bool restart)
+    {
+        var time = new FakeTimeProvider(T0);
+        var (orchestrator, _) = Started(time);
+        orchestrator.Handle(new LaunchApp("netflix"));
+        time.Advance(TimeSpan.FromSeconds(30));
+        var failed = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new TimerElapsed(1)).Snapshot);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(failed, "netflix"));
+
+        var result = orchestrator.Handle(restart ? new RestartApp("netflix") : new CloseApp("netflix"));
+
+        Assert.IsType<StopApp>(result.Commands[0]);
+        Assert.DoesNotContain(result.Commands, command => command is UnmuteProcessTree);
+        Assert.Equal(AppLifecycleState.Stopping, StateOf(Assert.IsType<ShellSnapshot>(result.Snapshot), "netflix"));
     }
 
     [Theory]

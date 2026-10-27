@@ -96,6 +96,7 @@ public sealed partial class Orchestrator
     private OrchestratorResult EnterFailed(AppState app, bool wasForeground, bool processAlive)
     {
         var hwnd = app.Hwnd;
+        var wasStopping = app.State == AppLifecycleState.Stopping;
         app.Hwnd = null;
         app.State = AppLifecycleState.Failed;
         DropPendingStarts(app.AppId);
@@ -113,6 +114,11 @@ public sealed partial class Orchestrator
         {
             commands.Add(new MuteProcessTree(NextCmdId(), app.RootPid));
             commands.Add(new MinimizeWindow(NextCmdId(), liveHwnd));
+        }
+        else if (wasStopping && app.RootPid > 0)
+        {
+            // OnStop odciszyło drzewo przed StopApp; żywy proces po timeoucie stopu wraca pod regułę wyciszenia.
+            commands.Add(new MuteProcessTree(NextCmdId(), app.RootPid));
         }
 
         if (wasForeground)

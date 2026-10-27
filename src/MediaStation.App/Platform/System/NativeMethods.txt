@@ -108,6 +108,7 @@ IAudioSessionControl2
 ISimpleAudioVolume
 IChannelAudioVolume
 IAudioSessionNotification
+IAudioSessionEvents
 SetWinEventHook
 UnhookWinEvent
 WINEVENTPROC

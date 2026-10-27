@@ -43,6 +43,7 @@
     <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSignalRouter.cs" Link="App\PowerSignalRouter.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\PowerSourcesAttachment.cs" Link="App\PowerSourcesAttachment.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\System\WakeSignalGate.cs" Link="App\WakeSignalGate.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Platform\Audio\AudioChangeContext.cs" Link="App\AudioChangeContext.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Audio\AudioRouterEngine.cs" Link="App\AudioRouterEngine.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Audio\AudioRule.cs" Link="App\AudioRule.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Audio\AudioSweepSchedule.cs" Link="App\AudioSweepSchedule.cs" />

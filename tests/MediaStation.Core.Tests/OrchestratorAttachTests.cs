@@ -205,7 +205,7 @@ public class OrchestratorAttachTests
                 break;
             default:
                 Background(orchestrator, "netflix");
-                Assert.IsType<StopApp>(orchestrator.Handle(new CloseApp("netflix")).Commands[0]);
+                Assert.IsType<StopApp>(orchestrator.Handle(new CloseApp("netflix")).Commands[1]);
                 break;
         }
 

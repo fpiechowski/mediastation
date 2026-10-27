@@ -23,6 +23,9 @@ internal interface IAudioSession : IDisposable
     /// <summary>PID procesu sesji; 0 dla dźwięków systemowych.</summary>
     int Pid { get; }
 
+    /// <summary>Rzeczywiste wyciszenie z <c>ISimpleAudioVolume</c> albo <c>null</c>, gdy interfejsu brak.</summary>
+    bool? TryGetMute();
+
     /// <summary>Ustawia wyciszenie przez <c>ISimpleAudioVolume</c>; <c>false</c>, gdy interfejsu brak.</summary>
     bool TrySetMute(bool mute);
 

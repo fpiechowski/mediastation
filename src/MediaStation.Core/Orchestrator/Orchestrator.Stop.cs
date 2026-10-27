@@ -36,13 +36,20 @@ public sealed partial class Orchestrator
             return Ignored(intent, appId, "inna aplikacja jest aktywna");
         }
 
+        // Odciszenie przed stopem: wyciszenie dziedziczone po zamkniętej aplikacji nie zostaje w jej następnej instancji.
+        var commands = new List<Command>();
+        if (app.RootPid > 0)
+        {
+            commands.Add(new UnmuteProcessTree(NextCmdId(), app.RootPid));
+        }
+
         var cmdId = NextCmdId();
         var transitionId = restart ? NextTransitionId() : 0;
         app.State = AppLifecycleState.Stopping;
         _pendingStops.Add(cmdId, new PendingStop(app.AppId, restart, transitionId));
-        return new OrchestratorResult(
-            [new StopApp(cmdId, app.AppId), ScheduleTimeout(_stopTimers, app.AppId, _stoppingTimeout)],
-            Snapshot());
+        commands.Add(new StopApp(cmdId, app.AppId));
+        commands.Add(ScheduleTimeout(_stopTimers, app.AppId, _stoppingTimeout));
+        return new OrchestratorResult(commands, Snapshot());
     }
 
     /// <summary>

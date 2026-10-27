@@ -124,12 +124,12 @@ public class ProcessTreeMatcherTests
 
         for (var i = 0; i < AudioSweepSchedule.MaxRetries; i++)
         {
-            Assert.Equal(AudioSweepSchedule.RetryDelay, schedule.NextDelay(unresolvedSession: true, anyMutedRoot: true));
+            Assert.Equal(AudioSweepSchedule.RetryDelay, schedule.NextDelay(unresolvedSession: true, ruleOrAssignedSessions: true));
         }
 
-        Assert.Equal(AudioSweepSchedule.PollInterval, schedule.NextDelay(unresolvedSession: true, anyMutedRoot: true));
-        Assert.Equal(AudioSweepSchedule.PollInterval, schedule.NextDelay(unresolvedSession: false, anyMutedRoot: true));
-        Assert.Equal(AudioSweepSchedule.RetryDelay, schedule.NextDelay(unresolvedSession: true, anyMutedRoot: true));
+        Assert.Equal(AudioSweepSchedule.PollInterval, schedule.NextDelay(unresolvedSession: true, ruleOrAssignedSessions: true));
+        Assert.Equal(AudioSweepSchedule.PollInterval, schedule.NextDelay(unresolvedSession: false, ruleOrAssignedSessions: true));
+        Assert.Equal(AudioSweepSchedule.RetryDelay, schedule.NextDelay(unresolvedSession: true, ruleOrAssignedSessions: true));
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class ProcessTreeMatcherTests
     {
         var schedule = new AudioSweepSchedule();
 
-        Assert.Null(schedule.NextDelay(unresolvedSession: false, anyMutedRoot: false));
-        Assert.Equal(AudioSweepSchedule.PollInterval, schedule.NextDelay(unresolvedSession: false, anyMutedRoot: true));
+        Assert.Null(schedule.NextDelay(unresolvedSession: false, ruleOrAssignedSessions: false));
+        Assert.Equal(AudioSweepSchedule.PollInterval, schedule.NextDelay(unresolvedSession: false, ruleOrAssignedSessions: true));
     }
 }

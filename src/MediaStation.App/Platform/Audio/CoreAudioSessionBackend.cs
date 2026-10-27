@@ -25,6 +25,7 @@ internal sealed unsafe class CoreAudioSessionBackend : IAudioSessionBackend
     private readonly SessionWatcher _sessionWatcher;
     private readonly Dictionary<string, IAudioSessionManager2> _managers = new(StringComparer.Ordinal);
     private readonly ConcurrentQueue<IAudioSessionControl> _notified = new();
+    private readonly Dictionary<string, VolumeRegistration> _volumeEvents = new(StringComparer.Ordinal);
     private bool _disposed;
 
     public CoreAudioSessionBackend(global::System.Action onChange)
@@ -102,6 +103,8 @@ internal sealed unsafe class CoreAudioSessionBackend : IAudioSessionBackend
             {
                 Add(control, sessions, seen);
             }
+
+            DropVolumeEventsExcept(seen);
         }
         catch
         {
@@ -133,6 +136,7 @@ internal sealed unsafe class CoreAudioSessionBackend : IAudioSessionBackend
             _ = ex;
         }
 
+        DropVolumeEventsExcept([]);
         DropManagersExcept([]);
         while (_notified.TryDequeue(out var control))
         {
@@ -214,7 +218,7 @@ internal sealed unsafe class CoreAudioSessionBackend : IAudioSessionBackend
         }
     }
 
-    private static void Add(IAudioSessionControl control, List<IAudioSession> sessions, HashSet<string> seen)
+    private void Add(IAudioSessionControl control, List<IAudioSession> sessions, HashSet<string> seen)
     {
         var session = ComAudioSession.TryCreate(control);
         if (session is null)
@@ -226,10 +230,62 @@ internal sealed unsafe class CoreAudioSessionBackend : IAudioSessionBackend
         if (seen.Add(session.Key))
         {
             sessions.Add(session);
+            WatchVolume(session);
         }
         else
         {
             session.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Pierwsze spotkanie sesji: rejestruje powiadomienia zmian głośności i oddaje rejestracji jej obiekt (sesja go
+    /// nie zwalnia). Błąd rejestracji nie psuje reguły: gwarancją jest okresowy skan, powiadomienia tylko go przyspieszają.
+    /// </summary>
+    private void WatchVolume(ComAudioSession session)
+    {
+        if (_volumeEvents.ContainsKey(session.Key))
+        {
+            return;
+        }
+
+        var events = new VolumeWatcher(_onChange);
+        try
+        {
+            session.Control.RegisterAudioSessionNotification(events);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            _ = ex;
+            return;
+        }
+
+        _volumeEvents[session.Key] = new VolumeRegistration(session.Control, events);
+        session.KeepControl = true;
+    }
+
+    private void DropVolumeEventsExcept(HashSet<string> present)
+    {
+        foreach (var key in new List<string>(_volumeEvents.Keys))
+        {
+            if (present.Contains(key))
+            {
+                continue;
+            }
+
+            var registration = _volumeEvents[key];
+            _volumeEvents.Remove(key);
+            try
+            {
+                registration.Control.UnregisterAudioSessionNotification(registration.Events);
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException)
+            {
+                // Sesja już zniknęła razem z rejestracją.
+                _ = ex;
+            }
+
+            Marshal.ReleaseComObject(registration.Control);
         }
     }
 
@@ -248,6 +304,11 @@ internal sealed unsafe class CoreAudioSessionBackend : IAudioSessionBackend
         public string Key { get; }
 
         public int Pid { get; }
+
+        public IAudioSessionControl Control => _control;
+
+        /// <summary>Obiekt przejęła rejestracja powiadomień: <see cref="Dispose"/> go nie zwalnia.</summary>
+        public bool KeepControl { get; set; }
 
         public static ComAudioSession? TryCreate(IAudioSessionControl control)
         {
@@ -276,6 +337,22 @@ internal sealed unsafe class CoreAudioSessionBackend : IAudioSessionBackend
             }
         }
 
+        public bool? TryGetMute()
+        {
+            ISimpleAudioVolume volume;
+            try
+            {
+                volume = (ISimpleAudioVolume)_control;
+            }
+            catch (InvalidCastException)
+            {
+                return null;
+            }
+
+            volume.GetMute(out var muted);
+            return muted;
+        }
+
         public bool TrySetMute(bool mute)
         {
             ISimpleAudioVolume volume;
@@ -288,7 +365,8 @@ internal sealed unsafe class CoreAudioSessionBackend : IAudioSessionBackend
                 return false;
             }
 
-            volume.SetMute(mute, null);
+            var context = AudioChangeContext.Own;
+            volume.SetMute(mute, &context);
             return true;
         }
 
@@ -327,11 +405,18 @@ internal sealed unsafe class CoreAudioSessionBackend : IAudioSessionBackend
                 return false;
             }
 
-            channels.SetAllVolumes((uint)levels.Length, levels, null);
+            var context = AudioChangeContext.Own;
+            channels.SetAllVolumes((uint)levels.Length, levels, &context);
             return true;
         }
 
-        public void Dispose() => Marshal.ReleaseComObject(_control);
+        public void Dispose()
+        {
+            if (!KeepControl)
+            {
+                Marshal.ReleaseComObject(_control);
+            }
+        }
     }
 
     /// <summary>Notyfikacje urządzeń: każda zmiana (stan, dodanie, domyślne) tylko budzi wątek AudioRoutera.</summary>
@@ -359,6 +444,49 @@ internal sealed unsafe class CoreAudioSessionBackend : IAudioSessionBackend
         {
             notified.Enqueue(NewSession);
             onChange();
+        }
+    }
+
+    /// <summary>Rejestracja powiadomień sesji: jej obiekt i odbiorca, trzymane między skanami.</summary>
+    private sealed record VolumeRegistration(IAudioSessionControl Control, VolumeWatcher Events);
+
+    /// <summary>
+    /// Powiadomienia zmian głośności sesji: obca zmiana (mikser, aplikacja) tylko budzi wątek AudioRoutera; własna, z
+    /// kontekstem <see cref="AudioChangeContext.Own"/>, nie zleca skanu.
+    /// </summary>
+    [ClassInterface(ClassInterfaceType.None)]
+    private sealed unsafe class VolumeWatcher(global::System.Action onChange) : IAudioSessionEvents
+    {
+        public void OnDisplayNameChanged(PCWSTR NewDisplayName, Guid* EventContext)
+        {
+        }
+
+        public void OnIconPathChanged(PCWSTR NewIconPath, Guid* EventContext)
+        {
+        }
+
+        public void OnSimpleVolumeChanged(float NewVolume, BOOL NewMute, Guid* EventContext) => Notify(EventContext);
+
+        public void OnChannelVolumeChanged(uint ChannelCount, float[] NewChannelVolumeArray, uint ChangedChannel, Guid* EventContext) => Notify(EventContext);
+
+        public void OnGroupingParamChanged(Guid* NewGroupingParam, Guid* EventContext)
+        {
+        }
+
+        public void OnStateChanged(AudioSessionState NewState)
+        {
+        }
+
+        public void OnSessionDisconnected(AudioSessionDisconnectReason DisconnectReason)
+        {
+        }
+
+        private void Notify(Guid* context)
+        {
+            if (AudioChangeContext.ShouldSweep(context is null ? null : *context))
+            {
+                onChange();
+            }
         }
     }
 }
