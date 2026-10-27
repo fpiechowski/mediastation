@@ -149,6 +149,41 @@ public class OrchestratorLoopTests
         Assert.Equal(LogLevel.Info, entry.Level);
         Assert.Equal("orchestrator", entry.Src);
         Assert.Equal(1234L, entry.Data!["hwnd"]);
+        Assert.Equal("foreign", entry.Data["owner"]);
+        Assert.Null(entry.Data["appId"]);
+    }
+
+    [Fact]
+    public void Foreground_changed_log_names_shell_and_app_owners()
+    {
+        var log = new RecordingLog();
+        var lookup = new FixedForegroundLookup(shell: 0x500);
+        using var loop = new OrchestratorLoop(
+            new CoreOrchestrator(TwoApps(), new FakeTimeProvider(T0), lookup),
+            _ => { },
+            _ => { },
+            _ => { },
+            log);
+        loop.Start();
+        loop.Post(new LaunchApp("netflix"));
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+
+        loop.Post(new ForegroundChanged(0x500));
+        loop.Post(new ForegroundChanged(0x1A2B));
+        WaitFor(() => log.Entries.Count(entry => entry.Msg == "foregroundChanged") == 2);
+
+        var entries = log.Entries.Where(entry => entry.Msg == "foregroundChanged").ToArray();
+        Assert.Equal("shell", entries[0].Data!["owner"]);
+        Assert.Null(entries[0].Data!["appId"]);
+        Assert.Equal("app", entries[1].Data!["owner"]);
+        Assert.Equal("netflix", entries[1].Data!["appId"]);
+    }
+
+    private sealed class FixedForegroundLookup(long shell) : IForegroundLookup
+    {
+        public long ShellHwnd => shell;
+
+        public int ProcessIdOf(long hwnd) => 0;
     }
 
     [Fact]

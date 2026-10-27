@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading;
 using MediaStation.Core.Contracts;
 using MediaStation.Core.Logging;
+using MediaStation.Core.Orchestrator;
 using CoreOrchestrator = MediaStation.Core.Orchestrator.Orchestrator;
 
 namespace MediaStation.App.Orchestrator;
@@ -126,12 +127,19 @@ public sealed class OrchestratorLoop : IDisposable
                     });
                 }
 
-                // Zmiana foregroundu to fakt zapisany w logu bez reakcji: tryb i dźwięk ustala epic-windows-audio.
-                if (message is ForegroundChanged changed)
+                // Zmiana foregroundu to fakt zapisany w logu bez reakcji (AD-8): jedno zdarzenie, jeden wpis.
+                if (result.Foreground is { } foreground)
                 {
                     _log.Info(Src, "foregroundChanged", new Dictionary<string, object?>
                     {
-                        ["hwnd"] = changed.Hwnd,
+                        ["hwnd"] = foreground.Hwnd,
+                        ["owner"] = foreground.Owner switch
+                        {
+                            ForegroundOwner.Shell => "shell",
+                            ForegroundOwner.App => "app",
+                            _ => "foreign",
+                        },
+                        ["appId"] = foreground.AppId,
                     });
                 }
 

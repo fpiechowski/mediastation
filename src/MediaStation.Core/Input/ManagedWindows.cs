@@ -30,6 +30,18 @@ public sealed class ManagedWindows
     private readonly object _gate = new();
     private Snapshot _current = new(0, null, Array.Empty<ManagedWindow>(), 0);
 
+    /// <summary>Uchwyt okna shella wpisany przez App; <c>0</c>, gdy nieznany.</summary>
+    public long Shell
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _current.Shell;
+            }
+        }
+    }
+
     /// <summary>Zapisuje uchwyt okna shella; <c>0</c> go usuwa.</summary>
     public void SetShell(long hwnd)
     {

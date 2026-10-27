@@ -91,10 +91,10 @@ public sealed record CdpLost(string AppId) : Event;
 public sealed record TimerElapsed(long TimerId) : Event;
 
 /// <summary>
-/// Foreground systemu zmienił się na okno <see cref="Hwnd"/>. Orchestrator nie zmienia stanu —
-/// pętla zapisuje fakt w logu, a reakcję (dopasowanie trybu, wyciszenie) ustala epic-windows-audio.
+/// Foreground systemu zmienił się na okno <see cref="Hwnd"/> (WindowManager, także bez udziału MediaStation).
+/// Orchestrator tylko rozpoznaje właściciela okna do logu i nie zmienia trybu, stanu aplikacji ani dźwięku (AD-8).
 /// </summary>
-/// <param name="Hwnd">Uchwyt okna; <c>long</c> z tego samego powodu co w <see cref="AppWindowAttached"/>.</param>
+/// <param name="Hwnd">Uchwyt okna najwyższego poziomu (<c>GA_ROOT</c>); <c>long</c> z tego samego powodu co w <see cref="AppWindowAttached"/>.</param>
 public sealed record ForegroundChanged(long Hwnd) : Event;
 
 /// <summary>Wykonawca zakończył komendę <see cref="CmdId"/> sukcesem (AD-4).</summary>

@@ -279,7 +279,7 @@ public static class CompositionRoot
 
         keyInjection.Start();
 
-        var loop = new OrchestratorLoop(new CoreOrchestrator(config, time), router.Dispatch, bridge.Publish, bridge.PublishAction, log);
+        var loop = new OrchestratorLoop(new CoreOrchestrator(config, time, new Win32ForegroundLookup(managedWindows)), router.Dispatch, bridge.Publish, bridge.PublishAction, log);
         postsTo = loop;
         loop.Start();
 

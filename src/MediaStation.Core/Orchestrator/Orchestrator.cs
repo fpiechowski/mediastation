@@ -23,6 +23,9 @@ public sealed record OrchestratorResult(IReadOnlyList<Command> Commands, ShellSn
 
     /// <summary>Odrzucony Intent (nazwa, <c>appId</c>, powód) albo <c>null</c>.</summary>
     public IgnoredIntent? IgnoredIntent { get; init; }
+
+    /// <summary>Właściciel okna z <see cref="ForegroundChanged"/> do wpisu w logu (<c>foregroundChanged</c>) albo <c>null</c>.</summary>
+    public ForegroundObservation? Foreground { get; init; }
 }
 
 /// <summary>Intent odrzucony przez Orchestrator: nazwa Intentu, <c>appId</c> i powód do logu <c>intentIgnored</c>.</summary>
@@ -54,13 +57,16 @@ public sealed partial class Orchestrator
     private InputMode _mode = InputMode.Shell;
     private List<ManagedWindow> _publishedWindows = [];
     private long _managedEpoch;
+    private readonly IForegroundLookup? _foreground;
 
-    public Orchestrator(LoadedConfig config, TimeProvider time)
+    /// <param name="foreground">Uchwyt shella i PID okna dla <see cref="ForegroundChanged"/>; bez niego okno jest rozpoznane tylko po <c>hwnd</c> aplikacji, a shell i dopasowanie po PID nie działają.</param>
+    public Orchestrator(LoadedConfig config, TimeProvider time, IForegroundLookup? foreground = null)
     {
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(time);
 
         _time = time;
+        _foreground = foreground;
         _startingTimeout = TimeSpan.FromSeconds(config.Settings.StartingTimeout);
         _stoppingTimeout = TimeSpan.FromSeconds(config.Settings.StoppingTimeout);
         _apps = new List<AppState>(config.Apps.Apps.Count);
@@ -97,6 +103,7 @@ public sealed partial class Orchestrator
             TimerElapsed elapsed => OnTimerElapsed(elapsed),
             CommandCompleted completed => OnCommandCompleted(completed),
             CommandFailed failed => OnCommandFailed(failed),
+            ForegroundChanged changed => OnForegroundChanged(changed),
             _ => OrchestratorResult.None,
         });
     }

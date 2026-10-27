@@ -161,6 +161,7 @@ internal sealed class Win32WindowManagerPort : IWindowManagerPort, IDisposable
 
     private void Run()
     {
+        WinEventForegroundHook? foregroundHook = null;
         try
         {
             _threadId = PInvoke.GetCurrentThreadId();
@@ -170,6 +171,10 @@ internal sealed class Win32WindowManagerPort : IWindowManagerPort, IDisposable
             _ready = true;
             _threadReady.Set();
             Drain();
+
+            // Hook foregroundu na wątku z pętlą komunikatów: callback OUTOFCONTEXT idzie przez nią.
+            foregroundHook = new WinEventForegroundHook(_log, _post);
+            foregroundHook.Start();
 
             while (true)
             {
@@ -195,6 +200,7 @@ internal sealed class Win32WindowManagerPort : IWindowManagerPort, IDisposable
         }
         finally
         {
+            foregroundHook?.Dispose();
             _dead = true;
             _ready = false;
             _threadReady.Set();

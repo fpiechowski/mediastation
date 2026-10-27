@@ -108,3 +108,8 @@ IAudioSessionControl2
 ISimpleAudioVolume
 IChannelAudioVolume
 IAudioSessionNotification
+SetWinEventHook
+UnhookWinEvent
+WINEVENTPROC
+EVENT_SYSTEM_FOREGROUND
+WINEVENT_OUTOFCONTEXT
