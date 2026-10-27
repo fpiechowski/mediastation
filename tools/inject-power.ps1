@@ -14,20 +14,27 @@
     Assertions only cover entries produced by the injected signals (source PBT_APMRESUMEAUTOMATIC);
     powerSignal/systemResumed entries from other sources (e.g. PowerModeChanged) are reported
     separately and never counted as proof. Expected trace: 3 x powerSignal, 2 x systemResumed
-    (src `system`) and 3 x snapshotPublished (start + 2 wakes) with seq 1, 2, 3. The script always
-    closes the application (also on failure) and treats a non-zero stop exit code as a failure.
+    (src `system`) and 2 x snapshotPublished after the first powerSignalInjected, whose focusRequest seq
+    continues the last snapshot published before it (1 -> 2, 3 on a fresh application). Snapshots from
+    before the first marker are history and are never counted, so an application used before the script
+    does not fail it. The script always closes the application (also on failure) and treats a non-zero
+    stop exit code as a failure.
 
     MediaStation must already be running with a valid config (%LOCALAPPDATA%\MediaStation\config);
     the script does not start it.
 
 .EXAMPLE
     powershell -File tools/inject-power.ps1
+
+.EXAMPLE
+    powershell -File tools/inject-power.ps1 -SelfTest
 #>
 param(
     [string]$ProcessName = 'MediaStation',
     [string]$LogsDir = (Join-Path $env:LOCALAPPDATA 'MediaStation\logs'),
     [int]$TimeoutSeconds = 30,
-    [switch]$KeepRunning
+    [switch]$KeepRunning,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -196,7 +203,101 @@ function Find-App {
     return $null
 }
 
+function Get-WakeSnapshotProblems {
+    # Snapshots published before the first powerSignalInjected marker are history: the last one is the
+    # baseline, and exactly two more (one per wake) must follow with focusRequest seq baseline + 1, + 2.
+    param([object[]]$Run)
+
+    $problems = New-Object System.Collections.Generic.List[string]
+
+    $firstMarker = -1
+    for ($i = 0; $i -lt $Run.Count; $i++) {
+        if ($Run[$i].msg -eq 'powerSignalInjected') {
+            $firstMarker = $i
+            break
+        }
+    }
+
+    if ($firstMarker -lt 0) {
+        $problems.Add('snapshotPublished: no powerSignalInjected marker to count from')
+        return $problems
+    }
+
+    $before = @($Run | Select-Object -First $firstMarker | Where-Object { $_.msg -eq 'snapshotPublished' })
+    $after = @($Run | Select-Object -Skip $firstMarker | Where-Object { $_.msg -eq 'snapshotPublished' })
+
+    if ($before.Count -lt 1) {
+        $problems.Add('snapshotPublished: no snapshot before the first powerSignalInjected')
+        return $problems
+    }
+
+    if ($after.Count -ne 2) {
+        $problems.Add("snapshotPublished: expected 2 after the first powerSignalInjected (2 wakes), got $($after.Count)")
+    }
+
+    if ($null -eq $before[-1].data.focusRequest.seq) {
+        $problems.Add('snapshotPublished: the snapshot before the first powerSignalInjected has no focusRequest.seq')
+        return $problems
+    }
+
+    $expected = [int]$before[-1].data.focusRequest.seq
+    for ($i = 0; $i -lt $after.Count; $i++) {
+        $expected++
+        $seq = $after[$i].data.focusRequest.seq
+        if ($seq -ne $expected) {
+            $problems.Add("snapshotPublished[$i]: seq $seq instead of $expected")
+        }
+    }
+
+    return $problems
+}
+
+function Invoke-SelfTest {
+    function New-Entry {
+        param([string]$Msg, $Seq = $null)
+
+        $data = if ($null -ne $Seq) { [pscustomobject]@{ focusRequest = [pscustomobject]@{ seq = $Seq } } } else { [pscustomobject]@{} }
+        return [pscustomobject]@{ msg = $Msg; data = $data }
+    }
+
+    $snap = { param($seq) New-Entry 'snapshotPublished' $seq }
+    $mark = New-Entry 'powerSignalInjected'
+
+    $cases = @(
+        @{ Name = 'fresh application'; Run = @((& $snap 1), $mark, (& $snap 2), (& $snap 3)); Problems = 0 },
+        @{ Name = 'used application (9 snapshots before)'; Run = @((1..9 | ForEach-Object { & $snap 1 }) + $mark + (& $snap 2) + (& $snap 3)); Problems = 0 },
+        @{ Name = 'used application after earlier wake'; Run = @((& $snap 1), (& $snap 2), (& $snap 2), $mark, (& $snap 3), (& $snap 4)); Problems = 0 },
+        @{ Name = 'second wake missing'; Run = @((& $snap 1), $mark, (& $snap 2)); Problems = 1 },
+        @{ Name = 'extra snapshot after markers'; Run = @((& $snap 1), $mark, (& $snap 2), (& $snap 3), (& $snap 3)); Problems = 2 },
+        @{ Name = 'gap in seq'; Run = @((& $snap 1), $mark, (& $snap 2), (& $snap 4)); Problems = 1 },
+        @{ Name = 'no snapshot before marker'; Run = @($mark, (& $snap 2), (& $snap 3)); Problems = 1 },
+        @{ Name = 'baseline without seq'; Run = @((New-Entry 'snapshotPublished'), $mark, (& $snap 1), (& $snap 2)); Problems = 1 },
+        @{ Name = 'no marker'; Run = @((& $snap 1)); Problems = 1 }
+    )
+
+    $failures = New-Object System.Collections.Generic.List[string]
+    foreach ($case in $cases) {
+        $found = @(Get-WakeSnapshotProblems -Run $case.Run)
+        Write-Host ("SelfTest '{0}': {1} problem(s), expected {2}" -f $case.Name, $found.Count, $case.Problems)
+        if ($found.Count -ne $case.Problems) {
+            $failures.Add("SelfTest '$($case.Name)': $($found.Count) problem(s) instead of $($case.Problems)")
+        }
+    }
+
+    if ($failures.Count -gt 0) {
+        $failures | ForEach-Object { Write-Host "FAIL: $_" }
+        exit 1
+    }
+
+    Write-Host "OK: $($cases.Count) SelfTest cases."
+    exit 0
+}
+
 # ---------------------------------------------------------------------------
+
+if ($SelfTest) {
+    Invoke-SelfTest
+}
 
 $problems = New-Object System.Collections.Generic.List[string]
 $app = $null
@@ -220,7 +321,7 @@ try {
     Write-Host "MediaStation: pid $($app.Id), hwnd $hwnd"
     Write-Host 'Log: mediastation-*.jsonl, path recomputed on every read'
 
-    # The first snapshot (rev 1) must exist so the counters only cover wakes.
+    # The first snapshot (rev 1) must exist so the baseline before the first marker is defined.
     if (-not (Wait-For -What 'first snapshotPublished' -Seconds $TimeoutSeconds -Condition {
                 @(Get-RunEntries -AppProcessId $app.Id | Where-Object { $_.msg -eq 'snapshotPublished' }).Count -ge 1
             })) {
@@ -322,17 +423,9 @@ try {
         $otherResumes | Group-Object { $_.data.source } | ForEach-Object { Write-Host "  $($_.Name): $($_.Count)" }
     }
 
-    # Start (seq 1) plus two wakes: the registration echo must not produce an extra snapshot.
-    $snapshots = @($run | Where-Object { $_.msg -eq 'snapshotPublished' })
-    if ($snapshots.Count -ne 3) {
-        $problems.Add("snapshotPublished: expected 3 (start + 2 wakes), got $($snapshots.Count)")
-    }
-
-    for ($i = 0; $i -lt $snapshots.Count; $i++) {
-        $seq = $snapshots[$i].data.focusRequest.seq
-        if ($seq -ne ($i + 1)) {
-            $problems.Add("snapshotPublished[$i]: seq $seq instead of $($i + 1)")
-        }
+    # Counted from the last snapshot before the first marker, so a used application is not a failure.
+    foreach ($problem in (Get-WakeSnapshotProblems -Run $run)) {
+        $problems.Add($problem)
     }
 
     $errors = @($run | Where-Object { $_.level -eq 'error' })
@@ -382,5 +475,5 @@ if ($problems.Count -gt 0) {
 }
 
 Write-Host ''
-Write-Host "OK: $injectedCount powerSignal, 2 systemResumed (src system, $PBT_SOURCE), 3 snapshotPublished (seq 1..3), 3 powerSignalInjected."
+Write-Host "OK: $injectedCount powerSignal, 2 systemResumed (src system, $PBT_SOURCE), 2 snapshotPublished after the first marker (seq continues the baseline), 3 powerSignalInjected."
 exit 0
