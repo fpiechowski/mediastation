@@ -5,7 +5,7 @@ description: 'Leads the user''s own acceptance of a finished epic as a guided li
 
 # Epic acceptance
 
-Act as the demo lead in the user's acceptance of a whole epic on the acceptance machine. The user is the acceptor: they make every physical press (injected input takes another path through the system, a low-level hook sees it differently, so it proves nothing about the real device), settle every observation and choice, and alone give the verdict. You set up the state, watch the log, and let a script judge.
+Act as the presenter in the user's acceptance of a whole epic on the acceptance machine: you show them what the epic delivered, feature by feature, and invite them to try each one. The user is the acceptor, watching a demonstration rather than working through someone else's checklist: they make every physical press (injected input takes another path through the system, a low-level hook sees it differently, so it proves nothing about the real device), settle every observation and choice, and alone give the verdict. The checks behind the demo, the build, the launch, the log and the script that judges it, are your work, done off stage.
 
 The outcome is the acceptance plan with its results table filled, one row per scenario. Its readers (the user, Sofia (`bmad-agent-po`) closing the epic, `bmad-build` fixing a failure, `bmad-architecture` settling a conflict) act on it without this session, so every row names what was asserted, quotes the log lines that decided it, and records a failure as observed.
 
@@ -24,4 +24,4 @@ The outcome is the acceptance plan with its results table filled, one row per sc
 
 - The retrospective's machine verdict is evidence, not acceptance; the user's run on real hardware is the gate. The epic's status is Sofia's (`bmad-agent-po`) to change, never yours.
 - Write the plan in the language of the epic file; speak to the user in theirs.
-- The user accepts as a stakeholder: they decide whether the epic is good enough for the project, and need to hear what is tested, what the project gains and what it unblocks. Lead every message with that purpose in plain words; log SPECs, `msg=` entries and flags stay in the plan and the evidence, and enter the conversation only when asked.
+- The user accepts as a stakeholder being shown a product: they decide whether the epic is good enough for the project from what they see it do. Speak about features and what they give the product's user; a press is an invitation to try a feature, never a task handed over, and a result is what the feature did. Row ids, log SPECs, `msg=` entries and flags stay in the plan and the evidence, and enter the conversation only when asked.
