@@ -54,6 +54,20 @@ internal sealed class WinEventForegroundHook : IDisposable
         _hook = hook;
     }
 
+    /// <summary>Raportuje bieżące okno na wierzchu jako <see cref="ForegroundChanged"/>; nie rzuca (AD-4).</summary>
+    public void ReportCurrent()
+    {
+        try
+        {
+            var window = Win32WindowApi.Describe(PInvoke.GetForegroundWindow());
+            _post(new ForegroundChanged(window.Hwnd, window.Pid));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Error(WindowCommandExecutor.Src, "foregroundReportFailed", ex);
+        }
+    }
+
     public void Dispose()
     {
         if (!_hook.IsNull)
@@ -72,13 +86,8 @@ internal sealed class WinEventForegroundHook : IDisposable
                 return;
             }
 
-            var root = PInvoke.GetAncestor(hwnd, GET_ANCESTOR_FLAGS.GA_ROOT);
-            if (root.IsNull)
-            {
-                root = hwnd;
-            }
-
-            _post(new ForegroundChanged((long)(nint)root.Value));
+            var window = Win32WindowApi.Describe(hwnd);
+            _post(new ForegroundChanged(window.Hwnd, window.Pid));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

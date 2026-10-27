@@ -44,6 +44,9 @@ public sealed record MinimizeWindow(long CmdId, long Hwnd) : WindowCommand(CmdId
 /// <summary>WindowManager pokazuje ekran główny nad aplikacjami.</summary>
 public sealed record ShowShell(long CmdId) : WindowCommand(CmdId);
 
+/// <summary>WindowManager raportuje bieżące okno na wierzchu: jedno <see cref="ForegroundChanged"/>, potem <see cref="CommandCompleted"/>.</summary>
+public sealed record ReportForeground(long CmdId) : WindowCommand(CmdId);
+
 /// <summary>
 /// Baza komend AudioRoutera, jedynego kodu wyciszającego sesje audio aplikacji (AD-15). Działa wyłącznie na
 /// <c>rootPid</c> z komendy: drzewo procesów aplikacji ustala AudioRouter po łańcuchu PID.

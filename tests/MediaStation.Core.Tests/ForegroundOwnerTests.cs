@@ -15,11 +15,9 @@ public class ForegroundOwnerTests
         new("plex", 0, 777),
     ];
 
-    private sealed class FakeLookup(Dictionary<long, int>? pids = null) : IForegroundLookup
+    private sealed class FakeLookup : IForegroundLookup
     {
         public long ShellHwnd => Shell;
-
-        public int ProcessIdOf(long hwnd) => pids is not null && pids.TryGetValue(hwnd, out var pid) ? pid : 0;
     }
 
     [Fact]
@@ -27,7 +25,7 @@ public class ForegroundOwnerTests
     {
         var result = ForegroundOwnerResolver.Resolve(Shell, 99, Shell, Apps);
 
-        Assert.Equal(new ForegroundObservation(Shell, ForegroundOwner.Shell, null), result);
+        Assert.Equal(new ForegroundObservation(Shell, 99, ForegroundOwner.Shell, null), result);
     }
 
     [Fact]
@@ -35,7 +33,7 @@ public class ForegroundOwnerTests
     {
         var result = ForegroundOwnerResolver.Resolve(0x1A2B, 777, Shell, Apps);
 
-        Assert.Equal(new ForegroundObservation(0x1A2B, ForegroundOwner.App, "netflix"), result);
+        Assert.Equal(new ForegroundObservation(0x1A2B, 777, ForegroundOwner.App, "netflix"), result);
     }
 
     [Fact]
@@ -43,7 +41,7 @@ public class ForegroundOwnerTests
     {
         var result = ForegroundOwnerResolver.Resolve(0x9999, 777, Shell, Apps);
 
-        Assert.Equal(new ForegroundObservation(0x9999, ForegroundOwner.App, "plex"), result);
+        Assert.Equal(new ForegroundObservation(0x9999, 777, ForegroundOwner.App, "plex"), result);
     }
 
     [Fact]
@@ -51,7 +49,7 @@ public class ForegroundOwnerTests
     {
         var result = ForegroundOwnerResolver.Resolve(0x9999, 55, Shell, Apps);
 
-        Assert.Equal(new ForegroundObservation(0x9999, ForegroundOwner.Foreign, null), result);
+        Assert.Equal(new ForegroundObservation(0x9999, 55, ForegroundOwner.Foreign, null), result);
     }
 
     [Fact]
@@ -69,7 +67,7 @@ public class ForegroundOwnerTests
     {
         var result = ForegroundOwnerResolver.Resolve(0, 4321, 0, Apps);
 
-        Assert.Equal(new ForegroundObservation(0, ForegroundOwner.Foreign, null), result);
+        Assert.Equal(new ForegroundObservation(0, 4321, ForegroundOwner.Foreign, null), result);
     }
 
     [Fact]
@@ -78,25 +76,25 @@ public class ForegroundOwnerTests
         var orchestrator = new MediaStation.Core.Orchestrator.Orchestrator(
             TwoApps(),
             new Microsoft.Extensions.Time.Testing.FakeTimeProvider(T0),
-            new FakeLookup(new Dictionary<long, int> { [0x7001] = 4321, [0x7002] = 12 }));
+            new FakeLookup());
         orchestrator.Handle(new OrchestratorStarted());
         Foreground(orchestrator, "netflix");
 
         Assert.Equal(
-            new ForegroundObservation(Shell, ForegroundOwner.Shell, null),
-            orchestrator.Handle(new ForegroundChanged(Shell)).Foreground);
+            new ForegroundObservation(Shell, 1, ForegroundOwner.Shell, null),
+            orchestrator.Handle(new ForegroundChanged(Shell, 1)).Foreground);
         Assert.Equal(
-            new ForegroundObservation(0x1A2B, ForegroundOwner.App, "netflix"),
-            orchestrator.Handle(new ForegroundChanged(0x1A2B)).Foreground);
+            new ForegroundObservation(0x1A2B, 2, ForegroundOwner.App, "netflix"),
+            orchestrator.Handle(new ForegroundChanged(0x1A2B, 2)).Foreground);
         Assert.Equal(
-            new ForegroundObservation(0x7001, ForegroundOwner.App, "netflix"),
-            orchestrator.Handle(new ForegroundChanged(0x7001)).Foreground);
+            new ForegroundObservation(0x7001, 4321, ForegroundOwner.App, "netflix"),
+            orchestrator.Handle(new ForegroundChanged(0x7001, 4321)).Foreground);
         Assert.Equal(
-            new ForegroundObservation(0x7002, ForegroundOwner.Foreign, null),
-            orchestrator.Handle(new ForegroundChanged(0x7002)).Foreground);
+            new ForegroundObservation(0x7002, 12, ForegroundOwner.Foreign, null),
+            orchestrator.Handle(new ForegroundChanged(0x7002, 12)).Foreground);
         Assert.Equal(
-            new ForegroundObservation(0, ForegroundOwner.Foreign, null),
-            orchestrator.Handle(new ForegroundChanged(0)).Foreground);
+            new ForegroundObservation(0, 0, ForegroundOwner.Foreign, null),
+            orchestrator.Handle(new ForegroundChanged(0, 0)).Foreground);
     }
 
     [Fact]
@@ -111,7 +109,7 @@ public class ForegroundOwnerTests
 
         foreach (var hwnd in new long[] { Shell, 0x1A2B, 0x9999, 0 })
         {
-            var result = orchestrator.Handle(new ForegroundChanged(hwnd));
+            var result = orchestrator.Handle(new ForegroundChanged(hwnd, 5));
 
             Assert.Empty(result.Commands);
             Assert.Null(result.Snapshot);
@@ -129,8 +127,8 @@ public class ForegroundOwnerTests
         var orchestrator = Create();
         orchestrator.Handle(new OrchestratorStarted());
 
-        var result = orchestrator.Handle(new ForegroundChanged(1234));
+        var result = orchestrator.Handle(new ForegroundChanged(1234, 8));
 
-        Assert.Equal(new ForegroundObservation(1234, ForegroundOwner.Foreign, null), result.Foreground);
+        Assert.Equal(new ForegroundObservation(1234, 8, ForegroundOwner.Foreign, null), result.Foreground);
     }
 }

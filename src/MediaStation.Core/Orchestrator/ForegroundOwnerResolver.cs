@@ -14,17 +14,14 @@ public enum ForegroundOwner
 /// <summary>Okno aplikacji znane Orchestratorowi: <c>hwnd</c> z <c>AppWindowAttached</c> i <c>rootPid</c> jej drzewa procesów.</summary>
 public readonly record struct ForegroundApp(string AppId, long Hwnd, int RootPid);
 
-/// <summary>Wynik rozpoznania właściciela okna: <see cref="AppId"/> jest wypełnione tylko dla <see cref="ForegroundOwner.App"/>.</summary>
-public sealed record ForegroundObservation(long Hwnd, ForegroundOwner Owner, string? AppId);
+/// <summary>Wynik rozpoznania właściciela okna (<see cref="Pid"/> pochodzi z <c>ForegroundChanged</c>): <see cref="AppId"/> jest wypełnione tylko dla <see cref="ForegroundOwner.App"/>.</summary>
+public sealed record ForegroundObservation(long Hwnd, int Pid, ForegroundOwner Owner, string? AppId);
 
-/// <summary>Platformowe fakty potrzebne do rozpoznania okna: uchwyt shella (znany tylko App) i PID procesu okna.</summary>
+/// <summary>Platformowe fakty potrzebne do rozpoznania okna: uchwyt shella (znany tylko App). PID okna niesie <c>ForegroundChanged</c>.</summary>
 public interface IForegroundLookup
 {
     /// <summary>Uchwyt okna shella; <c>0</c>, gdy jeszcze nieznany.</summary>
     long ShellHwnd { get; }
-
-    /// <summary>PID procesu okna; <c>0</c>, gdy okna już nie ma.</summary>
-    int ProcessIdOf(long hwnd);
 }
 
 /// <summary>
@@ -40,19 +37,19 @@ public static class ForegroundOwnerResolver
 
         if (hwnd == 0)
         {
-            return new ForegroundObservation(hwnd, ForegroundOwner.Foreign, null);
+            return new ForegroundObservation(hwnd, pid, ForegroundOwner.Foreign, null);
         }
 
         if (hwnd == shellHwnd)
         {
-            return new ForegroundObservation(hwnd, ForegroundOwner.Shell, null);
+            return new ForegroundObservation(hwnd, pid, ForegroundOwner.Shell, null);
         }
 
         foreach (var app in apps)
         {
             if (app.Hwnd == hwnd)
             {
-                return new ForegroundObservation(hwnd, ForegroundOwner.App, app.AppId);
+                return new ForegroundObservation(hwnd, pid, ForegroundOwner.App, app.AppId);
             }
         }
 
@@ -62,11 +59,11 @@ public static class ForegroundOwnerResolver
             {
                 if (app.RootPid == pid)
                 {
-                    return new ForegroundObservation(hwnd, ForegroundOwner.App, app.AppId);
+                    return new ForegroundObservation(hwnd, pid, ForegroundOwner.App, app.AppId);
                 }
             }
         }
 
-        return new ForegroundObservation(hwnd, ForegroundOwner.Foreign, null);
+        return new ForegroundObservation(hwnd, pid, ForegroundOwner.Foreign, null);
     }
 }

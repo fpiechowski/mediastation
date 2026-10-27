@@ -83,6 +83,27 @@ internal sealed class Win32WindowApi : IWindowApi
         }
     }
 
+    public ForegroundWindow GetForeground() => Describe(PInvoke.GetForegroundWindow());
+
+    /// <summary>Wspólna definicja obserwacji dla haka i <c>ReportForeground</c>: okno <c>GA_ROOT</c> i PID jego procesu.</summary>
+    public static unsafe ForegroundWindow Describe(HWND hwnd)
+    {
+        if (hwnd.IsNull)
+        {
+            return new ForegroundWindow(0, 0);
+        }
+
+        var root = PInvoke.GetAncestor(hwnd, GET_ANCESTOR_FLAGS.GA_ROOT);
+        if (root.IsNull)
+        {
+            root = hwnd;
+        }
+
+        uint pid;
+        var thread = PInvoke.GetWindowThreadProcessId(root, &pid);
+        return new ForegroundWindow((long)(nint)root.Value, thread == 0 ? 0 : (int)pid);
+    }
+
     public unsafe IReadOnlyList<WindowInfo> EnumerateTopLevel()
     {
         var windows = new List<WindowInfo>();

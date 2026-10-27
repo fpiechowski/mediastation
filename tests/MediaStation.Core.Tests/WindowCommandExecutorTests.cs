@@ -87,6 +87,10 @@ public class WindowCommandExecutorTests
             return ForegroundAttached;
         }
 
+        public ForegroundWindow Foreground { get; set; } = new(100, 4242);
+
+        public ForegroundWindow GetForeground() => Foreground;
+
         public IReadOnlyList<WindowInfo> EnumerateTopLevel() => [];
     }
 
@@ -103,6 +107,28 @@ public class WindowCommandExecutorTests
         public WindowCommandExecutor Executor => _executor ??= new(Api, Log, Posted.Add, () => Shell, static _ => { });
 
         private WindowCommandExecutor? _executor;
+    }
+
+    [Fact]
+    public void Report_foreground_posts_one_foreground_changed_before_completion()
+    {
+        var rig = new Rig();
+
+        rig.Executor.Execute(new ReportForeground(7));
+
+        Assert.Equal<IOrchestratorMessage[]>([new ForegroundChanged(100, 4242), new CommandCompleted(7)], rig.Posted.ToArray());
+        Assert.Empty(rig.Api.Calls);
+    }
+
+    [Fact]
+    public void Report_foreground_without_a_window_reports_zero_zero_and_completes()
+    {
+        var rig = new Rig();
+        rig.Api.Foreground = new(0, 0);
+
+        rig.Executor.Execute(new ReportForeground(8));
+
+        Assert.Equal<IOrchestratorMessage[]>([new ForegroundChanged(0, 0), new CommandCompleted(8)], rig.Posted.ToArray());
     }
 
     [Fact]
@@ -321,6 +347,10 @@ public class WindowCommandExecutorTests
         public bool SimulateAlt() => false;
 
         public bool SetForegroundAttached(long hwnd) => false;
+
+        public ForegroundWindow Foreground { get; set; } = new(100, 4242);
+
+        public ForegroundWindow GetForeground() => Foreground;
 
         public IReadOnlyList<WindowInfo> EnumerateTopLevel() => [];
     }

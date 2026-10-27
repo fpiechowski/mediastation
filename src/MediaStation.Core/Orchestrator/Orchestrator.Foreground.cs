@@ -18,8 +18,7 @@ public sealed partial class Orchestrator
             apps.Add(new ForegroundApp(app.AppId, app.Hwnd ?? 0, app.RootPid));
         }
 
-        var pid = changed.Hwnd == 0 ? 0 : _foreground?.ProcessIdOf(changed.Hwnd) ?? 0;
-        var observation = ForegroundOwnerResolver.Resolve(changed.Hwnd, pid, _foreground?.ShellHwnd ?? 0, apps);
+        var observation = ForegroundOwnerResolver.Resolve(changed.Hwnd, changed.Pid, _foreground?.ShellHwnd ?? 0, apps);
         return OrchestratorResult.None with { Foreground = observation };
     }
 }

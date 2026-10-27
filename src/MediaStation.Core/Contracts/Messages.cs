@@ -92,10 +92,12 @@ public sealed record TimerElapsed(long TimerId) : Event;
 
 /// <summary>
 /// Foreground systemu zmienił się na okno <see cref="Hwnd"/> (WindowManager, także bez udziału MediaStation).
+/// WindowManager wysyła je też raz po starcie haka (bieżące okno) i w odpowiedzi na <see cref="ReportForeground"/>.
 /// Orchestrator tylko rozpoznaje właściciela okna do logu i nie zmienia trybu, stanu aplikacji ani dźwięku (AD-8).
 /// </summary>
-/// <param name="Hwnd">Uchwyt okna najwyższego poziomu (<c>GA_ROOT</c>); <c>long</c> z tego samego powodu co w <see cref="AppWindowAttached"/>.</param>
-public sealed record ForegroundChanged(long Hwnd) : Event;
+/// <param name="Hwnd">Uchwyt okna najwyższego poziomu (<c>GA_ROOT</c>); <c>long</c> z tego samego powodu co w <see cref="AppWindowAttached"/>; <c>0</c>, gdy nie ma okna.</param>
+/// <param name="Pid">PID procesu okna odczytany przez WindowManagera (AD-14); <c>0</c>, gdy nie ma okna.</param>
+public sealed record ForegroundChanged(long Hwnd, int Pid) : Event;
 
 /// <summary>Wykonawca zakończył komendę <see cref="CmdId"/> sukcesem (AD-4).</summary>
 public sealed record CommandCompleted(long CmdId) : Event;

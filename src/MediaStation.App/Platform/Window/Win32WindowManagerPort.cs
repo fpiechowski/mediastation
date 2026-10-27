@@ -175,6 +175,7 @@ internal sealed class Win32WindowManagerPort : IWindowManagerPort, IDisposable
             // Hook foregroundu na wątku z pętlą komunikatów: callback OUTOFCONTEXT idzie przez nią.
             foregroundHook = new WinEventForegroundHook(_log, _post);
             foregroundHook.Start();
+            foregroundHook.ReportCurrent();
 
             while (true)
             {

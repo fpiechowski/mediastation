@@ -133,6 +133,7 @@ public sealed class OrchestratorLoop : IDisposable
                     _log.Info(Src, "foregroundChanged", new Dictionary<string, object?>
                     {
                         ["hwnd"] = foreground.Hwnd,
+                        ["pid"] = foreground.Pid,
                         ["owner"] = foreground.Owner switch
                         {
                             ForegroundOwner.Shell => "shell",

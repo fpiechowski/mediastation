@@ -258,7 +258,7 @@ public class OrchestratorFailureTests
     {
         var orchestrator = Create();
 
-        var result = orchestrator.Handle(new ForegroundChanged(1234));
+        var result = orchestrator.Handle(new ForegroundChanged(1234, 8));
 
         Assert.Empty(result.Commands);
         Assert.Null(result.Snapshot);

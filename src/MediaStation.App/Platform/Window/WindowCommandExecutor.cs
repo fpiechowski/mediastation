@@ -100,8 +100,17 @@ internal sealed class WindowCommandExecutor
         MinimizeWindow minimize => (minimize.Hwnd, Minimize(minimize.Hwnd)),
         ActivateWindow activate => (activate.Hwnd, Activate(activate.Hwnd)),
         ShowShell => ShowShellWindow(),
+        ReportForeground => ReportForegroundWindow(),
         _ => (hwnd, ErrorCode.Unexpected),
     };
+
+    /// <summary>Świeża obserwacja okna na wierzchu: <see cref="ForegroundChanged"/> idzie przed <see cref="CommandCompleted"/>.</summary>
+    private (long? Hwnd, ErrorCode? Error) ReportForegroundWindow()
+    {
+        var window = _api.GetForeground();
+        _post(new ForegroundChanged(window.Hwnd, window.Pid));
+        return (window.Hwnd, null);
+    }
 
     private ErrorCode? Minimize(long hwnd)
     {

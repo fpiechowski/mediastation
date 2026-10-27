@@ -275,14 +275,27 @@ public class CoreMessageContractTests
     [Fact]
     public void Foreground_changed_event_envelope_serializes_exactly_and_round_trips()
     {
-        Event changed = new ForegroundChanged(1234);
+        Event changed = new ForegroundChanged(1234, 77);
 
         var json = ContractJson.SerializeEnvelope(changed);
 
-        Assert.Equal("""{"v":1,"type":"foregroundChanged","payload":{"hwnd":1234}}""", json);
+        Assert.Equal("""{"v":1,"type":"foregroundChanged","payload":{"hwnd":1234,"pid":77}}""", json);
         var back = ContractJson.DeserializeEnvelope<Event>(json);
         Assert.IsType<ForegroundChanged>(back);
         Assert.Equal(changed, back);
+    }
+
+    [Fact]
+    public void Report_foreground_command_envelope_serializes_exactly_and_round_trips()
+    {
+        Command report = new ReportForeground(9);
+
+        var json = ContractJson.SerializeEnvelope(report);
+
+        Assert.Equal("""{"v":1,"type":"reportForeground","payload":{"cmdId":9}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Command>(json);
+        Assert.IsType<ReportForeground>(back);
+        Assert.Equal(report, back);
     }
 
     [Fact]
@@ -444,7 +457,7 @@ public class CoreMessageContractTests
         Assert.IsAssignableFrom<IOrchestratorMessage>(new ProcessExited("netflix"));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new CdpLost("netflix"));
         Assert.IsAssignableFrom<IOrchestratorMessage>(new TimerElapsed(1));
-        Assert.IsAssignableFrom<IOrchestratorMessage>(new ForegroundChanged(1));
+        Assert.IsAssignableFrom<IOrchestratorMessage>(new ForegroundChanged(1, 2));
     }
 
     [Fact]
@@ -561,7 +574,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "setManagedWindows", "sendKey", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "muteProcessTree", "unmuteProcessTree", "forgetProcessTree", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
+        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "setManagedWindows", "sendKey", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "reportForeground", "muteProcessTree", "unmuteProcessTree", "forgetProcessTree", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -601,6 +614,7 @@ public class CoreMessageContractTests
                 "probe-existing.schema.json",
                 "process-exited.schema.json",
                 "renew-session.schema.json",
+                "report-foreground.schema.json",
                 "restart-app.schema.json",
                 "schedule-timer.schema.json",
                 "send-key.schema.json",
@@ -750,10 +764,11 @@ public class CoreMessageContractTests
     [InlineData("app-window-attached.schema.json", "AppWindowAttached", "appId,hwnd,rootPid")]
     [InlineData("process-exited.schema.json", "ProcessExited", "appId")]
     [InlineData("cdp-lost.schema.json", "CdpLost", "appId")]
-    [InlineData("foreground-changed.schema.json", "ForegroundChanged", "hwnd")]
+    [InlineData("foreground-changed.schema.json", "ForegroundChanged", "hwnd,pid")]
     [InlineData("activate-window.schema.json", "ActivateWindow", "cmdId,hwnd")]
     [InlineData("minimize-window.schema.json", "MinimizeWindow", "cmdId,hwnd")]
     [InlineData("show-shell.schema.json", "ShowShell", "cmdId")]
+    [InlineData("report-foreground.schema.json", "ReportForeground", "cmdId")]
     [InlineData("mute-process-tree.schema.json", "MuteProcessTree", "cmdId,rootPid")]
     [InlineData("unmute-process-tree.schema.json", "UnmuteProcessTree", "cmdId,rootPid")]
     [InlineData("forget-process-tree.schema.json", "ForgetProcessTree", "cmdId,rootPid")]

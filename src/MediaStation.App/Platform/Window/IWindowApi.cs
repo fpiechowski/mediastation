@@ -15,6 +15,9 @@ internal enum WindowShow
     MinimizeNoActivate,
 }
 
+/// <summary>Okno najwyższego poziomu i PID jego procesu; <c>(0, 0)</c>, gdy brak okna.</summary>
+internal readonly record struct ForegroundWindow(long Hwnd, int Pid);
+
 /// <summary>
 /// Jedyna granica logiki WindowManagera do Win32 (AD-15). Operacje na cudzych oknach są asynchroniczne
 /// (<c>ShowWindowAsync</c>, <c>SWP_ASYNCWINDOWPOS</c>), żeby zawieszone okno nie blokowało wątku WindowManagera.
@@ -41,6 +44,9 @@ internal interface IWindowApi
 
     /// <summary>Fallback: <c>AttachThreadInput</c> do wątku okna pierwszego planu, <c>SetForegroundWindow</c> i odpięcie.</summary>
     bool SetForegroundAttached(long hwnd);
+
+    /// <summary>Okno na wierzchu (<c>GA_ROOT</c>) i jego PID; <c>(0, 0)</c>, gdy brak okna.</summary>
+    ForegroundWindow GetForeground();
 
     /// <summary>Okna najwyższego poziomu (<c>EnumWindows</c>).</summary>
     IReadOnlyList<WindowInfo> EnumerateTopLevel();

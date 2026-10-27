@@ -123,7 +123,7 @@ public class OrchestratorLoopTests
         loop.Start();
         WaitFor(() => published.Count >= 1);
 
-        loop.Post(new ForegroundChanged(1234));
+        loop.Post(new ForegroundChanged(1234, 8));
         WaitFor(() => log.Entries.Any(entry => entry.Msg == "foregroundChanged"));
 
         // Pętla loguje przed dispatch/publish, więc sam wpis nie dowodzi braku snapshotu: SystemResumed
@@ -149,6 +149,7 @@ public class OrchestratorLoopTests
         Assert.Equal(LogLevel.Info, entry.Level);
         Assert.Equal("orchestrator", entry.Src);
         Assert.Equal(1234L, entry.Data!["hwnd"]);
+        Assert.Equal(8, entry.Data["pid"]);
         Assert.Equal("foreign", entry.Data["owner"]);
         Assert.Null(entry.Data["appId"]);
     }
@@ -168,8 +169,8 @@ public class OrchestratorLoopTests
         loop.Post(new LaunchApp("netflix"));
         loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
 
-        loop.Post(new ForegroundChanged(0x500));
-        loop.Post(new ForegroundChanged(0x1A2B));
+        loop.Post(new ForegroundChanged(0x500, 10));
+        loop.Post(new ForegroundChanged(0x1A2B, 4321));
         WaitFor(() => log.Entries.Count(entry => entry.Msg == "foregroundChanged") == 2);
 
         var entries = log.Entries.Where(entry => entry.Msg == "foregroundChanged").ToArray();
@@ -182,8 +183,6 @@ public class OrchestratorLoopTests
     private sealed class FixedForegroundLookup(long shell) : IForegroundLookup
     {
         public long ShellHwnd => shell;
-
-        public int ProcessIdOf(long hwnd) => 0;
     }
 
     [Fact]
