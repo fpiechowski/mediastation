@@ -402,7 +402,8 @@ severity: medium
 reason: Zgodne z AD-8 (zmiana okna poza MediaStation nie zmienia trybu), ale użytkownik chce, żeby pilot działał także po Alt+Tab. To zmiana wymagań, nie błąd wykonania.
 owner: bmad-architecture (zmiana AD-8)
 ticket: entry 9 w epic-windows-audio (5.9), czeka na decyzję bmad-architecture, 2026-10-27
-status: open
+status: done 2026-10-28
+resolution: already resolved: story 5.9 (dd14a69): Orchestrator.Foreground.cs OnForegroundChanged resolves the window owner and re-evaluates input mode after a settle timer, so Alt+Tab no longer leaves routing on app mode.
 
 ### DW-45: AudioRouter widzi tylko wyciszenia, które sam zainicjował; ręczne zmiany w mikserze Windows i Alt+Tab rozjeżdżają jego stan.
 origin: odbiór epiki 5 na UM760, 2026-10-27, S19 (1. podejście) i przerwa przed S18
@@ -412,7 +413,8 @@ severity: medium
 reason: Po ręcznych zmianach w mikserze użytkownik miał ciszę mimo odciszonej reguły (Moonlight) i słyszał Edge razem ze streamem (po ręcznym odciszeniu Edge). W czystym stanie dźwięk działał (S19 powtórka, S20, S21, S23, S24). Do rozważenia: uzgadnianie ze stanem sesji audio przy każdym przejściu.
 owner: bmad-architecture
 ticket: entry 10 w epic-windows-audio (5.10), czeka na decyzję bmad-architecture, 2026-10-27
-status: open
+status: done 2026-10-28
+resolution: already resolved: story 5.10 (199144e): AudioRouterEngine/CoreAudioSessionBackend reconcile the audio rule as target state over the Windows mixer instead of an own-mutes-only ledger.
 
 ### DW-46: Kropka „działa w tle” przy zakładce Video jest w prawym górnym rogu pigułki; użytkownik woli ją wycentrowaną w pionie.
 origin: odbiór epiki 5 na UM760, 2026-10-27, S3
