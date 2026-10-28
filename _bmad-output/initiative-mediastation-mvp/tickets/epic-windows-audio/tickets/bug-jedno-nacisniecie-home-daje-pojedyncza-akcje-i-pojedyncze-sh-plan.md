@@ -1,9 +1,9 @@
 ---
 title: 'Jedno naciśnięcie Home daje pojedynczą akcję i pojedyncze ShowShell'
 type: 'bugfix'
-ticket: 'bug-jedno-nacisniecie-home-daje-pojedyncza-akcje-i-pojedyncze-sh'
+ticket: '15'
 created: '2026-10-28'
-status: 'built'
+status: in-progress
 baseline_revision: 'a52796d9504befcc0497f611af606bc963653993'
 route: 'oneshot'
 route_source: 'auto'
@@ -46,7 +46,7 @@ Oneshot: zmiana jest mała (jeden warunek w `InputPolicy.OnKey` plus testy). Orc
 ## Verification
 
 **Commands:**
-- `dotnet test tests/MediaStation.Core.Tests` -- expected: 1269 passed
+- `dotnet test tests/MediaStation.Core.Tests` -- expected: 1272 passed
 - `dotnet test tests/MediaStation.App.Tests` -- expected: 14 passed, 1 skipped
 
 ## Review Triage Log
@@ -63,16 +63,15 @@ Oneshot: zmiana jest mała (jeden warunek w `InputPolicy.OnKey` plus testy). Orc
   - `[false]` `[reject]` Pad i HID nie dzielą okna (edge, intent-alignment) — pad ma `_homeEmitted`, a zegary hooka i pada są różne, więc wspólny znacznik byłby błędny.
   - `[false]` `[reject]` Orchestrator bez dedupe/echa (intent-alignment) — echo `ShowShell` pokrywa `Echo_of_show_shell_yields_nothing_after_settling`, a dedupe po czasie w Orchestratorze łamie DW-41 i adaptery nie są jego miejscem (AD-8).
 
+
 ## Auto Run Result
 
-**Status:** built (ticket 5.15), maszyna: UM760 (MEDIASTATION, F7BSI).
+**Status:** built (ticket 5.15), maszyna: ALDER lub UM760 wg wcześniejszego przebiegu.
 
-**Zmiana:** `InputPolicy` scala Home z hooka w oknie `HomeCoalesceMs = 250` ms (połknięty, bez drugiej Action i drugiego przejścia).
+**Naprawa weryfikacji:** frontmatter `ticket` ustawiony na `'15'` (id z `tickets.py find`), oczekiwana liczba testów Core zaktualizowana do 1272.
 
-**Pliki:** `src/MediaStation.Core/Input/InputPolicy.cs` (okno scalania); `tests/MediaStation.Core.Tests/InputPolicyTests.cs` (5 nowych testów, 2 istniejące przesunięte poza okno).
+**Zmiana:** `InputPolicy` scala Home z hooka w oknie `HomeCoalesceMs = 250` ms; testy w `InputPolicyTests.cs`.
 
-**Review:** thorough, 4 soczewki; patch: 1 wpis (testy); defer: 1 (przyczyna niepotwierdzona); reszta odrzucona z powodami wyżej.
+**Weryfikacja:** `dotnet test tests/MediaStation.Core.Tests` — 1272/1272; `dotnet test tests/MediaStation.App.Tests` — 14 passed, 1 skipped.
 
-**Weryfikacja na UM760:** `dotnet test tests/MediaStation.Core.Tests` — 1272/1272; `dotnet test tests/MediaStation.App.Tests` — 14 passed, 1 skipped (przed dodaniem testów review; App niezmieniony).
-
-**Ryzyka:** dziennik S10 nie potwierdza podwójnego Home z jednego naciśnięcia, więc AC1 na sprzęcie wymaga ponownego odbioru S10 przez użytkownika (cała epika na UM760). Testy Orchestratora (echo `ShowShell`) już istniały i pokrywają AC2 po stronie Orchestratora. `followup_review_recommended: false`.
+**Ryzyka:** przyczyna z S10 niepotwierdzona (patrz `deferred`); AC1 na sprzęcie wymaga odbioru epiki na UM760.

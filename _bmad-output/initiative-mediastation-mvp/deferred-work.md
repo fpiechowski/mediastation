@@ -473,3 +473,10 @@ source_spec: `plan-dw-power-notifications-harness.md`
 severity: medium
 reason: Observed by the new harness; Registration_echo_is_delivered_through_the_hook_after_start pins the behavior and Registration_echo_is_not_reported_as_a_wake (Skipped) holds the desired one. Pre-existing router/shim timing, not caused by the harness.
 status: open
+
+### DW-51: Przyczyna podwójnego Home z S10 nie jest potwierdzona; okno scalania w InputPolicy jest ochroną, nie dowiedzioną naprawą.
+origin: spec-deferred 3886f76d6600
+location: src/MediaStation.Core/Input/InputPolicy.cs
+source_spec: `tickets/epic-windows-audio/tickets/bug-jedno-nacisniecie-home-daje-pojedyncza-akcje-i-pojedyncze-sh-plan.md`
+reason: Dziennik z S10 (UM760, 2026-10-28, 14:05:00 i 14:05:21) pokazuje dwa osobne naciśnięcia, każde z jedną akcją i jednym ShowShell. Jeśli podwójny przebieg ma inne źródło (pad, HID, echo), błąd zostanie; rozstrzyga ponowny odbiór S10 na UM760.
+status: open
