@@ -78,6 +78,13 @@ public sealed class InputPolicy : IInputTarget
     /// <summary>Okno korelacji raportu urządzenia z klawiszem; okno jest jednostronne (raport przed klawiszem).</summary>
     public const int CorrelationWindowMs = 50;
 
+    /// <summary>
+    /// Okno scalania Home z klawiatury (hook LL): drugi key-down Home w tym czasie od poprzedniego, który dał Action
+    /// (powtórzony sygnał, drugi VK tego samego naciśnięcia, echo), nie daje drugiej Action ani drugiego przejścia.
+    /// Człowiek nie wciska Home dwa razy szybciej; klawisz zostaje połknięty jak zwykle.
+    /// </summary>
+    public const int HomeCoalesceMs = 250;
+
     private const int HidConsumerUsagePage = 0x0C;
     private const int RemoteHomeUsage = 0x0223;
     private const int RemoteBackUsage = 0x0224;
@@ -108,6 +115,7 @@ public sealed class InputPolicy : IInputTarget
     private readonly Dictionary<HeldId, HeldKey> _held = [];
     private PendingLong? _pendingLong;
     private bool _homeEmitted;
+    private long? _lastKeyHomeMs;
     private bool _gamepadBaselinePending;
     private RemoteEvidence? _pendingRemoteEvidence;
     private readonly Dictionary<string, HashSet<int>> _hidKeyboardUsages = [];
@@ -278,6 +286,16 @@ public sealed class InputPolicy : IInputTarget
                     key.TimeMs,
                     _time.GetUtcNow().AddMilliseconds(_longPressMs));
                 return new InputDecision(true, NoActions);
+            }
+
+            if (kind == ActionKind.Home)
+            {
+                if (_lastKeyHomeMs is { } lastHome && key.TimeMs - lastHome is >= 0 and < HomeCoalesceMs)
+                {
+                    return new InputDecision(true, NoActions);
+                }
+
+                _lastKeyHomeMs = key.TimeMs;
             }
 
             return new InputDecision(true, [new ActionMessage(kind, ActionPhase.Press, source, key.TimeMs)]);

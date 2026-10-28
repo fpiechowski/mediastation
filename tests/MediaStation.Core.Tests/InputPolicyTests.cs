@@ -867,8 +867,82 @@ public class InputPolicyTests
         policy.OnKey(Up(0xAC, 1005, injected: true));
 
         Assert.Equal(
-            Press(ActionKind.Home, ActionSource.Keyboard, 1020),
-            Assert.Single(policy.OnKey(Down(0xAC, 1020, injected: true)).Actions));
+            Press(ActionKind.Home, ActionSource.Keyboard, 1400),
+            Assert.Single(policy.OnKey(Down(0xAC, 1400, injected: true)).Actions));
+    }
+
+    [Fact]
+    public void Single_home_press_with_repeated_or_second_vk_gives_one_action()
+    {
+        var (policy, _, _) = Create();
+
+        var first = policy.OnKey(Down(0xAC, 1000));
+        Assert.Equal(Press(ActionKind.Home, ActionSource.Keyboard, 1000), Assert.Single(first.Actions));
+
+        // Autorepeat bez key-up, key-up i ponowny key-down tego samego VK w oknie scalania nie dają drugiej Action.
+        Assert.Empty(policy.OnKey(Down(0xAC, 1030)).Actions);
+        Assert.Empty(policy.OnKey(Up(0xAC, 1050)).Actions);
+        var again = policy.OnKey(Down(0xAC, 1100));
+        Assert.True(again.Swallow);
+        Assert.Empty(again.Actions);
+        policy.OnKey(Up(0xAC, 1120));
+
+        // Drugie naciśnięcie po oknie scalania jest nowym Home.
+        var second = policy.OnKey(Down(0xAC, 1000 + InputPolicy.HomeCoalesceMs));
+        Assert.Equal(Press(ActionKind.Home, ActionSource.Keyboard, 1000 + InputPolicy.HomeCoalesceMs), Assert.Single(second.Actions));
+    }
+
+    [Fact]
+    public void Second_vk_mapped_to_home_inside_the_window_gives_no_second_action()
+    {
+        var (policy, _) = RoutedWildcard(InputMode.Shell, null);
+
+        Assert.Single(policy.OnKey(Down(0xAC, 1000)).Actions);
+
+        var second = policy.OnKey(Down(0x24, 1010));
+        Assert.True(second.Swallow);
+        Assert.Empty(second.Actions);
+    }
+
+    [Fact]
+    public void Remote_home_followed_by_keyboard_home_inside_the_window_gives_one_remote_action()
+    {
+        var (policy, _, _) = Create();
+
+        policy.OnHidConsumer(new HidConsumerReport(DonglePath, 990, 0x0C, RemoteHomeUsage));
+        var first = policy.OnKey(Down(0xAC, 1000, injected: true));
+        policy.OnKey(Up(0xAC, 1010, injected: true));
+        var echo = policy.OnKey(Down(0xAC, 1020, injected: true));
+
+        Assert.Equal(Press(ActionKind.Home, ActionSource.Remote, 1000), Assert.Single(first.Actions));
+        Assert.True(echo.Swallow);
+        Assert.Empty(echo.Actions);
+    }
+
+    [Fact]
+    public void Home_coalescing_window_ends_exactly_at_home_coalesce_ms()
+    {
+        var (policy, _, _) = Create();
+
+        Assert.Single(policy.OnKey(Down(0xAC, 1000)).Actions);
+        policy.OnKey(Up(0xAC, 1010));
+
+        Assert.Empty(policy.OnKey(Down(0xAC, 1000 + InputPolicy.HomeCoalesceMs - 1)).Actions);
+        policy.OnKey(Up(0xAC, 1000 + InputPolicy.HomeCoalesceMs));
+
+        // Zdławiony key-down nie przesuwa okna: liczy się od ostatniej Action.
+        Assert.Single(policy.OnKey(Down(0xAC, 1000 + InputPolicy.HomeCoalesceMs)).Actions);
+    }
+
+    [Fact]
+    public void Home_coalescing_does_not_swallow_other_keys()
+    {
+        var (policy, _, _) = Create();
+
+        Assert.Single(policy.OnKey(Down(0xAC, 1000)).Actions);
+
+        var back = policy.OnKey(Down(0xA6, 1010));
+        Assert.Equal(Press(ActionKind.Back, ActionSource.Keyboard, 1010), Assert.Single(back.Actions));
     }
 
     [Fact]
@@ -931,10 +1005,10 @@ public class InputPolicyTests
         policy.OnHidConsumer(new HidConsumerReport(DonglePath, 990, 0x0C, RemoteHomeUsage));
         var first = policy.OnKey(Down(0xAC, 1000, injected: true));
         policy.OnKey(Up(0xAC, 1010, injected: true));
-        var second = policy.OnKey(Down(0xAC, 1020, injected: true));
+        var second = policy.OnKey(Down(0xAC, 1400, injected: true));
 
         Assert.Equal(Press(ActionKind.Home, ActionSource.Remote, 1000), Assert.Single(first.Actions));
-        Assert.Equal(Press(ActionKind.Home, ActionSource.Keyboard, 1020), Assert.Single(second.Actions));
+        Assert.Equal(Press(ActionKind.Home, ActionSource.Keyboard, 1400), Assert.Single(second.Actions));
     }
 
     [Fact]
