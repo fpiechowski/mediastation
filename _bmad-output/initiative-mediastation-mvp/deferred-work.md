@@ -392,7 +392,9 @@ location: src/MediaStation.Core/Orchestrator/Orchestrator.Home.cs:58
 source_spec: `plan-dw-decision-dw-41-home-in-shell-mode.md`
 severity: low
 reason: Orchestrator.Home.cs Foreground branch returns OrchestratorResult.None when Hwnd is null; pre-existing and outside DW-41's intent (no Foreground app).
-status: open
+status: done 2026-10-28
+resolution: resolved by sweep bundle dw-foreground-no-hwnd-shows-shell
+resolution-undo: 5077aafbe1224076096361a511cafc9a8b19860af5e6fcaf34679f547534a6e8 2026-10-28 7374617475733a206f70656e
 ticket: `_bmad-output/backlog/bug-foreground-without-hwnd-shows-shell.md`
 
 ### DW-43: Moonlight po Home i powrocie zawiesza się na „Uruchamianie input stream establishment…”, bez transmisji (log pokazuje poprawne komendy okienne).

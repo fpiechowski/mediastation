@@ -34,7 +34,8 @@ public sealed partial class Orchestrator
     /// <summary>
     /// Home z pierwszego planu: aplikacja schodzi do <c>Background</c>, shell wraca na wierzch, a InputHub
     /// dostaje tryb <c>shell</c>. Kolejność komend jest istotna (AD-5/AD-15): najpierw <see cref="MuteProcessTree"/>, potem minimalizacja,
-    /// potem <see cref="ShowShell"/>, na końcu routing. Fokusu nie zmieniamy — UI sam wraca na ostatni kafelek.
+    /// potem <see cref="ShowShell"/>, na końcu routing; bez znanego <c>hwnd</c> pomijamy tylko minimalizację (DW-42).
+    /// Fokusu nie zmieniamy — UI sam wraca na ostatni kafelek.
     /// Home w trakcie <c>Starting</c> pokazuje od razu tylko shell: aplikacja zostaje <c>Starting</c> bez fokusu,
     /// bez routingu i bez anulowania timeoutu, a okno, które pojawi się później, dostanie kompensację w
     /// <see cref="OnAppWindowAttached"/>. Home jest decyzją o pierwszym planie także wtedy, gdy nie ma czego chować
@@ -55,17 +56,17 @@ public sealed partial class Orchestrator
         var app = _apps.Find(candidate => candidate.State == AppLifecycleState.Foreground);
         if (app is not null)
         {
-            if (app.Hwnd is not { } hwnd)
+            app.State = AppLifecycleState.Background;
+            var foregroundCommands = new List<Command> { new MuteProcessTree(NextCmdId(), app.RootPid) };
+            // Bez znanego hwnd nie ma czego minimalizować, ale shell i routing wracają tak samo (DW-42).
+            if (app.Hwnd is { } hwnd)
             {
-                return OrchestratorResult.None;
+                foregroundCommands.Add(new MinimizeWindow(NextCmdId(), hwnd));
             }
 
-            app.State = AppLifecycleState.Background;
-            var mute = new MuteProcessTree(NextCmdId(), app.RootPid);
-            var minimize = new MinimizeWindow(NextCmdId(), hwnd);
-            var showShell = new ShowShell(NextCmdId());
-            var routing = Route(InputMode.Shell, null, PointerPolicy.Blocked);
-            return new OrchestratorResult([mute, minimize, showShell, routing], Snapshot());
+            foregroundCommands.Add(new ShowShell(NextCmdId()));
+            foregroundCommands.Add(Route(InputMode.Shell, null, PointerPolicy.Blocked));
+            return new OrchestratorResult(foregroundCommands, Snapshot());
         }
 
         if (_apps.Exists(candidate => candidate.State == AppLifecycleState.Starting))

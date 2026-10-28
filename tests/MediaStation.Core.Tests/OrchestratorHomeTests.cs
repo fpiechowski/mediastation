@@ -1,3 +1,4 @@
+using System.Reflection;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
 using Microsoft.Extensions.Time.Testing;
@@ -186,6 +187,64 @@ public class OrchestratorHomeTests
         var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
         Assert.Equal(background.Rev + 1, snapshot.Rev);
         Assert.Equal(AppLifecycleState.Background, StateOf(snapshot, "netflix"));
+    }
+
+    /// <summary>
+    /// Aplikacja <c>Foreground</c> bez znanego <c>hwnd</c> (DW-42): Home nie ma czego minimalizować, ale nadal
+    /// wycisza proces, pokazuje shell i przełącza routing na <c>shell</c>; aplikacja schodzi do <c>Background</c>.
+    /// </summary>
+    [Fact]
+    public void Home_from_foreground_without_hwnd_shows_shell_and_routes_shell_input()
+    {
+        var (orchestrator, _) = Started();
+        var foreground = Foreground(orchestrator, "netflix");
+        ClearHwnd(orchestrator, "netflix");
+
+        var result = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 2));
+
+        Assert.Collection(
+            result.Commands,
+            command => Assert.Equal(new MuteProcessTree(11, 4321), command),
+            command => Assert.Equal(new ShowShell(12), command),
+            command => Assert.Equal(
+                new SetInputRouting(13, InputMode.Shell, null, PointerPolicy.Blocked, 3),
+                command),
+            // Zerowanie hwnd w teście zmienia zbiór zarządzanych okien, więc Handle dopisuje jego aktualizację.
+            command => AssertManaged(command, 14, 2));
+        var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
+        Assert.Equal(foreground.Rev + 1, snapshot.Rev);
+        Assert.Equal(AppLifecycleState.Background, StateOf(snapshot, "netflix"));
+    }
+
+    /// <summary>Po Home bez <c>hwnd</c> aplikacja jest w <c>Background</c>, więc kolejny Home tylko potwierdza shell.</summary>
+    [Fact]
+    public void Second_home_after_hwndless_foreground_only_reasserts_the_shell()
+    {
+        var (orchestrator, _) = Started();
+        Foreground(orchestrator, "netflix");
+        ClearHwnd(orchestrator, "netflix");
+        orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 2));
+
+        var result = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 3));
+
+        Assert.IsType<ShowShell>(Assert.Single(result.Commands));
+        var snapshot = Assert.IsType<ShellSnapshot>(result.Snapshot);
+        Assert.Equal(AppLifecycleState.Background, StateOf(snapshot, "netflix"));
+    }
+
+    /// <summary>Stan <c>Foreground</c> bez <c>hwnd</c> nie jest osiągalny przez publiczne Intenty, więc zerujemy go refleksją.</summary>
+    private static void ClearHwnd(CoreOrchestrator orchestrator, string appId)
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var apps = (System.Collections.IEnumerable)typeof(CoreOrchestrator).GetField("_apps", flags)!.GetValue(orchestrator)!;
+        foreach (var app in apps)
+        {
+            var type = app.GetType();
+            if ((string)type.GetProperty("AppId")!.GetValue(app)! == appId)
+            {
+                type.GetProperty("Hwnd")!.SetValue(app, null);
+            }
+        }
     }
 
     [Theory]
