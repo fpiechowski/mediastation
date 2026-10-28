@@ -190,3 +190,32 @@ after = []
 hitl = false
 risk = "medium"
 references = ["epic-windows-audio-um760-acceptance.md, S10 (2026-10-28)", "deferred-work.md, DW-41"]
+
+# Po pełnym odbiorze 2026-10-28: świeży przebieg z MEDIASTATION_HARNESS_URL
+# nadal nie daje działającego okna netflix.com.  Najpierw naprawa startu, potem
+# bramka preflightu, dopiero potem ponowny odbiór S15–S27.
+
+[[entry]]
+id = 16
+type = "bug"
+title = "Dev harness Netflix nie doprowadza Edge do widocznego, działającego netflix.com"
+description = "Świeży przebieg na UM760 z HEAD 60d6215 i MEDIASTATION_HARNESS_URL nie otworzył widocznego okna Netflix ani materiału; log miał audioRuleApplied muted=false sessions=0, ale nie miał appWindowAttached dla netflix. Rozstrzygnij i napraw ścieżkę od konfiguracji profilu i URL do gotowego okna Edge, zachowując diagnostykę etapów startu."
+verify = "Na UM760 po świeżym publish i wyczyszczeniu tylko profilu harnessu OK na kafelku Netflix otwiera Edge z profiles\\netflix, loguje dokładnie jedno appWindowAttached dla netflix, a użytkownik widzi netflix.com i może rozpocząć odtwarzanie; przebieg z już żywym procesem profilu również kończy się adopcją jednego okna albo ma jednoznaczny błąd etapu. Test regresyjny pokrywa świeży profil, żywy profil, URL niedostępny i brak okna."
+covers = ["R2", "R8"]
+after = [14]
+hitl = false
+risk = "high"
+severity = "P1"
+references = ["epic-windows-audio-um760-acceptance.md, S15 i pełny pass z 2026-10-28", "epic-windows-audio.md, R2, R8, Decision 2026-10-26 o dev harnessie", "epic-browserhost/epic-browserhost.md"]
+
+[[entry]]
+id = 17
+type = "story"
+title = "Preflight odbioru wymaga zalogowanego i grającego netflix.com"
+description = "Przed uruchomieniem scenariuszy audio odbiór ma sprawdzić, że Edge w profilu profiles\\netflix ma widoczne okno na netflix.com i rzeczywiście odtwarza materiał. Preflight ma zakończyć się czytelnym wynikiem gotowe/niegotowe i blokować S15–S27, gdy warunek nie jest spełniony."
+verify = "Na UM760 po poprawce 16 preflight dla profilu profiles\\netflix potwierdza okno Edge, adres lub tytuł netflix.com, gotowość odtwarzania i obecność appWindowAttached; dla braku logowania, złego URL, pustego materiału lub braku okna kończy się niezerowo z przyczyną i nie pozwala oznaczyć S15–S27 jako wykonanych. Test automatyczny obejmuje co najmniej brak okna, zły profil i poprawny profil; krok logowania/odtwarzania pozostaje potwierdzeniem użytkownika."
+covers = ["R8"]
+after = [16]
+hitl = true
+risk = "high"
+references = ["epic-windows-audio-um760-acceptance.md, P0.4, S15–S27 i wynik użytkownika z 2026-10-28", "epic-windows-audio.md, R8, Done when 4", "epic-windows-audio/tickets/bug-start-kafelka-netflix-konczy-sie-devharnessstartfailed-zamia.md"]
