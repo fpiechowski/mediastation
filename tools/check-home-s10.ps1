@@ -18,7 +18,9 @@
     exception is named: the desktop window (`Progman`/`WorkerW` owned by `explorer`, target `desktop`). A DWM
     ghost window (`dwm`) over the shell is a failure ("target not foreground (DWM ghost over the shell)"):
     the keyboard hook receives no input while the ghost has the foreground.
-    -EdgeTitle is a regular expression matched against the window title.
+    -EdgeTitle is a regular expression matched against the window title. Without it the Edge target is the
+    first ownerless `Chrome_WidgetWin_*` window whose title ends with "Microsoft Edge" and is not DevTools, so
+    DevTools and app/PWA windows of the same process are never picked (DW-32); -EdgeTitle replaces that rule.
 
     Targets run in the order of -Targets (default `shell-hung, edge, moonlight, desktop`): the hung shell goes
     first and the desktop last, because MinimizeAll leaves a hung shell behind and Windows then replaces it
@@ -289,6 +291,8 @@ function Select-EdgeWindow {
 
     # The first (topmost) real Edge window with a title; the title is not part of the contract, so the default
     # accepts any (3.13: the window of the person was not called "Netflix"). A tooltip/popup has another class.
+    # Without -TitlePattern a DevTools window and a window whose title does not end with "Microsoft Edge" (an
+    # app/PWA window) are skipped; -TitlePattern replaces that rule.
     # Owned windows are skipped. With -TreePids (the process tree of the `rootPid` of `appWindowAttached`) only the
     # visible, ownerless `Chrome_WidgetWin_1` window of that tree counts, whatever its title (DW-15, DW-32).
     foreach ($window in $Windows) {
@@ -311,6 +315,13 @@ function Select-EdgeWindow {
             }
 
             if ([string]::IsNullOrWhiteSpace([string]$window.Title)) {
+                continue
+            }
+
+            # Without -EdgeTitle only a real browser window of the person counts: a DevTools window and an
+            # app/PWA window of the same process are foreign (DW-32). The browser title ends with the product name;
+            # an explicit -EdgeTitle is the person's own choice and replaces these rules.
+            if ($TitlePattern.Length -eq 0 -and (($window.Title -match '^DevTools(\s|$)') -or ($window.Title -notmatch 'Microsoft[\s\u200B]*Edge\s*$'))) {
                 continue
             }
         }
@@ -690,6 +701,17 @@ function Invoke-SelfTest {
     & $expect 'edge title pattern without a match gives no window' ((Select-EdgeWindow -Windows $edgeWindows -TitlePattern 'Disney').ToInt64()) 0
     & $expect 'no edge window gives no window' ((Select-EdgeWindow -Windows @($edgeWindows[0], $edgeWindows[1])).ToInt64()) 0
 
+    # Foreign Edge windows of the same process (DW-32): DevTools and PWA/app windows are not the default target.
+    $foreignEdge = @(
+        [pscustomobject]@{ Handle = [IntPtr]3001; ProcessId = 4242; ProcessName = 'msedge'; Class = 'Chrome_WidgetWin_1'; Title = 'DevTools - netflix.com/browse' }
+        [pscustomobject]@{ Handle = [IntPtr]3002; ProcessId = 4242; ProcessName = 'msedge'; Class = 'Chrome_WidgetWin_1'; Title = 'DevTools - Microsoft Edge' }
+        [pscustomobject]@{ Handle = [IntPtr]3003; ProcessId = 4242; ProcessName = 'msedge'; Class = 'Chrome_WidgetWin_1'; Title = 'Spotify' }
+        [pscustomobject]@{ Handle = [IntPtr]3004; ProcessId = 4242; ProcessName = 'msedge'; Class = 'Chrome_WidgetWin_1'; Title = ('Netflix and 2 more pages - Osobiste - Microsoft{0} Edge' -f [char]0x200B) }
+    )
+    & $expect 'default edge target skips DevTools and PWA windows' ((Select-EdgeWindow -Windows $foreignEdge).ToInt64()) 3004
+    & $expect 'only DevTools and PWA windows give no default target' ((Select-EdgeWindow -Windows @($foreignEdge[0], $foreignEdge[1], $foreignEdge[2])).ToInt64()) 0
+    & $expect 'explicit edge title may select a PWA window' ((Select-EdgeWindow -Windows $foreignEdge -TitlePattern 'Spotify').ToInt64()) 3003
+
     # Order of the default targets (3.13): the hung shell is measured first (before any MinimizeAll can leave it
     # behind a DWM ghost) and the desktop last.
     if (-not $script:TargetsBound) {
@@ -740,7 +762,7 @@ function Invoke-SelfTest {
     & $expect 'moonlight target takes any class' (Select-RestoreTargetWindow -Windows $moonWindows -Attached $attached -TreePids $tree -AnyClass).ToInt64() 8
     & $expect 'browser target rejects a non-browser class' (Select-RestoreTargetWindow -Windows $moonWindows -Attached $attached -TreePids $tree).ToInt64() 0
     & $expect 'edge selector with a tree skips owners, helpers and other processes' (Select-EdgeWindow -Windows $restoreWindows -TreePids $tree).ToInt64() 5
-    & $expect 'edge selector without a tree skips owned windows' (Select-EdgeWindow -Windows @($restoreWindows[0], $restoreWindows[5])).ToInt64() 6
+    & $expect 'edge selector without a tree skips owned windows' (Select-EdgeWindow -Windows @($restoreWindows[0], $restoreWindows[5]) -TitlePattern 'second').ToInt64() 6
     & $expect 'owned browser window gives no id' ((Get-BrowserWindowIds -Windows @($restoreWindows[0])) -join ',') ''
 
     # Restore verdict (OS state after Home).

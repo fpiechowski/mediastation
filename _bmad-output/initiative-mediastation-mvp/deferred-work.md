@@ -300,7 +300,9 @@ location: tools/check-home-s10.ps1 Select-EdgeWindow
 source_spec: `tickets/epic-input/tickets/bug-check-home-s10-home-przy-zawieszonym-shellu-i-cel-edge-nie-d-plan.md`
 severity: low
 reason: `Select-EdgeWindow` nie odróżnia okien tego samego procesu; zawężenie daje `-EdgeTitle`. Skutek: Home wysyłany nad niewłaściwym oknem Edge, wynik nadal mierzy log aplikacji.
-status: open
+status: done 2026-10-28
+resolution: resolved by sweep bundle dw-s10-select-edge-window
+resolution-undo: 54d7f6d1f822fd8c918dddaa39634bece12a278f969945de2c34b7d705e2ef76 2026-10-28 7374617475733a206f70656e
 ticket: `_bmad-output/backlog/bug-s10-select-edge-window.md`
 
 ### DW-33: Stany kafelka `Starting`, `Stopping`, `Foreground` i `Background`, kropka „w tle”, powrót fokusu na ostatni kafelek i długie OK na `Background` nie zostały sprawdzone na żywym shellu.
