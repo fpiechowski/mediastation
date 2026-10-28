@@ -19,6 +19,72 @@ internal static class HarnessMoonlight
     /// </summary>
     public const string StreamWindowClass = "SDL_app";
 
+    /// <summary>Etap nieudanego startu: Moonlight nie nawiązał połączenia (brak okna strumienia).</summary>
+    public const string StageHandshake = "handshake";
+
+    /// <summary>Etap nieudanego startu: okno strumienia istnieje, ale nie nadaje się do wyboru (ukryte, z właścicielem).</summary>
+    public const string StageWindowAttach = "windowAttach";
+
+    /// <summary>
+    /// Klasyfikuje timeout: <c>windowAttach</c>, gdy drzewo procesów ma jakiekolwiek okno oczekiwanej klasy, którego wybór
+    /// zawiódł albo które pojawiło się po timeoucie; inaczej <c>handshake</c> (np. tylko okno łączenia Qt, zły host).
+    /// </summary>
+    public static string ClassifyStage(IEnumerable<MediaStation.App.Platform.Window.WindowInfo> windows, ISet<int> tree, string? expectedClass)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+        ArgumentNullException.ThrowIfNull(tree);
+
+        return windows.Any(w => tree.Contains(w.Pid)
+            && (expectedClass is null || string.Equals(w.ClassName, expectedClass, StringComparison.Ordinal)))
+            ? StageWindowAttach
+            : StageHandshake;
+    }
+
+    /// <summary>Pola diagnostyczne wpisu timeoutu: <c>failedStage</c> i <c>moonlightLogHints</c> z jednej migawki okien.</summary>
+    public static IReadOnlyDictionary<string, object?> TimeoutDiagnostics(
+        IEnumerable<MediaStation.App.Platform.Window.WindowInfo> windows,
+        ISet<int> tree,
+        string? expectedClass,
+        IEnumerable<string> logLines) =>
+        new Dictionary<string, object?>
+        {
+            ["failedStage"] = ClassifyStage(windows, tree, expectedClass),
+            ["moonlightLogHints"] = LogHints(logLines),
+        };
+
+    /// <summary>Ostatnie <paramref name="max"/> linii z Warning, Error lub failed (bez rozróżniania wielkości liter), w kolejności pliku.</summary>
+    public static IReadOnlyList<string> LogHints(IEnumerable<string> lines, int max = 5)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+
+        string[] markers = ["Warning", "Error", "failed"];
+        return
+        [
+            .. lines
+                .Where(l => markers.Any(m => l.Contains(m, StringComparison.OrdinalIgnoreCase)))
+                .TakeLast(max),
+        ];
+    }
+
+    /// <summary>Ścieżka najnowszego pliku logu (wg czasu zapisu) albo <c>null</c>, gdy lista jest pusta.</summary>
+    public static string? LatestLogFile(IEnumerable<KeyValuePair<string, DateTime>> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+
+        string? best = null;
+        var bestTime = DateTime.MinValue;
+        foreach (var (path, time) in files)
+        {
+            if (best is null || time > bestTime)
+            {
+                best = path;
+                bestTime = time;
+            }
+        }
+
+        return best;
+    }
+
     /// <summary>Argumenty startu: <c>stream &lt;host&gt; &lt;app&gt;</c> w trybie borderless z wyciszeniem po utracie fokusu.</summary>
     public static IReadOnlyList<string> BuildArguments(string host, string app)
     {

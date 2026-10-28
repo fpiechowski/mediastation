@@ -387,18 +387,41 @@ internal sealed class DevHarnessHostPort : IAppHostPort
     private WindowInfo? WaitForWindow(Session session, string? windowClass)
     {
         var process = session.Process!;
-        var deadline = Stopwatch.StartNew();
-        while (deadline.Elapsed < WindowTimeout && !session.Stopping && !process.HasExited)
+        var clock = Stopwatch.StartNew();
+        return HarnessWait.FindWindow(
+            () => FindWindow(process.Id, windowClass),
+            () => process.HasExited,
+            () => session.Stopping,
+            () => Thread.Sleep(PollInterval),
+            () => clock.Elapsed,
+            WindowTimeout);
+    }
+
+    private static IReadOnlyList<string> ReadMoonlightLogLines()
+    {
+        try
         {
-            if (FindWindow(process.Id, windowClass) is { } window)
+            var files = new DirectoryInfo(Path.GetTempPath()).GetFiles("Moonlight-*.log")
+                .Select(f => new KeyValuePair<string, DateTime>(f.FullName, f.LastWriteTimeUtc));
+            if (HarnessMoonlight.LatestLogFile(files) is not { } latest)
             {
-                return window;
+                return [];
             }
 
-            Thread.Sleep(PollInterval);
-        }
+            using var stream = new FileStream(latest, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            var lines = new List<string>();
+            while (reader.ReadLine() is { } line)
+            {
+                lines.Add(line);
+            }
 
-        return null;
+            return lines;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
@@ -442,10 +465,15 @@ internal sealed class DevHarnessHostPort : IAppHostPort
             if (stage == "windowTimeout")
             {
                 var tree = WindowTreePicker.Descendants(process.Id, _processParents());
-                data["windows"] = _windows.EnumerateTopLevel()
+                var snapshot = _windows.EnumerateTopLevel().ToList();
+                data["windows"] = snapshot
                     .Where(w => tree.Contains(w.Pid))
                     .Select(w => $"hwnd={w.Hwnd} pid={w.Pid} class={w.ClassName} title=\"{TitleOf(w.Hwnd)}\" visible={w.Visible} owner={w.HasOwner}")
                     .ToList();
+                foreach (var (key, value) in HarnessMoonlight.TimeoutDiagnostics(snapshot, tree, windowClass, ReadMoonlightLogLines()))
+                {
+                    data[key] = value;
+                }
                 _log.Warn(Src, "appLaunchStage", data);
             }
             else

@@ -293,4 +293,104 @@ public class DevHarnessTests
 
         Assert.Contains("env-: FOO", HarnessMoonlight.Differences(manual, actual));
     }
+
+    [Fact]
+    public void ClassifyStage_is_handshake_with_only_qt_window_and_windowAttach_with_unselectable_sdl_window()
+    {
+        WindowInfo[] qtOnly = [new(1, 10, "Qt6QWindowIcon", Visible: true, HasOwner: false), new(2, 99, "SDL_app", Visible: true, HasOwner: false)];
+        WindowInfo[] hiddenSdl = [new(1, 10, "Qt6QWindowIcon", Visible: true, HasOwner: false), new(3, 11, "SDL_app", Visible: false, HasOwner: false)];
+
+        Assert.Equal("handshake", HarnessMoonlight.ClassifyStage(qtOnly, Tree, "SDL_app"));
+        Assert.Equal("windowAttach", HarnessMoonlight.ClassifyStage(hiddenSdl, Tree, "SDL_app"));
+        Assert.Equal("handshake", HarnessMoonlight.ClassifyStage([], Tree, "SDL_app"));
+    }
+
+    [Fact]
+    public void TimeoutDiagnostics_has_stage_and_hints_for_qt_only_and_unselectable_sdl_trees()
+    {
+        WindowInfo[] qtOnly = [new(1, 10, "Qt6QWindowIcon", Visible: true, HasOwner: false)];
+        WindowInfo[] hiddenSdl = [new(3, 11, "SDL_app", Visible: false, HasOwner: false)];
+        string[] log = ["noise", "serverinfo request failed: HostNotFoundError"];
+
+        var qt = HarnessMoonlight.TimeoutDiagnostics(qtOnly, Tree, "SDL_app", log);
+        var sdl = HarnessMoonlight.TimeoutDiagnostics(hiddenSdl, Tree, "SDL_app", log);
+
+        Assert.Equal("handshake", qt["failedStage"]);
+        Assert.Equal("windowAttach", sdl["failedStage"]);
+        Assert.Equal(["serverinfo request failed: HostNotFoundError"], Assert.IsAssignableFrom<IReadOnlyList<string>>(qt["moonlightLogHints"]));
+        Assert.Equal(qt["moonlightLogHints"], sdl["moonlightLogHints"]);
+    }
+
+    [Fact]
+    public void LogHints_keeps_last_five_matching_lines_in_order_and_is_empty_without_matches()
+    {
+        string[] lines = ["noise", "Warning a", "x", "Error b", "serverinfo request failed c", "d FAILED", "Warning e", "Error f", "tail"];
+
+        Assert.Equal(["Error b", "serverinfo request failed c", "d FAILED", "Warning e", "Error f"], HarnessMoonlight.LogHints(lines));
+        Assert.Empty(HarnessMoonlight.LogHints(["a", "b"]));
+    }
+
+    [Fact]
+    public void LatestLogFile_picks_newest_or_null()
+    {
+        var t = new DateTime(2026, 10, 28, 12, 0, 0, DateTimeKind.Utc);
+
+        Assert.Equal("b", HarnessMoonlight.LatestLogFile([new("a", t), new("b", t.AddMinutes(1)), new("c", t.AddMinutes(-1))]));
+        Assert.Null(HarnessMoonlight.LatestLogFile([]));
+    }
+
+    private sealed class Clock
+    {
+        public TimeSpan Now;
+        public int Sleeps;
+
+        public void Sleep()
+        {
+            Sleeps++;
+            Now += TimeSpan.FromMilliseconds(100);
+        }
+    }
+
+    [Fact]
+    public void Wait_returns_window_that_appears_after_some_polls()
+    {
+        var clock = new Clock();
+        var polls = 0;
+
+        var result = HarnessWait.FindWindow(() => ++polls == 4 ? "w" : null, () => false, () => false, clock.Sleep, () => clock.Now, TimeSpan.FromSeconds(20));
+
+        Assert.Equal("w", result);
+        Assert.Equal(3, clock.Sleeps);
+    }
+
+    [Fact]
+    public void Wait_returns_null_at_timeout_when_window_never_appears()
+    {
+        var clock = new Clock();
+
+        var result = HarnessWait.FindWindow<string>(() => null, () => false, () => false, clock.Sleep, () => clock.Now, TimeSpan.FromSeconds(1));
+
+        Assert.Null(result);
+        Assert.Equal(10, clock.Sleeps);
+    }
+
+    [Fact]
+    public void Wait_returns_null_when_process_exited_or_stopping()
+    {
+        var clock = new Clock();
+
+        Assert.Null(HarnessWait.FindWindow(() => "w", () => true, () => false, clock.Sleep, () => clock.Now, TimeSpan.FromSeconds(20)));
+        Assert.Null(HarnessWait.FindWindow(() => "w", () => false, () => true, clock.Sleep, () => clock.Now, TimeSpan.FromSeconds(20)));
+    }
+
+    [Fact]
+    public void Wait_is_stateless_so_a_second_wait_after_a_timeout_finds_the_window()
+    {
+        var first = new Clock();
+        var second = new Clock();
+        var secondPolls = 0;
+
+        Assert.Null(HarnessWait.FindWindow<string>(() => null, () => false, () => false, first.Sleep, () => first.Now, TimeSpan.FromSeconds(1)));
+        Assert.Equal("w2", HarnessWait.FindWindow(() => ++secondPolls == 2 ? "w2" : null, () => false, () => false, second.Sleep, () => second.Now, TimeSpan.FromSeconds(1)));
+    }
 }
