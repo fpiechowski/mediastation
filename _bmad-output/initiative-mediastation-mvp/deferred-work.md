@@ -285,6 +285,7 @@ severity: medium
 reason: Logi przebiegów 1 i 2 z 2026-10-25 (brak wpisów w oknach shell-hung #1 i #2, na wierzchu `Ghost` procesu `dwm`) oraz sonda na UM760: z duchem na wierzchu wstrzyknięte Enter nie dało `keyEnter`, bez ducha dało. Wstrzyknięcie mogła zablokować UIPI, więc dla fizycznego pilota rozstrzygnie dopiero przebieg użytkownika; ewentualna poprawka to zmiana uprawnień hooka (AD-8).
 status: open
 decision: 2026-10-28 Verify with physical remote first
+decision: 2026-10-28 Verify with physical remote first
 ticket: `_bmad-output/backlog/bug-home-shell-hung-dwm-ghost-hook.md`
 
 ### DW-32: Domyślny cel Edge to pierwsze okno `msedge` z tytułem, więc może to być obce okno użytkownika (np. DevTools, PWA).
