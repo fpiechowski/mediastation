@@ -95,6 +95,21 @@ public class LogRawInputSinkTests
     }
 
     [Fact]
+    public void Unknown_device_logs_only_its_vid_pid_signature()
+    {
+        var log = new RecordingLog();
+        var sink = new LogRawInputSink(log);
+
+        sink.DeliverUnknownDevice("VID_2341&PID_00AB");
+
+        var entry = Assert.Single(log.Entries);
+        Assert.Equal(LogLevel.Info, entry.Level);
+        Assert.Equal("rawInputUnknownDevice", entry.Msg);
+        Assert.Equal(["signature"], entry.Data!.Keys.ToArray());
+        Assert.Equal("VID_2341&PID_00AB", FormatData(entry).GetProperty("signature").GetString());
+    }
+
+    [Fact]
     public void Error_report_logs_operation_and_error_code()
     {
         var log = new RecordingLog();

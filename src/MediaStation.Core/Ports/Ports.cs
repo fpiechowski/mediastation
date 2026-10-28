@@ -123,4 +123,10 @@ public interface IRawInputSink
 {
     /// <summary>Dostarcza jeden scalony wpis kalibracji; wywołanie nie blokuje się długo i nie rzuca.</summary>
     void Deliver(RawInputEntry entry);
+
+    /// <summary>
+    /// Zgłasza urządzenie HID spoza configu (jedno wywołanie na VID/PID w trybie), żeby nowy pilot był widoczny
+    /// w logu; <paramref name="signature"/> to <c>VID_xxxx&amp;PID_xxxx</c> bez instancji. Nie blokuje i nie rzuca.
+    /// </summary>
+    void DeliverUnknownDevice(string signature);
 }

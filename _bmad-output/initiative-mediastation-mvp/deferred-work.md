@@ -216,7 +216,9 @@ source_spec: `tickets/epic-input/epic-input-retrospective.md`, A8
 severity: low
 reason: Przy równoległym trzymaniu dwóch przycisków pilota puszczenie jednego pozwala zalogować drugi ponownie. Klucz dedupe powinien być VK→usage, nie globalny reset.
 owner: backlog: story „`--calibrate-input` zapisuje wybrany przycisk Klawiatura do input.json”, 2026-10-26
-status: open
+status: done 2026-10-28
+resolution: resolved by sweep bundle dw-calibrate-input-hardening
+resolution-undo: bb3da08324fed9006132303b8ad20dfbecd360dfd9469d8aeaf7458207d66c5b 2026-10-28 7374617475733a206f70656e
 ticket: `_bmad-output/backlog/story-calibrate-input-dedupe-usages.md`
 
 ### DW-25: `InputHub` (815 linii) i `InputPolicy` (678 linii) przerosły rolę „cienkiego adaptera".
@@ -246,7 +248,9 @@ source_spec: `tickets/epic-input/epic-input-retrospective.md`, Q4
 severity: low
 reason: Decyzja 2026-10-23: na teraz wystarcza ręczne odkrycie sygnatury (G20S Pro znany ze spike S10). Ulepszenie: kalibracja loguje nieznane urządzenia HID, gdy nic nie pasuje. Dotyczy kroku odbioru „wybór przycisku Klawiatura".
 owner: author, kiedy zmieni się pilot
-status: open
+status: done 2026-10-28
+resolution: resolved by sweep bundle dw-calibrate-input-hardening
+resolution-undo: bb3da08324fed9006132303b8ad20dfbecd360dfd9469d8aeaf7458207d66c5b 2026-10-28 7374617475733a206f70656e
 ticket: `_bmad-output/backlog/story-calibrate-input-accept-new-remote-signature.md`
 
 ### DW-28: Generator schematów (`MediaStation.SchemaExport`) i zwykły `dotnet publish` nie działają na maszynach z Application Control.

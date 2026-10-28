@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
 using MediaStation.Core.Ports;
@@ -18,7 +19,7 @@ namespace MediaStation.Core.Input;
 /// Czas płynie wyłącznie przez wstrzyknięty <see cref="TimeProvider"/> (AD-14); typ nie jest wątkowo bezpieczny —
 /// App woła go z jednego wątku Input.
 /// </summary>
-public sealed class InputCalibration : IInputTarget
+public sealed partial class InputCalibration : IInputTarget
 {
     /// <summary>Długość trybu kalibracji; po niej tryb kończy się sam.</summary>
     public const int DurationSeconds = 60;
@@ -38,13 +39,19 @@ public sealed class InputCalibration : IInputTarget
     /// <summary>Górna granica bufora hooków; chroni pamięć przy nietypowym zegarze zdarzeń.</summary>
     private const int HookBufferLimit = 64;
 
+    [GeneratedRegex(@"VID_[0-9A-F]{4}&PID_[0-9A-F]{4}", RegexOptions.IgnoreCase)]
+    private static partial Regex VidPidPattern();
+
     private static readonly InputDecision PassDecision = new(false, Array.Empty<ActionMessage>());
 
     private readonly TimeProvider _time;
     private readonly IRawInputSink _sink;
     private readonly List<string> _remoteSignatures = [];
     private readonly List<KeyStroke> _hooks = [];
+    private readonly List<string> _knownSignatures = [];
+    private readonly HashSet<string> _reportedUnknown = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<int> _heldUsages = [];
+    private readonly Dictionary<int, int> _usageByVk = [];
     private readonly HashSet<int> _heldVks = [];
     private readonly HashSet<int> _heldRemoteVks = [];
     private readonly HashSet<int> _heldRawVks = [];
@@ -68,6 +75,11 @@ public sealed class InputCalibration : IInputTarget
 
         foreach (var device in config.Devices)
         {
+            if (device is not null && !string.IsNullOrWhiteSpace(device.Signature))
+            {
+                _knownSignatures.Add(device.Signature);
+            }
+
             if (device is not null && device.Source == ActionSource.Remote
                 && !string.IsNullOrWhiteSpace(device.Signature))
             {
@@ -135,6 +147,7 @@ public sealed class InputCalibration : IInputTarget
             // VK dopięty do wpisu należy do pilota: bez tego jego key-up nie zwolniłby znacznika usage.
             _heldVks.Add(key.VirtualKey);
             _heldRemoteVks.Add(key.VirtualKey);
+            TrackUsage(pending);
             return PassDecision;
         }
 
@@ -177,6 +190,7 @@ public sealed class InputCalibration : IInputTarget
 
         if (MatchRemote(report.DevicePath) is not { } signature)
         {
+            ReportUnknownDevice(report.DevicePath);
             return PassDecision;
         }
 
@@ -196,6 +210,7 @@ public sealed class InputCalibration : IInputTarget
         press.UsagePage ??= report.UsagePage;
         press.Usage ??= report.Usage;
         AttachBufferedHook(press);
+        TrackUsage(press);
         return PassDecision;
     }
 
@@ -215,6 +230,11 @@ public sealed class InputCalibration : IInputTarget
 
         if (MatchRemote(input.DevicePath) is not { } signature)
         {
+            if (input.VirtualKey != 0)
+            {
+                ReportUnknownDevice(input.DevicePath);
+            }
+
             return;
         }
 
@@ -241,6 +261,7 @@ public sealed class InputCalibration : IInputTarget
         press.Scan ??= input.Scan;
         press.RawTimeMs ??= input.TimeMs;
         AttachBufferedHook(press);
+        TrackUsage(press);
     }
 
     /// <summary>
@@ -322,6 +343,7 @@ public sealed class InputCalibration : IInputTarget
     {
         _pending = null;
         AttachBufferedHook(press);
+        TrackUsage(press);
 
         _sink.Deliver(new RawInputEntry(
             press.Signature,
@@ -424,8 +446,8 @@ public sealed class InputCalibration : IInputTarget
     }
 
     /// <summary>
-    /// Zwolnienie klawisza z hooka albo <c>WM_INPUT</c>: zdejmuje VK, a znacznik usage czyści tylko wtedy, gdy
-    /// zwolniony VK należał do naciśnięcia pilota. Key-up zwykłej klawiatury (albo VK tylko zbuforowany bez
+    /// Zwolnienie klawisza z hooka albo <c>WM_INPUT</c>: zdejmuje VK, a znacznik usage zdejmuje tylko wtedy, gdy
+    /// zwolniony VK należał do naciśnięcia pilota, i tylko usage sparowany z tym VK. Key-up zwykłej klawiatury (albo VK tylko zbuforowany bez
     /// urządzenia) nie może wyczyścić trzymanego przycisku pilota (AD-13), bo powtórzony raport HID dałby wtedy
     /// drugi wpis tego samego naciśnięcia.
     /// </summary>
@@ -436,9 +458,56 @@ public sealed class InputCalibration : IInputTarget
         var remote = _heldRemoteVks.Remove(virtualKey);
         remote |= _heldRawVks.Remove(virtualKey);
 
-        if (remote)
+        // Zwalniamy tylko usage związany z tym VK i tylko gdy VK należał do pilota; pozostałe trzymane przyciski
+        // pilota zostają zdeduplikowane.
+        if (remote && _usageByVk.Remove(virtualKey, out var usage))
         {
-            _heldUsages.Clear();
+            _heldUsages.Remove(usage);
+        }
+    }
+
+    /// <summary>Ścieżka bez identyfikatora instancji (pierwsze dwa segmenty <c>#</c>), gdy brak VID/PID, np. klawiatura PS/2.</summary>
+    private static string WithoutInstance(string devicePath)
+    {
+        var parts = devicePath.Split('#');
+        return parts.Length > 2 ? string.Join('#', parts[0], parts[1]) : devicePath;
+    }
+
+    /// <summary>Zapamiętuje parę VK→usage naciśnięcia, gdy znamy oba kody, żeby key-up zwolnił tylko ten usage.</summary>
+    private void TrackUsage(PendingPress press)
+    {
+        // VK już zwolniony przed domknięciem wpisu nie może zostawić w mapie nieaktualnej pary.
+        if (press is { VirtualKey: { } virtualKey, Usage: { } usage }
+            && (_heldRemoteVks.Contains(virtualKey) || _heldRawVks.Contains(virtualKey)))
+        {
+            _usageByVk[virtualKey] = usage;
+        }
+    }
+
+    /// <summary>
+    /// Urządzenie spoza configu (żadna sygnatura, także <c>keyboard</c>/<c>gamepad</c>, nie pasuje) jest zgłaszane raz
+    /// na VID/PID, żeby nowy pilot był widoczny w logu (DW-27); instancja urządzenia nie trafia do logu.
+    /// </summary>
+    private void ReportUnknownDevice(string devicePath)
+    {
+        if (string.IsNullOrEmpty(devicePath))
+        {
+            return;
+        }
+
+        foreach (var known in _knownSignatures)
+        {
+            if (DeviceSignature.Matches(devicePath, known))
+            {
+                return;
+            }
+        }
+
+        var match = VidPidPattern().Match(devicePath);
+        var signature = match.Success ? match.Value.ToUpperInvariant() : WithoutInstance(devicePath);
+        if (_reportedUnknown.Add(signature))
+        {
+            _sink.DeliverUnknownDevice(signature);
         }
     }
 
@@ -446,6 +515,7 @@ public sealed class InputCalibration : IInputTarget
     private void ReleaseAll()
     {
         _heldUsages.Clear();
+        _usageByVk.Clear();
         _heldVks.Clear();
         _heldRemoteVks.Clear();
         _heldRawVks.Clear();

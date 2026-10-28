@@ -315,6 +315,73 @@ public class InputCalibrationTests
     }
 
     [Fact]
+    public void Releasing_one_of_two_held_remote_buttons_keeps_the_other_deduplicated()
+    {
+        var (calibration, time, sink) = Create();
+
+        // Dwa przyciski pilota trzymane naraz: usage 0x00B0 z VK 0x0D, usage 0x00B1 z VK 0x27.
+        calibration.OnHidConsumer(new HidConsumerReport(DonglePath, 1000, 0x0C, 0x00B0));
+        calibration.OnRawKeyboard(new RawKeyboardInput(DonglePath, 1001, 0x0D, 0x1C, Down: true));
+        time.Advance(TimeSpan.FromMilliseconds(InputCalibration.MergeWindowMs));
+        calibration.OnTimer(time.GetUtcNow());
+        calibration.OnHidConsumer(new HidConsumerReport(DonglePath, 1100, 0x0C, 0x00B1));
+        calibration.OnRawKeyboard(new RawKeyboardInput(DonglePath, 1101, 0x27, 0x4D, Down: true));
+        time.Advance(TimeSpan.FromMilliseconds(InputCalibration.MergeWindowMs));
+        calibration.OnTimer(time.GetUtcNow());
+        Assert.Equal(2, sink.Entries.Count);
+
+        // Puszczenie pierwszego nie może zwolnić usage drugiego: jego powtórka nadal jest ignorowana.
+        calibration.OnRawKeyboard(new RawKeyboardInput(DonglePath, 1200, 0x0D, 0x1C, Down: false));
+        calibration.OnHidConsumer(new HidConsumerReport(DonglePath, 1210, 0x0C, 0x00B1));
+        time.Advance(TimeSpan.FromMilliseconds(InputCalibration.MergeWindowMs));
+        calibration.OnTimer(time.GetUtcNow());
+        Assert.Equal(2, sink.Entries.Count);
+
+        // Pierwszy usage został zwolniony i wraca do logu jako nowe naciśnięcie.
+        calibration.OnHidConsumer(new HidConsumerReport(DonglePath, 1300, 0x0C, 0x00B0));
+        time.Advance(TimeSpan.FromMilliseconds(InputCalibration.MergeWindowMs));
+        calibration.OnTimer(time.GetUtcNow());
+        Assert.Equal(3, sink.Entries.Count);
+    }
+
+    [Fact]
+    public void Unknown_hid_device_is_reported_once_per_vid_pid_without_an_entry()
+    {
+        var (calibration, _, sink) = Create();
+        const string NewRemote =
+            @"\\?\HID#VID_2341&PID_00AB&MI_01#7&1&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}";
+
+        calibration.OnHidConsumer(new HidConsumerReport(NewRemote, 1000, 0x0C, 0x00B0));
+        calibration.OnHidConsumer(new HidConsumerReport(NewRemote, 1500, 0x0C, 0));
+        calibration.OnRawKeyboard(new RawKeyboardInput(NewRemote, 2000, 0x0D, 0x1C, Down: true));
+
+        Assert.Equal(["VID_2341&PID_00AB"], sink.UnknownDevices);
+        Assert.Empty(sink.Entries);
+    }
+
+    [Fact]
+    public void Unknown_device_without_vid_pid_is_reported_without_its_instance_id()
+    {
+        var (calibration, _, sink) = Create();
+
+        calibration.OnRawKeyboard(new RawKeyboardInput(
+            @"\\?\ACPI#PNP0303#4&1b2c3d&0#{884b96c3-56ef-11d1-bc8c-00a0c91405dd}", 1000, 0x41, 0x1E, Down: true));
+
+        Assert.Equal([@"\\?\ACPI#PNP0303"], sink.UnknownDevices);
+    }
+
+    [Fact]
+    public void Configured_devices_are_never_reported_as_unknown()
+    {
+        var (calibration, _, sink) = Create();
+
+        calibration.OnHidConsumer(new HidConsumerReport(DonglePath, 1000, 0x0C, 0x00B0));
+        calibration.OnRawKeyboard(new RawKeyboardInput(KeyboardPath, 2000, 0x41, 0x1E, Down: true));
+
+        Assert.Empty(sink.UnknownDevices);
+    }
+
+    [Fact]
     public void Physical_escape_ends_the_mode_without_swallowing_and_injected_escape_does_not()
     {
         var (calibration, time, _) = Create();
@@ -498,6 +565,10 @@ public class InputCalibrationTests
     {
         public List<RawInputEntry> Entries { get; } = [];
 
+        public List<string> UnknownDevices { get; } = [];
+
         public void Deliver(RawInputEntry entry) => Entries.Add(entry);
+
+        public void DeliverUnknownDevice(string signature) => UnknownDevices.Add(signature);
     }
 }

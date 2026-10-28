@@ -47,6 +47,17 @@ public sealed class LogRawInputSink : IRawInputSink, IInputHubErrorSink
         });
     }
 
+    /// <summary>Loguje urządzenie spoza configu jako <c>rawInputUnknownDevice {signature}</c> (DW-27).</summary>
+    public void DeliverUnknownDevice(string signature)
+    {
+        ArgumentNullException.ThrowIfNull(signature);
+
+        _log.Info(Src, "rawInputUnknownDevice", new Dictionary<string, object?>
+        {
+            ["signature"] = signature,
+        });
+    }
+
     /// <summary>Loguje porażkę huba; klucz <c>errorCode</c> jest pomijany, gdy operacja go nie zwróciła.</summary>
     public void Report(InputHubError error)
     {
