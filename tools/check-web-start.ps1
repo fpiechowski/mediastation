@@ -20,7 +20,8 @@ param(
     [string]$AppId = 'netflix',
     [ValidateRange(1, 20)][int]$Cycles = 2,
     [string]$MediaStation = '',
-    [string]$LogsDir = (Join-Path $env:LOCALAPPDATA 'MediaStation\logs')
+    [string]$LogsDir = (Join-Path $env:LOCALAPPDATA 'MediaStation\logs'),
+    [string]$DiagnosticUrl = 'https://www.netflix.com/'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -190,6 +191,12 @@ function Invoke-Pass {
         if ($roots.Count -ne 1 -or $roots[0] -ne [int]$attached.data.rootPid) { $problems.Add("$Pass`: browser roots after the cycles: $($roots -join ','), expected only $($attached.data.rootPid)") }
 
         $entries = @(Get-RunEntries -ProcessId $app.Id)
+        $launches = @($entries | Where-Object { $_.msg -eq 'appLaunch' -and $_.data.appId -eq $AppId })
+        if ($launches.Count -lt 1) { $problems.Add("$Pass`: no appLaunch evidence") }
+        else {
+            $expectedUrl = ($DiagnosticUrl -split '[?#]')[0]
+            if (-not ($launches | Where-Object { $_.data.url -eq $expectedUrl })) { $problems.Add("$Pass`: appLaunch URL evidence does not match $expectedUrl") }
+        }
         $badLevel = @($entries | Where-Object { $_.level -in @('warn', 'error') -and $allowedWarnings -notcontains $_.msg })
         $count = @($entries | Where-Object { $_.msg -eq 'appWindowAttached' }).Count
         $exited = @($entries | Where-Object { $_.msg -eq 'processExited' }).Count
@@ -217,11 +224,13 @@ try {
     Copy-Item -LiteralPath $appsPath -Destination $backupPath -Force
     Set-Content -LiteralPath $appsPath -Value (@{ apps = @($tile) } | ConvertTo-Json -Depth 5) -Encoding UTF8
     $env:MEDIASTATION_DEV_HARNESS = '1'
+    $env:MEDIASTATION_HARNESS_URL = $DiagnosticUrl
     Invoke-Pass -Pass 'clean'
     Invoke-Pass -Pass 'leftover'
 }
 finally {
     Remove-Item Env:\MEDIASTATION_DEV_HARNESS -ErrorAction SilentlyContinue
+    Remove-Item Env:\MEDIASTATION_HARNESS_URL -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $backupPath) { Move-Item -LiteralPath $backupPath -Destination $appsPath -Force }
 }
 

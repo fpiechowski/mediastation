@@ -176,6 +176,20 @@ internal sealed class DevHarnessHostPort : IAppHostPort
 
             var roots = HarnessLaunch.MatchingRootsFor(entry, _commandLines(), _profilesDir);
             var windowClass = HarnessLaunch.WindowClassOf(entry);
+            HarnessBrowser.WebLaunch? probeLaunch = null;
+            if (entry is WebApp web)
+            {
+                var exe = HarnessBrowser.ResolveExecutable(HarnessBrowser.ExecutableCandidates(
+                    web.Browser,
+                    Environment.GetEnvironmentVariable("ProgramFiles"),
+                    Environment.GetEnvironmentVariable("ProgramFiles(x86)"),
+                    Environment.GetEnvironmentVariable("LocalAppData")), File.Exists);
+                if (exe is not null)
+                {
+                    probeLaunch = HarnessBrowser.BuildLaunch(exe, Path.Combine(_profilesDir, entry.Id),
+                        HarnessBrowser.ResolveUrl(Environment.GetEnvironmentVariable(HarnessBrowser.UrlEnvVarName)));
+                }
+            }
             foreach (var pid in roots)
             {
                 if (FindWindow(pid, windowClass) is not { } window)
@@ -183,6 +197,10 @@ internal sealed class DevHarnessHostPort : IAppHostPort
                     continue;
                 }
 
+                if (probeLaunch is not null)
+                {
+                    LaunchWebHandoff(entry.Id, probeLaunch);
+                }
                 var adopted = new Session { Process = Process.GetProcessById(pid) };
                 lock (_gate)
                 {
@@ -223,6 +241,7 @@ internal sealed class DevHarnessHostPort : IAppHostPort
 
             string? exe;
             string[] launchArgs;
+            HarnessBrowser.WebLaunch? webLaunch = null;
             HarnessMoonlight.MoonlightLaunch? moonLaunch = null;
             switch (app)
             {
@@ -240,7 +259,8 @@ internal sealed class DevHarnessHostPort : IAppHostPort
                     }
 
                     var url = HarnessBrowser.ResolveUrl(Environment.GetEnvironmentVariable(HarnessBrowser.UrlEnvVarName));
-                    launchArgs = [.. HarnessBrowser.BuildArguments(Path.Combine(_profilesDir, app.Id), url)];
+                    webLaunch = HarnessBrowser.BuildLaunch(exe, Path.Combine(_profilesDir, app.Id), url);
+                    launchArgs = [.. webLaunch.Arguments];
                     break;
                 case MoonlightApp moon:
                     exe = HarnessMoonlight.ResolveExecutable(
@@ -265,7 +285,7 @@ internal sealed class DevHarnessHostPort : IAppHostPort
 
             // Działająca instancja profilu przeglądarki (bez własnej sesji) jest adoptowana zamiast drugiego startu:
             // drugi msedge.exe na tym samym profilu tylko przekazuje żądanie i kończy się.
-            if (app is WebApp && TryAdoptRunningProfile(command, app, windowClass))
+            if (webLaunch is not null && TryAdoptRunningProfile(command, app, windowClass, webLaunch))
             {
                 return;
             }
@@ -337,9 +357,10 @@ internal sealed class DevHarnessHostPort : IAppHostPort
                 _log.Info(Src, "appLaunch", new Dictionary<string, object?>
                 {
                     ["appId"] = app.Id,
-                    ["commandLine"] = $"\"{exe}\" {string.Join(' ', launchArgs)}",
-                    ["args"] = launchArgs,
+                    ["commandLine"] = $"\"{exe}\" {string.Join(' ', webLaunch?.DiagnosticArguments ?? launchArgs)}",
+                    ["args"] = webLaunch?.DiagnosticArguments ?? launchArgs,
                     ["workingDirectory"] = info.WorkingDirectory,
+                    ["url"] = webLaunch?.DiagnosticUrl,
                     ["pid"] = started.Id,
                 });
             }
@@ -363,7 +384,11 @@ internal sealed class DevHarnessHostPort : IAppHostPort
                         started,
                         windowClass,
                         HarnessLaunch.WebFailedStage(exitCode is not null, exitCode ?? 0),
-                        exitCode);
+                        exitCode,
+                        webLaunch?.DiagnosticUrl,
+                        webLaunch?.DiagnosticArguments,
+                        webLaunch is null ? null : $"\"{webLaunch.Executable}\" {string.Join(' ', webLaunch.DiagnosticArguments)}",
+                        info.WorkingDirectory);
                 }
 
                 session.Stopping = true;
@@ -475,7 +500,7 @@ internal sealed class DevHarnessHostPort : IAppHostPort
     /// Adoptuje działającą instancję profilu przeglądarki z oknem, jeśli nie ma własnej sesji. Zwraca <c>true</c>,
     /// gdy sesja została wpisana i okno zaraportowane (bez uruchamiania nowego procesu).
     /// </summary>
-    private bool TryAdoptRunningProfile(StartApp command, AppEntry app, string? windowClass)
+    private bool TryAdoptRunningProfile(StartApp command, AppEntry app, string? windowClass, HarnessBrowser.WebLaunch launch)
     {
         lock (_gate)
         {
@@ -485,13 +510,20 @@ internal sealed class DevHarnessHostPort : IAppHostPort
             }
         }
 
-        foreach (var pid in HarnessLaunch.MatchingRootsFor(app, _commandLines(), _profilesDir))
+        var roots = HarnessLaunch.MatchingRootsFor(app, _commandLines(), _profilesDir);
+        if (roots.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var pid in roots)
         {
             if (FindWindow(pid, windowClass) is not { } window)
             {
                 continue;
             }
 
+            LaunchWebHandoff(app.Id, launch);
             Process process;
             try
             {
@@ -528,6 +560,47 @@ internal sealed class DevHarnessHostPort : IAppHostPort
         }
 
         return false;
+    }
+
+    private void LaunchWebHandoff(string appId, HarnessBrowser.WebLaunch launch)
+    {
+        var commandLine = $"\"{launch.Executable}\" {string.Join(' ', launch.DiagnosticArguments)}";
+        try
+        {
+            var info = new ProcessStartInfo(launch.Executable) { UseShellExecute = false };
+            foreach (var arg in launch.Arguments) info.ArgumentList.Add(arg);
+            var process = Process.Start(info);
+            _log.Info(Src, "appLaunch", new Dictionary<string, object?>
+            {
+                ["appId"] = appId, ["commandLine"] = commandLine,
+                ["args"] = launch.DiagnosticArguments, ["workingDirectory"] = info.WorkingDirectory,
+                ["url"] = launch.DiagnosticUrl, ["pid"] = process?.Id, ["handoff"] = true,
+            });
+            if (process is not null)
+            {
+                LogStage(appId, "handoff", process, HarnessLaunch.WindowClassOf(_apps.GetValueOrDefault(appId)),
+                    url: launch.DiagnosticUrl, args: launch.DiagnosticArguments, commandLine: commandLine,
+                    workingDirectory: info.WorkingDirectory);
+            }
+            else
+            {
+                _log.Warn(Src, "appLaunchStage", new Dictionary<string, object?>
+                {
+                    ["appId"] = appId, ["stage"] = "navigation", ["reason"] = "processStartReturnedNull",
+                    ["pid"] = null, ["url"] = launch.DiagnosticUrl, ["commandLine"] = commandLine,
+                    ["args"] = launch.DiagnosticArguments, ["workingDirectory"] = info.WorkingDirectory,
+                });
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Warn(Src, "appLaunchStage", new Dictionary<string, object?>
+            {
+                ["appId"] = appId, ["stage"] = "navigation", ["reason"] = ex.GetType().Name, ["pid"] = null,
+                ["url"] = launch.DiagnosticUrl, ["commandLine"] = commandLine,
+                ["args"] = launch.DiagnosticArguments, ["workingDirectory"] = null,
+            });
+        }
     }
 
     private static IReadOnlyList<string> ReadMoonlightLogLines()
@@ -573,7 +646,7 @@ internal sealed class DevHarnessHostPort : IAppHostPort
         }
     }
 
-    private void LogStage(string appId, string stage, Process process, string? windowClass, string? failedStage = null, int? exitCode = null)
+    private void LogStage(string appId, string stage, Process process, string? windowClass, string? failedStage = null, int? exitCode = null, string? url = null, IReadOnlyList<string>? args = null, string? commandLine = null, string? workingDirectory = null)
     {
         try
         {
@@ -599,6 +672,16 @@ internal sealed class DevHarnessHostPort : IAppHostPort
             {
                 data["failedStage"] = failedStage;
                 data["exitCode"] = exitCode;
+            }
+            if (url is not null)
+            {
+                data["url"] = url;
+            }
+            if (args is not null)
+            {
+                data["args"] = args;
+                data["commandLine"] = commandLine;
+                data["workingDirectory"] = workingDirectory;
             }
 
             if (stage == "windowTimeout")

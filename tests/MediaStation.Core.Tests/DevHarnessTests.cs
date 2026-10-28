@@ -68,6 +68,26 @@ public class DevHarnessTests
             args);
     }
 
+    [Fact]
+    public void Web_launch_contains_same_profile_arguments_and_safe_diagnostics()
+    {
+        var launch = HarnessBrowser.BuildLaunch("C:\\Edge\\msedge.exe", "C:\\profiles\\netflix", "https://netflix.example/watch?token=secret#play");
+
+        Assert.Equal("C:\\Edge\\msedge.exe", launch.Executable);
+        Assert.Equal("C:\\profiles\\netflix", launch.ProfileDir);
+        Assert.Equal("https://netflix.example/watch", launch.DiagnosticUrl);
+        Assert.Equal("https://netflix.example/watch", launch.DiagnosticArguments[^1]);
+        Assert.Equal("https://netflix.example/watch?token=secret#play", launch.Arguments[^1]);
+    }
+
+    [Theory]
+    [InlineData("about:blank", "about:blank")]
+    [InlineData("https://example.test/path?secret=x", "https://example.test/path")]
+    [InlineData("https://alice:secret@example.test/path?secret=x", "https://example.test/path")]
+    [InlineData("data:text/html,secret", "<redacted-url>")]
+    public void Safe_diagnostic_url_keeps_destination_without_query(string input, string expected) =>
+        Assert.Equal(expected, HarnessBrowser.SafeDiagnosticUrl(input));
+
     [Theory]
     [InlineData(null, "about:blank")]
     [InlineData("", "about:blank")]

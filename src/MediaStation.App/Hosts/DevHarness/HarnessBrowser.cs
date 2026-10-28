@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using MediaStation.Core.Config;
 
 namespace MediaStation.App.Hosts.DevHarness;
@@ -11,6 +12,13 @@ namespace MediaStation.App.Hosts.DevHarness;
 /// </summary>
 internal static class HarnessBrowser
 {
+    internal sealed record WebLaunch(string Executable, string ProfileDir, string Url, IReadOnlyList<string> Arguments)
+    {
+        public string DiagnosticUrl => SafeDiagnosticUrl(Url);
+        public IReadOnlyList<string> DiagnosticArguments => Arguments.Count == 0
+            ? Arguments
+            : [.. Arguments.Take(Arguments.Count - 1), DiagnosticUrl];
+    }
     /// <summary>Nazwa zmiennej środowiskowej czytanej raz przy starcie, wyłącznie w trybie głównym.</summary>
     public const string EnvVarName = "MEDIASTATION_DEV_HARNESS";
 
@@ -146,5 +154,45 @@ internal static class HarnessBrowser
             "--autoplay-policy=no-user-gesture-required",
             url,
         ];
+    }
+
+    /// <summary>Pure launch value shared by fresh starts and profile URL handoffs.</summary>
+    public static WebLaunch BuildLaunch(string executable, string profileDir, string url)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executable);
+        ArgumentException.ThrowIfNullOrWhiteSpace(profileDir);
+        ArgumentException.ThrowIfNullOrWhiteSpace(url);
+        return new WebLaunch(executable, profileDir, url, BuildArguments(profileDir, url));
+    }
+
+    /// <summary>Removes query, fragment and authority credentials from launch diagnostics while retaining the destination.</summary>
+    public static string SafeDiagnosticUrl(string url)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(url);
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+        {
+            return "<invalid-url>";
+        }
+
+        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(uri.Scheme, "about", StringComparison.OrdinalIgnoreCase))
+        {
+            return "<redacted-url>";
+        }
+
+        if (string.Equals(uri.Scheme, "about", StringComparison.OrdinalIgnoreCase))
+        {
+            return uri.GetLeftPart(UriPartial.Path);
+        }
+
+        var safe = new UriBuilder(uri)
+        {
+            UserName = string.Empty,
+            Password = string.Empty,
+            Query = string.Empty,
+            Fragment = string.Empty,
+        };
+        return safe.Uri.GetLeftPart(UriPartial.Path);
     }
 }
