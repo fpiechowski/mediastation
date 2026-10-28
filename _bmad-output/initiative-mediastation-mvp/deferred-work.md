@@ -436,7 +436,9 @@ source_spec: `tickets/epic-home-screen/epic-home-screen.md`, R2
 severity: low
 reason: Kosmetyka ekranu głównego z epiki 4, zauważona przy odbiorze epiki 5; nie blokuje.
 ticket: `_bmad-output/backlog/bug-kropka-w-tle-przy-zakladce-nie-jest-wycentrowana-w-pionie.md` (backlog 5), 2026-10-27
-status: open
+status: done 2026-10-28
+resolution: resolved by sweep bundle dw-tab-running-dot-centred
+resolution-undo: 4f89cb5348427f4db8aaef237159c41ee0557854a4b6ec6a2823c5926733c93b 2026-10-28 7374617475733a206f70656e
 
 ### DW-47: Production Moonlight host (epic-moonlight-native) must pick the SDL stream window (`SDL_app`), not the first visible window of the process, or it reproduces bug 5.8.
 origin: spec-deferred dccc73e9da61
