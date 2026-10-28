@@ -152,3 +152,41 @@ hitl = false
 risk = "high"
 severity = "P1"
 references = ["tickets/epic-windows-audio/tickets/bug-moonlight-po-home-i-powrocie-stoi-na-uruchamianie-input-stre.md, rozdzielenie startu od powrotu po Home", "tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md, S6 i U1", "deferred-work.md, DW-43, DW-47, DW-48"]
+
+[[entry]]
+id = 13
+type = "bug"
+title = "Dev harness Moonlight nie znajduje okna SDL_app po starcie"
+description = "Odbiór 2026-10-28 na UM760: Moonlight pozostaje na ustanawianiu połączenia, a harness kończy się appLaunchStage=windowTimeout dla oczekiwanej klasy SDL_app; nie powstaje appWindowAttached."
+verify = "Na UM760 z osiągalnym hostem Sunshine start przez MediaStation kończy handshake i raportuje appWindowAttached dla okna strumienia; test regresyjny obejmuje timeout wyboru okna. Jeśli przyczyna jest poza kodem, Source conflict z porównaniem startu ręcznego i przez MediaStation."
+covers = ["R2", "R8"]
+after = [12]
+hitl = false
+risk = "high"
+severity = "P1"
+references = ["epic-windows-audio-um760-acceptance.md, S6 (2026-10-28)", "deferred-work.md, DW-43, DW-47, DW-48"]
+
+[[entry]]
+id = 14
+type = "bug"
+title = "Start kafelka Netflix kończy się DevHarnessStartFailed zamiast otwarciem Edge"
+description = "Odbiór 2026-10-28 na UM760: po OK kafelek Netflix przechodzi do Nie odpowiada, Edge nie otwiera się, a log nie zawiera appWindowAttached dla netflix."
+verify = "Na UM760 świeży publish uruchamia kafelek Netflix i raportuje appWindowAttached oraz zakończony start bez devHarnessStartFailed; test regresyjny obejmuje timeout okna i błędny profil/URL."
+covers = ["R2", "R8"]
+after = []
+hitl = false
+risk = "high"
+severity = "P1"
+references = ["epic-windows-audio-um760-acceptance.md, S9 (2026-10-28)", "epic-browserhost/epic-browserhost.md"]
+
+[[entry]]
+id = 15
+type = "bug"
+title = "Jedno naciśnięcie Home daje pojedynczą akcję i pojedyncze ShowShell"
+description = "Odbiór 2026-10-28 na UM760: w oknie S10 pojawiły się dwa wpisy action home i dwa ShowShell zamiast jednego."
+verify = "Test automatyczny i przebieg na UM760 pokazują dokładnie jedną akcję Home oraz jedną komendę ShowShell na jedno naciśnięcie; echo własnej komendy nie tworzy drugiego przejścia."
+covers = ["R2", "R3"]
+after = []
+hitl = false
+risk = "medium"
+references = ["epic-windows-audio-um760-acceptance.md, S10 (2026-10-28)", "deferred-work.md, DW-41"]
