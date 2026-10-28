@@ -12,14 +12,16 @@ namespace MediaStation.Core.Tests;
 /// </summary>
 public class MissingHostPortTests
 {
-    [Fact]
-    public void Start_logs_and_posts_command_failed_with_same_cmd_id()
+    [Theory]
+    [InlineData("netflix")]
+    [InlineData("moonlight-pc")]
+    public void Start_logs_and_posts_command_failed_with_same_cmd_id(string appId)
     {
         var log = new RecordingLog();
         var posted = new List<IOrchestratorMessage>();
         var port = new MissingHostPort(log, posted.Add);
 
-        port.Start(new StartApp(7, "netflix"));
+        port.Start(new StartApp(7, appId));
 
         var failed = Assert.IsType<CommandFailed>(Assert.Single(posted));
         Assert.Equal(7, failed.CmdId);
@@ -29,7 +31,7 @@ public class MissingHostPortTests
         Assert.Equal(MissingHostPort.Src, entry.Src);
         Assert.Equal("startWithoutHost", entry.Msg);
         Assert.Equal(7L, entry.Data!["cmdId"]);
-        Assert.Equal("netflix", entry.Data["appId"]);
+        Assert.Equal(appId, entry.Data["appId"]);
     }
 
     [Fact]
