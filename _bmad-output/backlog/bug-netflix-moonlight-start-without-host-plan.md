@@ -1,9 +1,7 @@
 ---
 title: "Netflix i Moonlight przechodzą w „Nie odpowiada”, bo build nie rejestruje hostów aplikacji"
 ticket: 17
-status: blocked
-blocked_at: "2026-10-28"
-blocked_reason: "dirty working tree: untracked _bmad-output/backlog/bug-netflix-moonlight-start-without-host.md"
+status: draft
 ---
 ## Auto Run Result
 
