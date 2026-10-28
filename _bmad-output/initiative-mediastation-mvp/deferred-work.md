@@ -5,6 +5,7 @@ source_spec: `epic-orchestrator-lifecycle/story-systemevents-wybudzenie-z-modern
 severity: low
 reason: The registration-echo window and the three-source mapping moved out of the HWND-bound shim into `PowerSignalRouter` (linked into `MediaStation.Core.Tests`, see `PowerSignalRouterTests`), so what stays untested is only the plumbing that needs a real window. Settle it with an HWND-level harness, or with an echo observation during the UM760 epic acceptance.
 status: open
+ticket: `_bmad-output/backlog/bug-power-notifications-hwnd-harness.md`
 
 ### DW-2: A throw from `HwndSource.AddHook` or the `SystemEvents.PowerModeChanged` subscribe after the hook is attached leaks that hook for the process lifetime.
 
@@ -49,6 +50,7 @@ reason: Story 1 odroczyła reset `_held`/`_pendingLong` do story, która rejestr
 evidence: Retro A1 (2026-10-23, 19c5038): key-down Home, Back, OK i Keyboard (klawisze bez siatki `repeat`) starszy niż `MaxRepeatHoldMs` zaczyna nowe naciśnięcie, więc Home nie zamarza po utraconym key-up; test `Swallowed_home_with_missing_key_up_is_stale_after_max_hold_and_acts_again`. Zostaje otwarte tylko dla połkniętej strzałki (siatka `repeat`) i dla resetu `_pendingLong` przy re-rejestracji hooka.
 owner: epic-osk, decyzja refinementu epiki 4, 2026-10-26
 status: open
+ticket: `_bmad-output/backlog/spike-epic-osk-deferred-risks.md`
 
 ### DW-7: AD-8 („Jedno naciśnięcie daje jedną Action”, „InputHub jest właścicielem timingu”) i checklista odbioru epiku („dokładnie jeden wpis `action`” dla strzałek) nie opisują, że trzymana strzałka daje `press` + N×`repeat`
 
@@ -82,6 +84,7 @@ severity: low
 reason: KeyInjector jest tylko przekazywany jako delegat w CompositionRoot.cs, testy karmią KeyInjectionPump własnym delegatem, a logi z 2026-10-20..22 nie mają żadnego wpisu keyInjection. Układ struktur pochodzi z CsWin32 (wygenerowane INPUT/KEYBDINPUT), więc ryzyko jest niskie. Rozstrzyga odbiór epiku na UM760: prawdziwy SendKey daje wpis keyInjection, a wstrzyknięty klawisz nie daje Action i wraca przez hook; alternatywnie jednorazowe wywołanie helpera poza testami.
 owner: epic-osk (pierwszy `SendInput` w TextSink foreground), decyzja refinementu epiki 4, 2026-10-26
 status: open
+ticket: `_bmad-output/backlog/spike-epic-osk-deferred-risks.md`
 
 ### DW-11: Przestrzeń współrzędnych clipu (`GetWindowRect`, piksele fizyczne) i zdarzeń hooka (`MSLLHOOKSTRUCT.pt`) może się rozejść, gdy aplikacja nie jest per-monitor DPI aware, a okno OSK stoi na monitorze o
 origin: spec-deferred ae465c0c9b5a
@@ -91,6 +94,7 @@ severity: medium
 reason: Plan (Implementation Notes) twierdzi „WPF w .NET jest per-monitor DPI aware”, ale `src/MediaStation.App/MediaStation.App.csproj` nie deklaruje żadnego manifestu DPI, a domyślny WPF raportuje `SYSTEM_AWARE`. ALDER pracuje przy 200% i ma dwa monitory (1920×1080 oraz 1080×1920), więc na monitorze o skali innej niż systemowa prostokąt clipu i punkt hooka mogą być w różnych przestrzeniach. Rozstrzyga pomiar `GetProcessDpiAwareness` na opublikowanym exe oraz przebieg z OSK na monitorze o innej skali (porównanie prostokąta z `GetWindowRect` z punktem z hooka) — do odbioru epiku, razem z epic-osk, które pierwsze wyśle `clipHwnd`.
 owner: epic-osk, decyzja refinementu epiki 4, 2026-10-26
 status: open
+ticket: `_bmad-output/backlog/spike-epic-osk-deferred-risks.md`
 
 ### DW-12: AD-8 nadal opisuje `SetInputRouting{ mode, appType, pointer, epoch }`, choć kontrakt ma teraz opcjonalne `clipHwnd`; dokumentacja architektury jest nieaktualna do czasu epic-osk.
 
@@ -142,6 +146,7 @@ severity: medium
 reason: AD-8/AD-9 każą otwierać OSK z `Keyboard` w `app` + `web` tylko przy `textFocus{active:true}`, a InputHub sam nie bramkuje i dziś Orchestrator ignoruje każdą Action poza `Home`, więc zachowanie odpowiada tabeli tylko przypadkiem. Pierwsza story epic-osk, która podłączy `Keyboard` do OSK, musi dodać bramkę `textFocus` w Orchestratorze i test: `Keyboard` w `app` + `web` bez `textFocus` nie otwiera OSK, a z `textFocus` otwiera. Bez tego przycisk Klawiatura otworzy OSK w przeglądarce bez pola tekstowego.
 owner: epic-osk, decyzja refinementu epiki 4, 2026-10-26
 status: open
+ticket: `_bmad-output/backlog/spike-epic-osk-deferred-risks.md`
 
 ### DW-18: Orchestrator nie zachowuje `rootPid` z `AppWindowAttached`, którego `epic-windows-audio` potrzebuje do AD-15.
 
@@ -169,6 +174,7 @@ severity: low
 reason: Atrybucja per ticket zadziałała, bo żadna epika się nie przeplatała; następna przeplatana będzie wymagała ręcznej oceny zakresu commitów. Naprawa po stronie pętli: zapisać close HEAD w planie przy zamknięciu, nie etykietować jednorodzicowych squashy jako `Merge`.
 owner: bmad-loop tooling
 status: open
+ticket: `_bmad-output/backlog/story-bmad-loop-close-head-timeout-reconciliation.md`
 
 ### DW-21: Pętla nie uzgadnia planu w stanie `built` z sesją dev zakończoną timeoutem.
 origin: retro epiki 2 (A7)
@@ -178,6 +184,7 @@ severity: low
 reason: Nie wystąpiło w epice 3 (brak timeoutu sesji dev), więc ani niezrealizowane, ani obalone. Zostaje jako znany brak do pierwszego timeoutu.
 owner: bmad-loop tooling
 status: open
+ticket: `_bmad-output/backlog/story-bmad-loop-close-head-timeout-reconciliation.md`
 
 ### DW-22: Clip kursora jest liczony tylko przy zmianie `epoch`; zdegenerowany `GetWindowRect` jest przyjmowany jako clip.
 origin: retro epiki 3, 2026-10-23 (F9/A6/Q5)
@@ -187,6 +194,7 @@ severity: medium
 reason: Dla stałego, nieaktywowanego okna OSK epoch-only wystarcza na start. Epic-osk musi odrzucić zdegenerowany (zerowy, zminimalizowany) `GetWindowRect`, bo inaczej każde kliknięcie w trybie `osk` zostanie połknięte, oraz przemierzyć clip przy przesunięciu lub zmianie rozmiaru okna i przy zmianie aktywacji. Wspólnie z DW-11 (przestrzeń DPI).
 owner: epic-osk
 status: open
+ticket: `_bmad-output/backlog/spike-epic-osk-deferred-risks.md`
 
 ### DW-23: Wzorzec „źródła App linkowane do `MediaStation.Core.Tests`" (19 plików) jest opisany tylko komentarzem w csproj.
 origin: retro epiki 3, 2026-10-23 (F5/A7)
@@ -206,6 +214,7 @@ severity: low
 reason: Przy równoległym trzymaniu dwóch przycisków pilota puszczenie jednego pozwala zalogować drugi ponownie. Klucz dedupe powinien być VK→usage, nie globalny reset.
 owner: backlog: story „`--calibrate-input` zapisuje wybrany przycisk Klawiatura do input.json”, 2026-10-26
 status: open
+ticket: `_bmad-output/backlog/story-calibrate-input-dedupe-usages.md`
 
 ### DW-25: `InputHub` (815 linii) i `InputPolicy` (678 linii) przerosły rolę „cienkiego adaptera".
 origin: retro epiki 3, 2026-10-23 (F2/F3/A11)
@@ -215,6 +224,7 @@ severity: low
 reason: Klasy są spójne, ale każda story dokładała 150-520 linii. Przed rozszerzeniem przez epic-osk lub epic-browserhost wydzielić z `InputHub` polling XInput i pointer/clip, a z `InputPolicy` mapowanie pada; wspólny helper pompy w tle przy trzeciej pompie.
 owner: epic-osk / epic-browserhost (pierwsza z nich)
 status: open
+ticket: `_bmad-output/backlog/spike-epic-osk-deferred-risks.md`
 
 ### DW-26: Refactor sweep (3.10) nie miał listy zakresu i zużył 20,5 M tokenów (budżet 2 M).
 origin: retro epiki 3, 2026-10-23 (F16/A10)
@@ -234,6 +244,7 @@ severity: low
 reason: Decyzja 2026-10-23: na teraz wystarcza ręczne odkrycie sygnatury (G20S Pro znany ze spike S10). Ulepszenie: kalibracja loguje nieznane urządzenia HID, gdy nic nie pasuje. Dotyczy kroku odbioru „wybór przycisku Klawiatura".
 owner: author, kiedy zmieni się pilot
 status: open
+ticket: `_bmad-output/backlog/story-calibrate-input-accept-new-remote-signature.md`
 
 ### DW-28: Generator schematów (`MediaStation.SchemaExport`) i zwykły `dotnet publish` nie działają na maszynach z Application Control.
 origin: plan AD-8 foreground gate, 2026-10-23
@@ -272,6 +283,7 @@ source_spec: `tickets/epic-input/tickets/bug-check-home-s10-home-przy-zawieszony
 severity: medium
 reason: Logi przebiegów 1 i 2 z 2026-10-25 (brak wpisów w oknach shell-hung #1 i #2, na wierzchu `Ghost` procesu `dwm`) oraz sonda na UM760: z duchem na wierzchu wstrzyknięte Enter nie dało `keyEnter`, bez ducha dało. Wstrzyknięcie mogła zablokować UIPI, więc dla fizycznego pilota rozstrzygnie dopiero przebieg użytkownika; ewentualna poprawka to zmiana uprawnień hooka (AD-8).
 status: open
+ticket: `_bmad-output/backlog/bug-home-shell-hung-dwm-ghost-hook.md`
 
 ### DW-32: Domyślny cel Edge to pierwsze okno `msedge` z tytułem, więc może to być obce okno użytkownika (np. DevTools, PWA).
 origin: spec-deferred 34503e8bb1f7
@@ -280,6 +292,7 @@ source_spec: `tickets/epic-input/tickets/bug-check-home-s10-home-przy-zawieszony
 severity: low
 reason: `Select-EdgeWindow` nie odróżnia okien tego samego procesu; zawężenie daje `-EdgeTitle`. Skutek: Home wysyłany nad niewłaściwym oknem Edge, wynik nadal mierzy log aplikacji.
 status: open
+ticket: `_bmad-output/backlog/bug-s10-select-edge-window.md`
 
 ### DW-33: Stany kafelka `Starting`, `Stopping`, `Foreground` i `Background`, kropka „w tle”, powrót fokusu na ostatni kafelek i długie OK na `Background` nie zostały sprawdzone na żywym shellu.
 origin: odbiór epiki 4 na UM760, 2026-10-26 (`tickets/epic-home-screen/epic-home-screen-um760-acceptance.md`, Poza zakresem i werdykt)
@@ -369,6 +382,7 @@ source_spec: `plan-dw-decision-dw-41-home-in-shell-mode.md`
 severity: low
 reason: Orchestrator.Home.cs Foreground branch returns OrchestratorResult.None when Hwnd is null; pre-existing and outside DW-41's intent (no Foreground app).
 status: open
+ticket: `_bmad-output/backlog/bug-foreground-without-hwnd-shows-shell.md`
 
 ### DW-43: Moonlight po Home i powrocie zawiesza się na „Uruchamianie input stream establishment…”, bez transmisji (log pokazuje poprawne komendy okienne).
 origin: odbiór epiki 5 na UM760, 2026-10-27, S6 (user: fail), `tickets/epic-windows-audio/epic-windows-audio-um760-acceptance.md`
@@ -416,6 +430,7 @@ source_spec: `tickets/epic-windows-audio/tickets/bug-moonlight-po-home-i-powroci
 severity: medium
 reason: Moonlight-qt shows a Qt connecting window (`Qt6120QWindowIcon`) for ~4-6 s before the `SDL_app` stream window; the dev harness fix is in `Hosts/DevHarness` only. Blind hunter finding; the future host does not exist yet.
 status: open
+ticket: `_bmad-output/backlog/story-moonlight-production-picks-sdl-window.md`
 
 ### DW-48: With only a `game` category tile in apps.json the injected OK did not start the tile (restore pass 0/4, no StartApp); cause not diagnosed.
 origin: spec-deferred dd29815a18e8
@@ -423,6 +438,7 @@ location: tools/check-home-s10.ps1:New-RestoreAppsJson
 source_spec: `tickets/epic-windows-audio/tickets/bug-moonlight-po-home-i-powrocie-stoi-na-uruchamianie-input-stre-plan.md`
 reason: Seen on UM760 2026-10-27 with the generated one-tile apps.json (category `game`): `action ok` logged, no start for 40 s; the same tile in `video` starts at once. Could be shell default focus with a lone `game` row; check with a `game`-only config and OK from a fresh start. Unverified.
 status: open
+ticket: `_bmad-output/backlog/bug-game-only-tile-ok-start.md`
 
 ### DW-49: A window command whose result is lost keeps evaluation blocked until the next transitionId.
 origin: spec-deferred 6d67a13a710e
@@ -430,3 +446,6 @@ location: src/MediaStation.Core/Orchestrator/Orchestrator.Foreground.cs (IsHardB
 source_spec: `tickets/epic-windows-audio/tickets/story-pilot-steruje-tym-co-jest-na-wierzchu-takze-po-alt-tab-plan.md`
 reason: Window-command results are tracked in a pending set cleared only by CommandCompleted/CommandFailed or a transitionId change; executors always answer (AD-4), so unverified. Settled by a test or run where the executor drops a result.
 status: open
+ticket: `_bmad-output/backlog/bug-window-command-result-loss-unblocks-evaluation.md`
+
+
