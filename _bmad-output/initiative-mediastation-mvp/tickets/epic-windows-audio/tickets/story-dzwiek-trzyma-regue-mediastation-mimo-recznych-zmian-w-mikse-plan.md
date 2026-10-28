@@ -3,7 +3,7 @@ title: 'Dźwięk trzyma regułę MediaStation mimo ręcznych zmian w mikserze'
 type: 'feature'
 ticket: '10'
 created: '2026-10-27'
-status: built
+status: done
 baseline_revision: 'dd14a6963436110cc80c1b8af663c01c6b227c5d'
 route: 'full'
 route_source: 'auto'
@@ -127,6 +127,10 @@ Residual risks: live mixer check with Edge and `harness-audio.html` was not run 
 Re-verified on re-dispatch (2026-10-27): `dotnet test` 1238 passed, 0 failed; `dotnet build -c Release` 0 errors, 0 warnings. Review already recorded above; no new changes.
 
 ## Auto Run Result
+
+## Recovery
+
+Ticket 5.10 was built before the current `bmad-loop` run and was not dispatched by that run. Existing automated verification and review evidence were accepted during reconciliation on 2026-10-28; no implementation rerun was needed. The ticket was marked `done` manually.
 
 Status: built
 
