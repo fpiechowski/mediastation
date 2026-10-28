@@ -20,8 +20,9 @@
 
   <!--
     Brak projektu testów App (granica epiki), więc typy adaptera bez Win32/WPF są linkowane do testów,
-    jak FileLogSink w MediaStation.LogAppendCheck. Poza testami zostaje sam plumbing Win32/WPF shimu
-    PowerNotifications (hook, RegisterPowerSettingNotification, SystemEvents, Marshal payloadu).
+    jak FileLogSink w MediaStation.LogAppendCheck. Plumbing Win32/WPF shimu
+    PowerNotifications (hook, RegisterPowerSettingNotification, SystemEvents, Marshal payloadu) testuje harness
+    HWND w MediaStation.App.Tests (net10.0-windows).
   -->
   <ItemGroup>
     <Compile Include="..\..\src\MediaStation.App\Config\AppIcons.cs" Link="App\AppIcons.cs" />

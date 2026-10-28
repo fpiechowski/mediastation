@@ -1,0 +1,15 @@
+GUID_CONSOLE_DISPLAY_STATE
+PBT_APMRESUMEAUTOMATIC
+PBT_POWERSETTINGCHANGE
+RegisterPowerSettingNotification
+UnregisterPowerSettingNotification
+WM_POWERBROADCAST
+SendMessageW
+PeekMessageW
+DispatchMessageW
+TranslateMessage
+PEEK_MESSAGE_REMOVE_TYPE
+EnumWindows
+GetClassNameW
+GetWindowTextW
+IsWindow

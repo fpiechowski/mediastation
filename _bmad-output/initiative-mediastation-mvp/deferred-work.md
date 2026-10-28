@@ -4,7 +4,9 @@ location: src/MediaStation.App/Platform/System/PowerNotifications.cs — `PowerN
 source_spec: `epic-orchestrator-lifecycle/story-systemevents-wybudzenie-z-modern-standby-na-um760-plan.md`
 severity: low
 reason: The registration-echo window and the three-source mapping moved out of the HWND-bound shim into `PowerSignalRouter` (linked into `MediaStation.Core.Tests`, see `PowerSignalRouterTests`), so what stays untested is only the plumbing that needs a real window. Settle it with an HWND-level harness, or with an echo observation during the UM760 epic acceptance.
-status: open
+status: done 2026-10-28
+resolution: resolved by sweep bundle dw-power-notifications-harness
+resolution-undo: 9d3a7e02dffc9dbe540b411d0984ddd619e0987306fa110be7e4eb6b8305f771 2026-10-28 7374617475733a206f70656e
 ticket: `_bmad-output/backlog/bug-power-notifications-hwnd-harness.md`
 
 ### DW-2: A throw from `HwndSource.AddHook` or the `SystemEvents.PowerModeChanged` subscribe after the hook is attached leaks that hook for the process lifetime.
@@ -454,3 +456,10 @@ status: open
 ticket: `_bmad-output/backlog/bug-window-command-result-loss-unblocks-evaluation.md`
 
 
+### DW-50: PowerSignalRouter reports the GUID_CONSOLE_DISPLAY_STATE registration echo as a winning systemResumed at startup, because the echo arrives after the registration window closes.
+origin: spec-deferred c0f617c750f2
+location: src/MediaStation.App/Platform/System/PowerSignalRouter.cs
+source_spec: `plan-dw-power-notifications-harness.md`
+severity: medium
+reason: Observed by the new harness; Registration_echo_is_delivered_through_the_hook_after_start pins the behavior and Registration_echo_is_not_reported_as_a_wake (Skipped) holds the desired one. Pre-existing router/shim timing, not caused by the harness.
+status: open
