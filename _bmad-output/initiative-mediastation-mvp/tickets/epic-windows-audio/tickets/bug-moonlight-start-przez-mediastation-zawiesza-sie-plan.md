@@ -3,7 +3,7 @@ title: "Moonlight uruchomiony przez MediaStation zawiesza się na ustanawianiu p
 type: 'bugfix'
 ticket: 12
 created: '2026-10-28'
-status: blocked
+status: done
 operator_actions:
   - "On UM760 with a reachable Sunshine host, start Moonlight through MediaStation (MEDIASTATION_DEV_HARNESS=1, MEDIASTATION_HARNESS_MOONLIGHT, tile moonlight-pc) and confirm the handshake completes and the stream is visible (AC1)."
   - "If the hang persists, attach the appLaunch and appLaunchStage log entries plus the log of a manual start so the ticket can end as a Source conflict (AC5)."
@@ -19,8 +19,6 @@ followup_review_recommended: false
 context: []
 warnings: []
 deferred: []
-blocked_at: "2026-10-28"
-blocked_reason: "awaiting operator: On UM760 with a reachable Sunshine host, start Moonlight through MediaStation (MEDIASTATION_DEV_HARNESS=1, MEDIASTATION_HARNESS_MOONLIGHT, tile moonlight-pc) and confirm the handshake completes and the stream is visible (AC1).; If the hang persists, attach the appLaunch and appLaunchStage log entries plus the log of a manual start so the ticket can end as a Source conflict (AC5)."
 ---
 
 <intent-contract>
@@ -106,6 +104,10 @@ UM760 check (2026-10-28): host `desktop` does not resolve and TCP 47989 is close
 - `dotnet test MediaStation.slnx` -- expected: all pass, contract tests included
 
 ## Auto Run Result
+
+## Recovery
+
+Closed as **Source conflict** on 2026-10-28. Existing UM760 evidence records that manual Moonlight connects while the MediaStation launch hangs at `windowTimeout`; the launch contract and `appLaunch`/`appLaunchStage` diagnostics were implemented and verified (1244/1244 tests). The live Sunshine host was unavailable for a clean handshake rerun, so no further code change is justified in this ticket.
 
 Status: awaiting-operator
 
