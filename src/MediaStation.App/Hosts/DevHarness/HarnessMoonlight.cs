@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace MediaStation.App.Hosts.DevHarness;
 
@@ -26,6 +27,113 @@ internal static class HarnessMoonlight
 
         return ["stream", host, app, "--display-mode", "borderless", "--mute-on-focus-loss"];
     }
+
+    /// <summary>Kontrakt startu procesu Moonlight: plik, argumenty, katalog roboczy i zmienne środowiska do usunięcia z dziecka.</summary>
+    public sealed record MoonlightLaunch(
+        string Exe,
+        IReadOnlyList<string> Args,
+        string? WorkingDirectory,
+        IReadOnlyList<string> EnvironmentToRemove);
+
+    private const string MediaStationEnvPrefix = "MEDIASTATION_";
+
+    /// <summary>Kontrakt MediaStation: katalog roboczy = folder exe, bez zmiennych <c>MEDIASTATION_*</c> w dziecku.</summary>
+    public static MoonlightLaunch BuildLaunch(string exe, string host, string app, IEnumerable<string> environmentNames)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(exe);
+        ArgumentNullException.ThrowIfNull(environmentNames);
+
+        return new MoonlightLaunch(exe, BuildArguments(host, app), WorkingDirectoryOf(exe), EnvironmentToRemove(environmentNames));
+    }
+
+    /// <summary>Ręczny start: <c>Moonlight.exe stream host app</c> z folderu exe, całe środowisko bez zmian.</summary>
+    public static MoonlightLaunch ManualLaunch(string exe, string host, string app)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(exe);
+        ArgumentException.ThrowIfNullOrWhiteSpace(host);
+        ArgumentException.ThrowIfNullOrWhiteSpace(app);
+
+        return new MoonlightLaunch(exe, ["stream", host, app], WorkingDirectoryOf(exe), []);
+    }
+
+    /// <summary>Opisy różnic między kontraktami (argumenty dodatkowe, katalog roboczy, zmienne środowiska).</summary>
+    public static IReadOnlyList<string> Differences(MoonlightLaunch manual, MoonlightLaunch actual)
+    {
+        ArgumentNullException.ThrowIfNull(manual);
+        ArgumentNullException.ThrowIfNull(actual);
+
+        var result = new List<string>();
+        if (!string.Equals(manual.Exe, actual.Exe, StringComparison.OrdinalIgnoreCase))
+        {
+            result.Add($"exe: {manual.Exe} -> {actual.Exe}");
+        }
+
+        if (!string.Equals(manual.WorkingDirectory, actual.WorkingDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            result.Add($"cwd: {manual.WorkingDirectory ?? "<inherited>"} -> {actual.WorkingDirectory ?? "<inherited>"}");
+        }
+
+        foreach (var arg in actual.Args.Except(manual.Args, StringComparer.Ordinal))
+        {
+            result.Add($"arg+: {arg}");
+        }
+
+        foreach (var arg in manual.Args.Except(actual.Args, StringComparer.Ordinal))
+        {
+            result.Add($"arg-: {arg}");
+        }
+
+        // Ręczny start dziedziczy środowisko powłoki bez MEDIASTATION_*; usunięcie tych zmiennych z dziecka to zgodność, nie różnica.
+        foreach (var name in actual.EnvironmentToRemove.Where(n => !n.StartsWith(MediaStationEnvPrefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            result.Add($"env-: {name}");
+        }
+
+        return result;
+    }
+
+    /// <summary>Nazwy zmiennych <c>MEDIASTATION_*</c> (bez rozróżniania wielkości liter) do usunięcia z dziecka.</summary>
+    public static IReadOnlyList<string> EnvironmentToRemove(IEnumerable<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+
+        return [.. names.Where(n => n.StartsWith(MediaStationEnvPrefix, StringComparison.OrdinalIgnoreCase))];
+    }
+
+    /// <summary>Opis środowiska <c>NAZWA=wartość</c>; wartości zmiennych z KEY, TOKEN, SECRET lub PASSWORD w nazwie to <c>&lt;redacted&gt;</c>.</summary>
+    public static IReadOnlyList<string> DescribeEnvironment(IEnumerable<KeyValuePair<string, string?>> vars)
+    {
+        ArgumentNullException.ThrowIfNull(vars);
+
+        string[] secretMarkers = ["KEY", "TOKEN", "SECRET", "PASSWORD"];
+        return
+        [
+            .. vars
+                .OrderBy(v => v.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(v => secretMarkers.Any(m => v.Key.Contains(m, StringComparison.OrdinalIgnoreCase))
+                    ? $"{v.Key}=<redacted>"
+                    : $"{v.Key}={v.Value}"),
+        ];
+    }
+
+    /// <summary>Nakłada kontrakt na <paramref name="info"/>: katalog roboczy i usunięcie zmiennych ze środowiska dziecka.</summary>
+    public static void Apply(System.Diagnostics.ProcessStartInfo info, MoonlightLaunch launch)
+    {
+        ArgumentNullException.ThrowIfNull(info);
+        ArgumentNullException.ThrowIfNull(launch);
+
+        if (launch.WorkingDirectory is { } cwd)
+        {
+            info.WorkingDirectory = cwd;
+        }
+
+        foreach (var name in launch.EnvironmentToRemove)
+        {
+            info.Environment.Remove(name);
+        }
+    }
+
+    private static string? WorkingDirectoryOf(string exe) => System.IO.Path.GetDirectoryName(exe) is { Length: > 0 } dir ? dir : null;
 
     /// <summary>Plik z <paramref name="envValue"/> (bez cudzysłowów i spacji brzegowych), jeśli istnieje; inaczej <c>null</c>.</summary>
     public static string? ResolveExecutable(string? envValue, Func<string, bool> exists)

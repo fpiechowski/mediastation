@@ -223,4 +223,74 @@ public class DevHarnessTests
         Assert.Equal([1], HarnessLaunch.MatchingRootsFor(web, lines, @"C:\p"));
         Assert.Equal([2], HarnessLaunch.MatchingRootsFor(moon, lines, @"C:\p"));
     }
+
+    [Fact]
+    public void Moonlight_launch_differs_from_manual_only_by_borderless_and_mute_args()
+    {
+        var exe = @"C:\M\Moonlight.exe";
+        var manual = HarnessMoonlight.ManualLaunch(exe, "desktop", "Desktop");
+        var actual = HarnessMoonlight.BuildLaunch(exe, "desktop", "Desktop", ["PATH", "MEDIASTATION_DEV_HARNESS"]);
+
+        Assert.Equal(@"C:\M", actual.WorkingDirectory);
+        Assert.Equal(
+            ["arg+: --display-mode", "arg+: borderless", "arg+: --mute-on-focus-loss"],
+            HarnessMoonlight.Differences(manual, actual));
+    }
+
+    [Fact]
+    public void Moonlight_launch_without_working_directory_is_reported_as_a_difference()
+    {
+        var exe = @"C:\M\Moonlight.exe";
+        var manual = HarnessMoonlight.ManualLaunch(exe, "desktop", "Desktop");
+        var baseline = HarnessMoonlight.BuildLaunch(exe, "desktop", "Desktop", []) with { WorkingDirectory = null };
+
+        Assert.Contains(HarnessMoonlight.Differences(manual, baseline), d => d.StartsWith("cwd:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Moonlight_environment_removal_lists_only_mediastation_variables()
+    {
+        Assert.Equal(
+            ["MEDIASTATION_DEV_HARNESS", "mediastation_harness_moonlight"],
+            HarnessMoonlight.EnvironmentToRemove(["MEDIASTATION_DEV_HARNESS", "PATH", "mediastation_harness_moonlight"]));
+    }
+
+    [Fact]
+    public void Moonlight_environment_description_redacts_secrets()
+    {
+        var described = HarnessMoonlight.DescribeEnvironment(
+        [
+            new("FOO_TOKEN", "abc"),
+            new("my_password", "x"),
+            new("PATH", @"C:\bin"),
+        ]);
+
+        Assert.Equal(["FOO_TOKEN=<redacted>", "my_password=<redacted>", @"PATH=C:\bin"], described);
+    }
+
+    [Fact]
+    public void Moonlight_apply_sets_working_directory_and_strips_mediastation_variables()
+    {
+        var exe = @"C:\M\Moonlight.exe";
+        var info = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false };
+        info.Environment["MEDIASTATION_X"] = "1";
+        info.Environment["KEEP_ME"] = "2";
+        var launch = HarnessMoonlight.BuildLaunch(exe, "desktop", "Desktop", info.Environment.Keys);
+
+        HarnessMoonlight.Apply(info, launch);
+
+        Assert.Equal(@"C:\M", info.WorkingDirectory);
+        Assert.False(info.Environment.ContainsKey("mediastation_x"));
+        Assert.True(info.Environment.ContainsKey("KEEP_ME"));
+    }
+
+    [Fact]
+    public void Moonlight_differences_report_extra_environment_removals()
+    {
+        var exe = @"C:\M\Moonlight.exe";
+        var manual = HarnessMoonlight.ManualLaunch(exe, "desktop", "Desktop");
+        var actual = HarnessMoonlight.BuildLaunch(exe, "desktop", "Desktop", []) with { EnvironmentToRemove = ["FOO"] };
+
+        Assert.Contains("env-: FOO", HarnessMoonlight.Differences(manual, actual));
+    }
 }

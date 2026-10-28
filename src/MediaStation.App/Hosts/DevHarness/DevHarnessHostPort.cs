@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaStation.App.Platform.Window;
@@ -222,6 +223,7 @@ internal sealed class DevHarnessHostPort : IAppHostPort
 
             string? exe;
             string[] launchArgs;
+            HarnessMoonlight.MoonlightLaunch? moonLaunch = null;
             switch (app)
             {
                 case WebApp web:
@@ -250,7 +252,9 @@ internal sealed class DevHarnessHostPort : IAppHostPort
                         return;
                     }
 
-                    launchArgs = [.. HarnessMoonlight.BuildArguments(moon.Host, moon.App)];
+                    var envNames = Environment.GetEnvironmentVariables().Keys.Cast<string>().ToList();
+                    moonLaunch = HarnessMoonlight.BuildLaunch(exe, moon.Host, moon.App, envNames);
+                    launchArgs = [.. moonLaunch.Args];
                     break;
                 default:
                     FailWith(command, "unknownApp");
@@ -280,6 +284,11 @@ internal sealed class DevHarnessHostPort : IAppHostPort
                 info.ArgumentList.Add(arg);
             }
 
+            if (moonLaunch is not null)
+            {
+                HarnessMoonlight.Apply(info, moonLaunch);
+            }
+
             Process? started = null;
             try
             {
@@ -301,12 +310,33 @@ internal sealed class DevHarnessHostPort : IAppHostPort
 
             session.Process = started;
 
+            if (moonLaunch is not null)
+            {
+                _log.Info(Src, "appLaunch", new Dictionary<string, object?>
+                {
+                    ["appId"] = app.Id,
+                    ["commandLine"] = $"\"{exe}\" {string.Join(' ', launchArgs)}",
+                    ["args"] = launchArgs,
+                    ["workingDirectory"] = info.WorkingDirectory,
+                    ["removedEnvironment"] = moonLaunch.EnvironmentToRemove,
+                    ["environment"] = HarnessMoonlight.DescribeEnvironment(
+                        info.Environment.Select(kv => new KeyValuePair<string, string?>(kv.Key, kv.Value))),
+                    ["pid"] = started.Id,
+                });
+                LogStage(app.Id, "started", started, windowClass);
+            }
+
             var window = session.Stopping ? null : WaitForWindow(session, windowClass);
             if (window is null || session.Stopping)
             {
                 // Sesję zdejmujemy tylko własną (reference): nowszy start mógł już wpisać następną.
                 Unregister(app.Id, session);
                 var stoppedFromOutside = session.StopRequested;
+                if (moonLaunch is not null && !stoppedFromOutside)
+                {
+                    LogStage(app.Id, "windowTimeout", started, windowClass);
+                }
+
                 session.Stopping = true;
                 Kill(started);
                 FailWith(command, stoppedFromOutside ? "stoppedDuringStart" : "windowTimeout");
@@ -317,6 +347,7 @@ internal sealed class DevHarnessHostPort : IAppHostPort
             {
                 ["appId"] = app.Id,
                 ["hwnd"] = window.Hwnd,
+                ["class"] = window.ClassName,
                 ["rootPid"] = started.Id,
             });
             _post(new AppWindowAttached(app.Id, window.Hwnd, started.Id));
@@ -368,6 +399,64 @@ internal sealed class DevHarnessHostPort : IAppHostPort
         }
 
         return null;
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern int GetWindowTextW(IntPtr hWnd, System.Text.StringBuilder text, int maxCount);
+
+    private static string TitleOf(long hwnd)
+    {
+        try
+        {
+            var text = new System.Text.StringBuilder(256);
+            return GetWindowTextW((IntPtr)hwnd, text, text.Capacity) > 0 ? text.ToString() : string.Empty;
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
+    }
+
+    private void LogStage(string appId, string stage, Process process, string? windowClass)
+    {
+        try
+        {
+            var exited = false;
+            try
+            {
+                exited = process.HasExited;
+            }
+            catch (InvalidOperationException)
+            {
+                exited = true;
+            }
+
+            var data = new Dictionary<string, object?>
+            {
+                ["appId"] = appId,
+                ["stage"] = stage,
+                ["pid"] = process.Id,
+                ["exited"] = exited,
+                ["expectedWindowClass"] = windowClass,
+            };
+            if (stage == "windowTimeout")
+            {
+                var tree = WindowTreePicker.Descendants(process.Id, _processParents());
+                data["windows"] = _windows.EnumerateTopLevel()
+                    .Where(w => tree.Contains(w.Pid))
+                    .Select(w => $"hwnd={w.Hwnd} pid={w.Pid} class={w.ClassName} title=\"{TitleOf(w.Hwnd)}\" visible={w.Visible} owner={w.HasOwner}")
+                    .ToList();
+                _log.Warn(Src, "appLaunchStage", data);
+            }
+            else
+            {
+                _log.Info(Src, "appLaunchStage", data);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Error(Src, "devHarnessStageLogFailed", ex, new Dictionary<string, object?> { ["appId"] = appId });
+        }
     }
 
     private WindowInfo? FindWindow(int rootPid, string? windowClass)

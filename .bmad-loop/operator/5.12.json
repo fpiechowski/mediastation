@@ -1,0 +1,12 @@
+{
+  "actions": [
+    "On UM760 with a reachable Sunshine host, start Moonlight through MediaStation (MEDIASTATION_DEV_HARNESS=1, MEDIASTATION_HARNESS_MOONLIGHT, tile moonlight-pc) and confirm the handshake completes and the stream is visible (AC1).",
+    "If the hang persists, attach the appLaunch and appLaunchStage log entries plus the log of a manual start so the ticket can end as a Source conflict (AC5)."
+  ],
+  "parked_at": "2026-10-28",
+  "ref": "5.12",
+  "run_id": "20261027-221933-f6ac",
+  "source": "tickets",
+  "spec_file": "_bmad-output/initiative-mediastation-mvp/tickets/epic-windows-audio/tickets/bug-moonlight-start-przez-mediastation-zawiesza-sie-plan.md",
+  "story_key": "5.12"
+}
