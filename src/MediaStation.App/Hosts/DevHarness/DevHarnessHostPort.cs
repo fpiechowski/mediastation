@@ -263,6 +263,13 @@ internal sealed class DevHarnessHostPort : IAppHostPort
 
             var windowClass = HarnessLaunch.WindowClassOf(app);
 
+            // Działająca instancja profilu przeglądarki (bez własnej sesji) jest adoptowana zamiast drugiego startu:
+            // drugi msedge.exe na tym samym profilu tylko przekazuje żądanie i kończy się.
+            if (app is WebApp && TryAdoptRunningProfile(command, app, windowClass))
+            {
+                return;
+            }
+
             // Sesja jest zarejestrowana przed startem procesu, więc Stop z luki nie ginie; drugi start tej samej
             // aplikacji najpierw zamyka poprzednią sesję, zamiast ją osierocić.
             var session = new Session();
@@ -325,9 +332,20 @@ internal sealed class DevHarnessHostPort : IAppHostPort
                 });
                 LogStage(app.Id, "started", started, windowClass);
             }
+            else
+            {
+                _log.Info(Src, "appLaunch", new Dictionary<string, object?>
+                {
+                    ["appId"] = app.Id,
+                    ["commandLine"] = $"\"{exe}\" {string.Join(' ', launchArgs)}",
+                    ["args"] = launchArgs,
+                    ["workingDirectory"] = info.WorkingDirectory,
+                    ["pid"] = started.Id,
+                });
+            }
 
-            var window = session.Stopping ? null : WaitForWindow(session, windowClass);
-            if (window is null || session.Stopping)
+            var hit = session.Stopping ? null : WaitForWindow(session, app, windowClass);
+            if (hit is null || session.Stopping)
             {
                 // Sesję zdejmujemy tylko własną (reference): nowszy start mógł już wpisać następną.
                 Unregister(app.Id, session);
@@ -336,9 +354,20 @@ internal sealed class DevHarnessHostPort : IAppHostPort
                 {
                     LogStage(app.Id, "windowTimeout", started, windowClass);
                 }
+                else if (app is WebApp && !stoppedFromOutside)
+                {
+                    var exitCode = ExitCodeOf(started);
+                    LogStage(
+                        app.Id,
+                        "windowTimeout",
+                        started,
+                        windowClass,
+                        HarnessLaunch.WebFailedStage(exitCode is not null, exitCode ?? 0),
+                        exitCode);
+                }
 
                 session.Stopping = true;
-                Kill(started);
+                Kill(session.Process ?? started);
                 FailWith(command, stoppedFromOutside ? "stoppedDuringStart" : "windowTimeout");
                 return;
             }
@@ -346,11 +375,11 @@ internal sealed class DevHarnessHostPort : IAppHostPort
             _log.Info(Src, "appWindowAttached", new Dictionary<string, object?>
             {
                 ["appId"] = app.Id,
-                ["hwnd"] = window.Hwnd,
-                ["class"] = window.ClassName,
-                ["rootPid"] = started.Id,
+                ["hwnd"] = hit.Window.Hwnd,
+                ["class"] = hit.Window.ClassName,
+                ["rootPid"] = hit.RootPid,
             });
-            _post(new AppWindowAttached(app.Id, window.Hwnd, started.Id));
+            _post(new AppWindowAttached(app.Id, hit.Window.Hwnd, hit.RootPid));
             _post(new CommandCompleted(command.CmdId));
 
             WatchExit(app.Id, session);
@@ -384,17 +413,121 @@ internal sealed class DevHarnessHostPort : IAppHostPort
         });
     }
 
-    private WindowInfo? WaitForWindow(Session session, string? windowClass)
+    /// <summary>
+    /// Czeka na okno. Launcher przeglądarki zakończony kodem 0 to możliwe przekazanie żądania instancji profilu:
+    /// wtedy szukamy też w pozostałych procesach profilu i przepinamy <see cref="Session.Process"/> na ten, który
+    /// ma okno. Zwraca okno i PID korzenia, w którym je znaleziono.
+    /// </summary>
+    private WindowHit? WaitForWindow(Session session, AppEntry app, string? windowClass)
     {
-        var process = session.Process!;
+        var launcher = session.Process!;
         var clock = Stopwatch.StartNew();
-        return HarnessWait.FindWindow(
-            () => FindWindow(process.Id, windowClass),
-            () => process.HasExited,
+        var found = HarnessLaunch.FindWindow(
+            app,
+            () => FindWindow(launcher.Id, windowClass) is { } own ? new WindowHit(own, launcher.Id) : null,
+            () => ExitCodeOf(launcher),
+            () =>
+            {
+                foreach (var pid in HarnessLaunch.MatchingRootsFor(app, _commandLines(), _profilesDir))
+                {
+                    if (pid != launcher.Id && FindWindow(pid, windowClass) is { } other)
+                    {
+                        return new WindowHit(other, pid);
+                    }
+                }
+
+                return null;
+            },
             () => session.Stopping,
             () => Thread.Sleep(PollInterval),
             () => clock.Elapsed,
             WindowTimeout);
+
+        if (found is not null && found.RootPid != launcher.Id)
+        {
+            try
+            {
+                session.Process = Process.GetProcessById(found.RootPid);
+            }
+            catch (ArgumentException)
+            {
+                // Korzeń z oknem zniknął między wykryciem a pobraniem uchwytu: start się nie udał.
+                return null;
+            }
+        }
+
+        return found;
+    }
+
+    private static int? ExitCodeOf(Process process)
+    {
+        try
+        {
+            return process.HasExited ? process.ExitCode : null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Adoptuje działającą instancję profilu przeglądarki z oknem, jeśli nie ma własnej sesji. Zwraca <c>true</c>,
+    /// gdy sesja została wpisana i okno zaraportowane (bez uruchamiania nowego procesu).
+    /// </summary>
+    private bool TryAdoptRunningProfile(StartApp command, AppEntry app, string? windowClass)
+    {
+        lock (_gate)
+        {
+            if (_sessions.ContainsKey(app.Id))
+            {
+                return false;
+            }
+        }
+
+        foreach (var pid in HarnessLaunch.MatchingRootsFor(app, _commandLines(), _profilesDir))
+        {
+            if (FindWindow(pid, windowClass) is not { } window)
+            {
+                continue;
+            }
+
+            Process process;
+            try
+            {
+                process = Process.GetProcessById(pid);
+            }
+            catch (ArgumentException)
+            {
+                continue;
+            }
+
+            var adopted = new Session { Process = process };
+            lock (_gate)
+            {
+                if (_sessions.ContainsKey(app.Id))
+                {
+                    return false;
+                }
+
+                _sessions[app.Id] = adopted;
+            }
+
+            _log.Info(Src, "appWindowAttached", new Dictionary<string, object?>
+            {
+                ["appId"] = app.Id,
+                ["hwnd"] = window.Hwnd,
+                ["class"] = window.ClassName,
+                ["rootPid"] = pid,
+                ["adopted"] = true,
+            });
+            _post(new AppWindowAttached(app.Id, window.Hwnd, pid));
+            _post(new CommandCompleted(command.CmdId));
+            WatchExit(app.Id, adopted);
+            return true;
+        }
+
+        return false;
     }
 
     private static IReadOnlyList<string> ReadMoonlightLogLines()
@@ -440,7 +573,7 @@ internal sealed class DevHarnessHostPort : IAppHostPort
         }
     }
 
-    private void LogStage(string appId, string stage, Process process, string? windowClass)
+    private void LogStage(string appId, string stage, Process process, string? windowClass, string? failedStage = null, int? exitCode = null)
     {
         try
         {
@@ -462,6 +595,12 @@ internal sealed class DevHarnessHostPort : IAppHostPort
                 ["exited"] = exited,
                 ["expectedWindowClass"] = windowClass,
             };
+            if (failedStage is not null)
+            {
+                data["failedStage"] = failedStage;
+                data["exitCode"] = exitCode;
+            }
+
             if (stage == "windowTimeout")
             {
                 var tree = WindowTreePicker.Descendants(process.Id, _processParents());
@@ -470,9 +609,12 @@ internal sealed class DevHarnessHostPort : IAppHostPort
                     .Where(w => tree.Contains(w.Pid))
                     .Select(w => $"hwnd={w.Hwnd} pid={w.Pid} class={w.ClassName} title=\"{TitleOf(w.Hwnd)}\" visible={w.Visible} owner={w.HasOwner}")
                     .ToList();
-                foreach (var (key, value) in HarnessMoonlight.TimeoutDiagnostics(snapshot, tree, windowClass, ReadMoonlightLogLines()))
+                if (failedStage is null)
                 {
-                    data[key] = value;
+                    foreach (var (key, value) in HarnessMoonlight.TimeoutDiagnostics(snapshot, tree, windowClass, ReadMoonlightLogLines()))
+                    {
+                        data[key] = value;
+                    }
                 }
                 _log.Warn(Src, "appLaunchStage", data);
             }
@@ -556,6 +698,8 @@ internal sealed class DevHarnessHostPort : IAppHostPort
         _log.Error(Src, "devHarnessCommandFailed", ex, new Dictionary<string, object?> { ["cmdId"] = command.CmdId });
         _post(new CommandFailed(command.CmdId, ErrorCode.Unexpected));
     }
+
+    private sealed record WindowHit(WindowInfo Window, int RootPid);
 
     private sealed class Session
     {

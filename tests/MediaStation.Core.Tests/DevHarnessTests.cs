@@ -384,6 +384,106 @@ public class DevHarnessTests
     }
 
     [Fact]
+    public void Launcher_exit_zero_is_handoff_only_for_web_apps()
+    {
+        var web = new WebApp("w", AppCategory.Video, "W", "w.png", "svc", BrowserKind.Edge, 9222);
+        var moon = new MoonlightApp("m", AppCategory.Game, "M", "m.png", "desktop", "Desktop");
+
+        Assert.True(HarnessLaunch.LauncherExitIsHandoff(web, 0));
+        Assert.False(HarnessLaunch.LauncherExitIsHandoff(web, 1));
+        Assert.False(HarnessLaunch.LauncherExitIsHandoff(moon, 0));
+        Assert.False(HarnessLaunch.LauncherExitIsHandoff(null, 0));
+    }
+
+    [Theory]
+    [InlineData(true, 1, "launcherExited")]
+    [InlineData(true, 0, "launcherHandoff")]
+    [InlineData(false, 0, "windowAttach")]
+    public void Web_failed_stage_distinguishes_crash_handoff_and_missing_window(bool exited, int exitCode, string expected)
+    {
+        Assert.Equal(expected, HarnessLaunch.WebFailedStage(exited, exitCode));
+    }
+
+    private static readonly WebApp WebTile = new("w", AppCategory.Video, "W", "w.png", "svc", BrowserKind.Edge, 9222);
+
+    [Fact]
+    public void Launch_wait_finds_window_in_other_profile_root_after_launcher_exit_zero()
+    {
+        var clock = new Clock();
+        var polls = 0;
+
+        var result = HarnessLaunch.FindWindow(
+            WebTile,
+            () => (string?)null,
+            () => 0, // launcher handed the request to the running profile instance and exited
+            () => ++polls == 3 ? "otherRoot" : null,
+            () => false,
+            clock.Sleep,
+            () => clock.Now,
+            TimeSpan.FromSeconds(20));
+
+        Assert.Equal("otherRoot", result);
+    }
+
+    [Fact]
+    public void Launch_wait_stops_at_once_when_launcher_exits_non_zero()
+    {
+        var clock = new Clock();
+        var otherPolls = 0;
+
+        var result = HarnessLaunch.FindWindow(
+            WebTile,
+            () => (string?)null,
+            () => 1,
+            () => { otherPolls++; return "otherRoot"; },
+            () => false,
+            clock.Sleep,
+            () => clock.Now,
+            TimeSpan.FromSeconds(20));
+
+        Assert.Null(result);
+        Assert.Equal(0, otherPolls);
+    }
+
+    [Fact]
+    public void Launch_wait_does_not_search_other_roots_while_launcher_is_alive()
+    {
+        var clock = new Clock();
+        var otherPolls = 0;
+
+        var result = HarnessLaunch.FindWindow(
+            WebTile,
+            () => (string?)null,
+            () => null,
+            () => { otherPolls++; return "otherRoot"; },
+            () => false,
+            clock.Sleep,
+            () => clock.Now,
+            TimeSpan.FromSeconds(1));
+
+        Assert.Null(result);
+        Assert.Equal(0, otherPolls);
+    }
+
+    [Fact]
+    public void Launch_wait_prefers_own_tree_window_on_a_fresh_profile()
+    {
+        var clock = new Clock();
+
+        var result = HarnessLaunch.FindWindow(
+            WebTile,
+            () => "own",
+            () => null,
+            () => "otherRoot",
+            () => false,
+            clock.Sleep,
+            () => clock.Now,
+            TimeSpan.FromSeconds(20));
+
+        Assert.Equal("own", result);
+    }
+
+    [Fact]
     public void Wait_is_stateless_so_a_second_wait_after_a_timeout_finds_the_window()
     {
         var first = new Clock();
