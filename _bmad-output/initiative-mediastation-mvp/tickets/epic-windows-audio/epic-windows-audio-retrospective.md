@@ -1,7 +1,7 @@
 ---
 epic: epic-windows-audio
 date: 2026-10-27
-verdict: accepted-with-open-items
+verdict: rejected
 criteria: declared
 headless: true
 ---
@@ -104,8 +104,7 @@ All are proposals; none was applied.
 None written (headless run only proposes). No decision passes the test: the choices that are hard to reverse and surprising without context are already recorded in architecture AD-1, AD-5, AD-8, AD-13, AD-14 and AD-15 (the 2026-10-27 update for spike 6.1 is in the epic Notes), and the remaining plan decisions (harness env var `MEDIASTATION_DEV_HARNESS`, single-exception `CompositionRoot` show, per-device catch in audio enumeration) are local and easy to reverse.
 
 ## Acceptance verdict
-
-**accepted-with-open-items** (criteria declared: epic file Requirements R1–R8 and Done when 1–4; no unfinished tickets, none at `built`).
+**rejected** (updated after the 2026-10-28 UM760 acceptance; ticket 5.15 remains `in-progress`, and required runtime scenarios failed).
 
 Evidence per criterion:
 - Done when 1 (minimize, never `SW_HIDE`): met in code and tests. `BannedSymbols.txt` bans the hiding path outside `Platform/Window`; `WindowCommandExecutorTests.cs` and the 5.5 live run (Edge/Chrome `IsIconic` and visible) support it.
@@ -137,3 +136,29 @@ Open items that keep this from plain **accepted**: F1/A1 (`DW-41`, medium), the 
 - No going-in concerns were asked for (headless); no team discussion was held.
 - `bmad-review` was not run on the full epic diff; the narrowing is recorded in Findings. The machine verdict **accepted-with-open-items** was rendered on the evidence alone without a human decision; the user's acceptance is separate.
 - All five action items and the "no decision records" call are proposals made without the user.
+
+
+## Follow-up evidence: UM760 acceptance 2026-10-28
+
+The user's whole-epic acceptance on **UM760** remained **not accepted**. This is newer evidence than the 2026-10-27 machine verdict and changes the machine verdict above to `rejected` because the epic still has an unfinished ticket (`5.15`) and the required runtime scenarios failed.
+
+### Sourced findings
+
+- **F10 — Moonlight launch is still broken in the real acceptance path (high, fix now).** S6 failed on `cf8a39c`: the UI stayed at “Ustanawianie połączenia z komputerem”, then the tile became unresponsive; the log records `appLaunchStage ... windowTimeout`, `devHarnessStartFailed`, and `commandFailed`. Source: `epic-windows-audio-um760-acceptance.md:200`.
+- **F11 — Netflix launch is still broken in the real acceptance path (high, fix now).** S9 on `cf8a39c` reports that OK immediately produced “Nie odpowiada” and no Edge window; no `appWindowAttached` was emitted. Source: `epic-windows-audio-um760-acceptance.md:203`.
+- **F12 — Home was tested without a valid target window and exposed duplicate input behavior (medium, fix now).** S10 recorded two Home/ShowShell pairs; the rerun on `47af713` recorded no completed `MinimizeWindow`, four warnings, `startWithoutHost`, and `commandFailed`. Source: `epic-windows-audio-um760-acceptance.md:204-205`.
+- **F13 — The acceptance could not reach audio verification after host failures (high, fix now).** S18–S21 and S26–S27 were `n/d` because Moonlight and Netflix never attached windows, so Done when 4 was not revalidated. Source: `epic-windows-audio-um760-acceptance.md:213-216` and `:221-222`.
+- **F14 — The ticket tree allowed a new repair ticket to remain in progress at the epic boundary (high, process).** `tickets.py status` reports 5.15 `in-progress` while the epic was being accepted; the retrospective workflow makes this a rejected machine verdict. Source: `tickets.py status epic-windows-audio`, 2026-10-28.
+
+### Process conclusion
+
+The evidence supports the user's diagnosis: build-time tests and agent reviews did not exercise the real launch and window-attachment paths that failed on UM760. Screenshots and Computer Use would have made the two visible failures immediately reviewable, but they must be tied to mandatory story scenarios and cannot replace deterministic log assertions or the user's whole-epic acceptance.
+
+### Action items
+
+| ID | Type | Item | Owner |
+|---|---|---|---|
+| A6 | Remediation | Re-drive 5.14/5.13/5.12 with a live launch gate: start Netflix and Moonlight from the built app, require an attached window and a clean failure path, and preserve screenshots plus JSONL logs in the plan's Verification section. | bmad-build / PO |
+| A7 | Process | Customize the build workflow so UI or host stories cannot reach `built` without automated tests, a real process/window smoke test, screenshot evidence for visual criteria, and a regression test for every acceptance failure. | bmad-customize |
+| A8 | Acceptance | Do not retry the whole epic until 5.15 is done and S6/S9/S10 pass on the same build revision; then rerun the full `fp-acceptance` scenarios, including audio. | user + PO |
+| A9 | Architecture | Resolve whether input routing should follow the foreground window after Alt+Tab; the acceptance records this as a requirements decision, not an incidental bug. | bmad-architecture |

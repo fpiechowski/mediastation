@@ -1,0 +1,13 @@
+[workflow]
+review = "thorough"
+
+activation_steps_append = [
+  """
+For every UI, host, input, audio, deployment, or external-process story:
+- Execute the strongest available real-process smoke test, including launch and window attachment.
+- Capture screenshots for visual acceptance criteria and record their paths in Verification.
+- Record commands, exit codes, JSONL assertions, and unavailable hardware explicitly.
+- Do not finish as built when required runtime or visual evidence is absent; halt with the missing evidence named.
+- Turn every acceptance failure into a regression test or repeatable smoke check before retrying.
+"""
+]

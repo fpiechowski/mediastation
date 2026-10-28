@@ -1,0 +1,14 @@
+[workflow]
+review = "thorough"
+
+activation_steps_append = [
+  """
+For every story that changes UI, window hosting, input routing, audio focus, deployment, or an external process:
+- Treat the ticket's acceptance criteria as executable scenarios.
+- Run the strongest available real-process smoke test after implementation, including process launch and window attachment.
+- For visual criteria, inspect the running result and save screenshots in the story plan's Verification section.
+- Record exact commands, exit codes, relevant JSONL log assertions, and any unavailable hardware path.
+- A story is not ready for built when its required process/window smoke test or visual evidence is missing.
+- Every acceptance failure must become a regression test, a repeatable smoke check, or an explicitly recorded deferred item.
+"""
+]
