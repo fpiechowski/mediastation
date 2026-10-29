@@ -44,7 +44,6 @@ after = [
   { epic = 2, needs = "AppWindowAttached i ForegroundChanged obsługiwane w Orchestratorze" },
   { epic = 3, needs = "Action Home z InputHub; znacznik dwExtraInfo i helper SendInput (3.7) dla odblokowania foreground symulowanym Alt" },
   { epic = 4, needs = "okno shella z ekranem głównym (wspólny kod Shell host)" },
-  { epic = 6, needs = "story 1 BrowserHost: flaga trybu okna przeglądarki" },
 ]
 
 [[epic]]
@@ -55,7 +54,6 @@ covers = ["CAP-7", "CAP-2"]
 after = [
   { epic = 2, needs = "stany cyklu życia, ProbeExisting/adopcja, RenewSession po wybudzeniu" },
   { epic = 4, needs = "AppMenu (Zamknij / Uruchom ponownie) dla J4" },
-  { epic = 5, needs = "minimize i mute okna przeglądarki bez CDP (AD-5)" },
 ]
 
 [[epic]]

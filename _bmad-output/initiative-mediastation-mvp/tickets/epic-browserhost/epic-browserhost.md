@@ -6,6 +6,7 @@ covers: [CAP-7, CAP-2]
 after: []
 assignee: ""
 risk: high
+refined: true
 ---
 
 # BrowserHost
@@ -17,6 +18,44 @@ CAP-7: MediaStation uruchamia przeglądarkę dobraną pod serwis, z osobnym prof
 ## Outcome
 
 Przeglądarka serwisu jest w pełni zarządzana przez MediaStation, a Eliza naprawia zawieszoną aplikację z pilota (J4); sygnałem jest success CAP-7 i J4.
+
+## Requirements
+
+1. **Uruchomienie i sterowanie bez śladu automatyzacji** (CAP-7, AD-1)
+   **Given** wpis web w `apps.json` wskazuje przeglądarkę, profil i port CDP
+   **When** Orchestrator uruchamia aplikację
+   **Then** BrowserHost startuje właściwą binarkę z osobnym profilem, `--kiosk`, CDP na `127.0.0.1` i flagami AD-1, a `navigator.webdriver` pozostaje `false`
+   **And** zakazane mechanizmy (`Runtime.enable`, Playwright, `--remote-allow-origins`, nasłuch poza loopbackiem) nie są używane
+
+2. **Binding i reconnect CDP** (CAP-7, AD-1, AD-10)
+   **Given** główna ramka przechodzi nawigację albo żywy proces traci połączenie CDP
+   **When** BrowserHost obsługuje zmianę
+   **Then** binding PageRuntime wraca po każdej nawigacji, a reconnect ponawia się do `cdpReconnectTimeout`
+   **And** po wyczerpaniu limitu aplikacja przechodzi do `Failed`, Home pozostaje dostępny, a D-pad nie jest buforowany
+
+3. **Adopcja i odnowienie sesji** (CAP-2, AD-10)
+   **Given** MediaStation startuje ponownie albo wraca po wybudzeniu
+   **When** żywy proces przeglądarki ma profil aplikacji
+   **Then** `ProbeExisting` adoptuje jego okno i proces bez drugiego startu, a `RenewSession` odnawia binding/CDP
+   **And** spóźnione fakty starej sesji nie zmieniają nowego `transitionId`
+
+4. **Wersja i rozróżnialne błędy startu** (CAP-7, AD-4, AD-13)
+   **Given** BrowserHost przygotowuje start albo napotyka błąd procesu, portu lub profilu
+   **When** odczytuje wersję i wykonuje start
+   **Then** porównuje `FileVersion` binarki z `Last Version` profilu przed startem i loguje `BrowserVersionChanged` przy zmianie, także bez odpowiedzi CDP
+   **And** rozróżnia `CdpUnavailable`, timeout startu, `ProcessExited`, `PortInUse` i `ProfileInUse`; przy `CdpUnavailable` okno jest mimo to podpięte, wyciszone i zminimalizowane
+
+5. **Minimalny PageRuntime i pakiet strony** (CAP-7, AD-6, AD-7)
+   **Given** przeglądarka nawiguje do strony usługi
+   **When** bundle strony jest ładowany
+   **Then** wspólny PageRuntime wysyła `hello`, obsługuje binding, buforuje komunikaty przed bindingiem i buduje artefakt do `<install>/page/`
+   **And** koperta komunikatu ma `v: 1`, `id` dla komunikatów host → page i ignoruje spóźnione odpowiedzi
+
+6. **Naprawa J4 z pilota** (CAP-2, CAP-6, AD-10)
+   **Given** kafelek przeglądarki jest `Failed`
+   **When** Eliza naciska OK, wybiera „Uruchom ponownie” i zatwierdza
+   **Then** AppMenu prowadzi przez `Stopping → Starting` do działającej aplikacji na pierwszym planie jednym przebiegiem
+   **And** ponowna awaria wraca do `Failed`, a „Zamknij” pozostaje dostępne bez eskalacji
 
 ## Done when
 
@@ -40,9 +79,7 @@ Przeglądarka serwisu jest w pełni zarządzana przez MediaStation, a Eliza napr
 
 ## Notes
 
-- Open question: tryb okna przeglądarki (`--app`, `--start-fullscreen` czy `--kiosk`). Rozstrzyga story 1 tej epiki, przed stories epic-windows-audio i epic-osk.
-- Open question: źródło wersji przeglądarki poza CDP (bieżącej przed startem i poprzedniej w `profiles\<appId>\`); kandydaci: `FileVersion` binarki i `Last Version` w `user-data-dir`. Rozstrzyga ta sama story 1.
-- Decision: story 1 to spike bez prerequisites (Edge na UM760), wyprzedza epic-windows-audio i epic-osk; wynik wraca do AD-1 i AD-13 w spine (2026-10-18).
+- Decision: story 1 (spike) rozstrzygnęła `--kiosk` jako tryb okna oraz `FileVersion` binarki + `Last Version` profilu jako źródła wersji; pomiar wykonano na UM760 (2026-10-27).
 - Decision: weryfikacja J4 na UM760 z CAP-2 jest tutaj (2026-10-18).
 - Decision: ta epika jest właścicielem minimalnego PageRuntime (`hello`, binding) i buildu page bundle; epic-netflix-dpad go rozszerza (2026-10-18).
 - Waits on epic-windows-audio because: okno przeglądarki bez CDP jest wyciszane i minimalizowane (AD-5) przez WindowManager i AudioRouter.
@@ -50,7 +87,9 @@ Przeglądarka serwisu jest w pełni zarządzana przez MediaStation, a Eliza napr
 - Deferred: rekord koperty nie ma pola `id?` z architektury (`{ v, type, id?, payload }`), a odczyt dziś `id` ignoruje (triage 1.1 #3). Źródło: F6 w retro epic-foundation-contracts (`_bmad-output/initiative-mediastation-mvp/tickets/epic-foundation-contracts/epic-foundation-contracts-retrospective.md`). Warunek: pierwsza story z request/response w protokole strony (PageRuntime) dodaje `id` do koperty (2026-10-20).
 - Deferred: `service` w `apps.json` nie musi być kebab-case, choć jest segmentem ścieżki `web/page/drivers/<service>`. Źródło: F18 w retro epic-foundation-contracts (`_bmad-output/initiative-mediastation-mvp/tickets/epic-foundation-contracts/epic-foundation-contracts-retrospective.md`). Warunek: pierwsza story, która wybiera driver albo ścieżkę page bundle po `service`, tu albo w epic-netflix-dpad (2026-10-20).
 - Deferred: `cdpConnectTimeout` i `cdpReconnectTimeout` w `settings.json` nie mają górnej granicy. Źródło: F18 w retro epic-foundation-contracts (`_bmad-output/initiative-mediastation-mvp/tickets/epic-foundation-contracts/epic-foundation-contracts-retrospective.md`); retro wskazało epic-deploy-resilience, tu, bo BrowserHost jest pierwszym konsumentem. Warunek: story, która pierwsza używa któregoś z tych czasów (2026-10-20).
-- Decision: story 1 (spike trybu okna i źródła wersji) zapisana jako wpis 1 w `tickets/tickets.toml` przy planowaniu epic-windows-audio, żeby jej story 5 czekała na `6.1`; reszta epiki nie jest jeszcze zaplanowana, a planowanie zachowuje ten wpis jako pierwszy. Do tego czasu `tickets.py` zgłasza `unpinned_after` dla wszystkich trzech `after` tej epiki: spike ich nie potrzebuje, przypną je stories z planowania epiki (2026-10-26).
+- Decision: wpis 1 pozostaje pierwszym, ukończonym spike'em; nowe wpisy przypinają zależności do gotowych epik lub wpisu 1, więc drzewo nie ma `unpinned_after` (2026-10-29).
 - Decision: ledger DW-3 (spóźniony `ProcessExited` po `RestartApp`) i DW-4 (spóźniony `AppWindowAttached` po timeoucie `Starting`, z decyzją o `Hwnd` w `Failed`) przypisane tej epice jako pierwszej z prawdziwym hostem (refinement epiki 4, 2026-10-26).
 - Update: spike 6.1 (`2ea151f`, 2026-10-27, UM760) rozstrzygnął tryb okna przeglądarki: `--kiosk` (AD-1), a źródło wersji poza CDP: `FileVersion` binarki i `Last Version` w `user-data-dir` (AD-13). Pytania o tryb okna w tych Notes są zamknięte; DW-38 (2026-10-27).
-- Decision: retro z 2026-10-27 (`epic-browserhost-retrospective.md`, werdykt `rejected`) to punkt kontrolny po spike'u 6.1, nie odbiór: epika ma zbudowany tylko wpis 1, a jej pozostałe stories (Done when 1–5) nie są zaplanowane. Epika zostaje otwarta; planowanie zachowuje wpis 1, przypina trzy `after` i uwzględnia DW-3, DW-4, DW-36, DW-39 i DW-40 (2026-10-27).
+- Decision: tracer epiki to start Edge → surowy CDP → PageRuntime `hello` → podpięcie okna → powrót Home; nowe stories rozwijają ten przepływ, a końcowy sweep zamyka dług techniczny (2026-10-29).
+- Decision: BrowserHost zapisuje wersję odczytaną przed startem i porównuje ją z `Browser.getVersion`, aby nie zgubić zmiany po awarii między startem a logiem (2026-10-29).
+- Decision: weryfikacja J4 na UM760 jest częścią odbioru całej epiki i pozostaje po stronie użytkownika; per-ticket automated evidence działa na bieżącej maszynie (2026-10-29).

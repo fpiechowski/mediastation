@@ -1,17 +1,111 @@
 # BrowserHost — entries w kolejności budowy. tickets.py reads it.
-# Kolejność tabel = kolejność budowy; `id` nie jest kolejnością.
-# Epika nie jest jeszcze zaplanowana: tu jest tylko story 1 (spike), na którą czekają epic-windows-audio (5.5) i epic-osk.
-# Planowanie epiki zachowuje ten wpis jako pierwszy, z tym samym `id`.
-# Ścieżki w `references` są względne do folderu inicjatywy.
+# Maszyna dowodów per ticket: UM760 (MEDIASTATION / F7BSI / EliteMini Series).
+# Tracer: 2 → 3 → 5 → 6 → 7; równolegle 4; 8 sweep; 9 E2E.
 
 [[entry]]
 id = 1
 type = "spike"
 title = "Tryb okna przeglądarki i źródło wersji poza CDP"
-description = "Rozstrzyga dwa otwarte pytania specu przed stories WindowManager i OSK (Decision 2026-10-18 w Notes epiki): (1) jedna flaga trybu okna Edge dla Netflixa spośród `--app`, `--start-fullscreen` i `--kiosk`, mierzona na Edge na UM760 z flagami z AD-1: minimalizacja i przywrócenie bez `SW_HIDE`, pełny ekran bez ramki i paska, zachowanie `f`/`Escape` playera, brak paska adresu, wpływ na DRM i jakość (1080p, PlayReady); (2) źródło wersji przeglądarki spoza CDP, bieżącej przed startem i poprzedniej w `profiles\\<appId>\\` (kandydaci: `FileVersion` binarki, `Last Version` w `user-data-dir`). Wynik wraca do AD-1 i AD-13 w spine przez `bmad-architecture`."
-verify = "Plan spike'a zawiera wybraną flagę z pomiarami dla każdej z trzech (minimalizacja i przywrócenie, pełny ekran, `f`/`Escape`, jakość i DRM) oraz źródło wersji z odczytem na bieżącej maszynie; AD-1 i AD-13 w architekturze mają rozstrzygnięcie zamiast otwartego pytania."
+description = "Rozstrzyga tryb okna i źródło wersji dla BrowserHost; wynik pomiaru na UM760 zapisany w AD-1 i AD-13."
+verify = "Plan spike'a zawiera pomiary trzech flag, a architektura wskazuje `--kiosk`, `FileVersion` i `Last Version`."
 covers = []
 after = []
 hitl = false
 risk = "high"
-references = ["architecture-mediastation/architecture-mediastation.md, AD-1, AD-13 (Aktualizacja przeglądarki i dostępność CDP), Deferred (otwarte pytania)", "spec-mediastation/spec-mediastation.md, Open Questions (tryb okna, źródło wersji)", "research-browser-control-for-streaming-services/digests/spike-um760.md, claims S1, S8"]
+references = ["architecture-mediastation/architecture-mediastation.md, AD-1, AD-13", "spec-mediastation/spec-mediastation.md, Open Questions"]
+
+[[entry]]
+id = 2
+type = "story"
+title = "Tracer BrowserHost: Edge kiosk, CDP i hello"
+description = "Najcieńsza ścieżka przez epikę: BrowserHost uruchamia Edge według `apps.json` z profilem `profiles\\<appId>`, flagami AD-1 i `--kiosk`, podłącza surowy klient CDP na loopbacku oraz raportuje `AppWindowAttached`. Minimalny PageRuntime wysyła `hello`; Orchestrator przeprowadza OK → Foreground, a Home wraca nad okno bez `SW_HIDE`."
+verify = "`dotnet test` pokrywa start/attach/hello i brak `Runtime.enable`; `dotnet build` nie używa Playwright ani `--remote-allow-origins`. Na UM760 log ma `appWindowAttached`, `hello` i `navigator.webdriver=false`, a Home daje shell na wierzchu oraz widoczne zminimalizowane okno Edge."
+covers = ["R1", "R2"]
+after = ["epic-orchestrator-lifecycle", 1]
+hitl = false
+risk = "high"
+references = ["epic-browserhost/epic-browserhost.md, Requirements 1 and 5", "architecture-mediastation/architecture-mediastation.md, AD-1, AD-4, AD-6, AD-7", "research-browser-control-for-streaming-services/digests/spike-um760.md, claims S1, S10"]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Binding po nawigacji i reconnect CDP"
+description = "BrowserHost ponawia binding i skrypt inicjalizujący po każdej nawigacji głównej ramki, obsługuje `CdpLost` i reconnect do `cdpReconnectTimeout`, a po limicie raportuje Failed bez blokowania Home. D-pad nie jest buforowany podczas zerwania."
+verify = "`dotnet test` pokrywa nawigację, utratę transportu, ponowienia z FakeTimeProvider, limit 30 s, ignorowanie spóźnionych odpowiedzi i Home. Na UM760 po limicie log ma `Failed`, a Home nadal działa."
+covers = ["R3", "R8"]
+after = [2]
+hitl = false
+risk = "high"
+references = ["epic-browserhost/epic-browserhost.md, Requirements 2 and 5", "architecture-mediastation/architecture-mediastation.md, AD-1, AD-7, AD-10", "ux-mediastation/EXPERIENCE.md, Rozstrzygnięcia R8"]
+
+[[entry]]
+id = 4
+type = "story"
+title = "Wersja przeglądarki i rozróżnialne błędy startu"
+description = "Przed startem odczytuje `FileVersion` binarki oraz `Last Version` profilu, porównuje z `Browser.getVersion` i emituje `BrowserVersionChanged`. Ścieżki startu rozróżniają `CdpUnavailable`, timeout, `ProcessExited`, `PortInUse` i `ProfileInUse`; przy żywym oknie bez CDP raportują podpięcie, wyciszenie i minimalizację."
+verify = "`dotnet test` pokrywa brak/pustą/nieparsowalną wersję, porównanie `System.Version`, zajęty port/profil i ErrorCode. Na UM760 harness zmienia `Last Version`, blokuje port/profil i wyłącza CDP; logi zawierają właściwe kody i `BrowserVersionChanged`."
+covers = ["R4"]
+after = [2]
+hitl = false
+risk = "high"
+references = ["epic-browserhost/epic-browserhost.md, Requirement 4", "architecture-mediastation/architecture-mediastation.md, AD-4, AD-13", "spec-mediastation/spec-mediastation.md, CAP-7"]
+
+[[entry]]
+id = 5
+type = "story"
+title = "ProbeExisting i RenewSession po restarcie oraz wybudzeniu"
+description = "BrowserHost implementuje `ProbeExisting` po restarcie i `RenewSession` po wybudzeniu: rozpoznaje żywy proces po profilu, adoptuje okno bez drugiego startu i odnawia CDP/binding. Spóźnione fakty są odrzucane po `transitionId`; adopcja przechodzi przez sekwencję AD-5."
+verify = "`dotnet test` pokrywa adopcję, brak drugiego procesu, RenewSession, spóźnione fakty i stare transitionId. Na UM760 restart MediaStation przy żywym Edge daje jeden proces, `ProbeExisting`, `AppWindowAttached`, `RenewSession`, mute/minimize i shell na wierzchu."
+covers = ["R2", "R3"]
+after = ["epic-orchestrator-lifecycle", 3, 4]
+hitl = false
+risk = "high"
+references = ["epic-browserhost/epic-browserhost.md, Requirements 2 and 3", "architecture-mediastation/architecture-mediastation.md, AD-5, AD-10, AD-13, AD-14", "spec-mediastation/spec-mediastation.md, CAP-2"]
+
+[[entry]]
+id = 6
+type = "story"
+title = "Minimalny PageRuntime i build page bundle"
+description = "Wspólny PageRuntime dostarcza binding, buforowanie, `hello`, `bridge.send/receive`, kopertę v1 z `id` oraz reinicjalizację po nawigacji. Build generuje jeden IIFE do `<install>/page/`; ServiceDriver pozostaje poza zakresem i należy do epic-netflix-dpad."
+verify = "`npm test` pokrywa hello, bufor przed bindingiem, reinicjalizację, wersję koperty i ignorowanie starego id. Build tworzy artefakt w `<install>/page/`, a tracer na UM760 ładuje go po starcie Edge."
+covers = ["R5"]
+after = [2, 3, 5]
+hitl = false
+risk = "high"
+references = ["epic-browserhost/epic-browserhost.md, Requirement 5", "architecture-mediastation/architecture-mediastation.md, AD-6, AD-7", "ux-mediastation/DESIGN.md, focus-ring-injected"]
+
+[[entry]]
+id = 7
+type = "story"
+title = "J4: restart aplikacji Failed jednym OK"
+description = "Integruje BrowserHost z AppMenu i Orchestrator lifecycle. Kafelek Failed otwiera AppMenu z fokusem na „Uruchom ponownie”; OK prowadzi przez `Stopping → Starting`, podpięcie i aktywację, a powtórna awaria wraca do Failed bez eskalacji. „Zamknij” pozostaje drugą opcją."
+verify = "`dotnet test` pokrywa RestartApp, kolejność stanów, błędny restart i brak eskalacji. Na UM760 scenariusz J4 z EXPERIENCE.md: jedno OK na Failed, jedno OK na restart i aplikacja działa na pierwszym planie; druga awaria zostawia Failed."
+covers = ["R6"]
+after = ["epic-home-screen", "epic-orchestrator-lifecycle", 5, 6]
+hitl = true
+risk = "high"
+references = ["epic-browserhost/epic-browserhost.md, Requirement 6", "ux-mediastation/EXPERIENCE.md, Key Flow J4", "architecture-mediastation/architecture-mediastation.md, AD-10, AD-16"]
+
+[[entry]]
+id = 8
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup po stories 2–7, wyłącznie z odroczonych pozycji i findings review, z zamkniętą listą ID ustaloną na początku pracy. Scope wypchnięty z innej story staje się nowym wpisem."
+verify = "Każda pozycja listy ma dowód wykonania albo uzasadnienie odrzucenia; `dotnet test`, `dotnet build` i `npm test` przechodzą bez zmiany zachowania BrowserHost."
+covers = []
+after = [2, 3, 4, 5, 6, 7]
+hitl = false
+risk = "medium"
+references = ["epic-browserhost/epic-browserhost.md, Notes (DW-3, DW-4, DW-36, DW-39, DW-40)", "deferred-work.md, BrowserHost findings"]
+
+[[entry]]
+id = 9
+type = "story"
+title = "BrowserHost end-to-end suite"
+description = "Końcowa automatyczna ścieżka integracyjna uruchamia sample apps, Edge kiosk, CDP, nawigację, reconnect, adopcję i J4 na dev harnessie; dowód operatorski dla prawdziwego Netflixa pozostaje w odbiorze epiki na UM760."
+verify = "CI przechodzi z izolowanym harnessem: start/hello, binding po nawigacji, reconnect i Failed po limicie, BrowserVersionChanged, PortInUse/ProfileInUse, ProbeExisting, RestartApp oraz brak SW_HIDE; raport zapisuje log JSON Lines i artefakty."
+covers = ["R1", "R2", "R3", "R4", "R5", "R6", "R8"]
+after = [8]
+hitl = false
+risk = "high"
+references = ["epic-browserhost/epic-browserhost.md, Done when", "spec-mediastation/spec-mediastation.md, CAP-7 and CAP-2", "ux-mediastation/EXPERIENCE.md, Key Flow J4"]
