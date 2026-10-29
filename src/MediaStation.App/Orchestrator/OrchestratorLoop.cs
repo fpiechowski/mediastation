@@ -134,6 +134,28 @@ public sealed class OrchestratorLoop : IDisposable
                     });
                 }
 
+                // Zerwane CDP (AD-10): stan kafelka z wynikowego snapshotu (`failed`) albo null, gdy fakt zignorowano.
+                if (message is CdpLost lost)
+                {
+                    AppLifecycleState? state = null;
+                    if (result.Snapshot is { } handled)
+                    {
+                        foreach (var app in handled.Apps)
+                        {
+                            if (app.AppId == lost.AppId)
+                            {
+                                state = app.State;
+                            }
+                        }
+                    }
+
+                    _log.Info(Src, "cdpLostHandled", new Dictionary<string, object?>
+                    {
+                        ["appId"] = lost.AppId,
+                        ["state"] = state,
+                    });
+                }
+
                 // Zmiana foregroundu to fakt zapisany w logu bez reakcji (AD-8): jedno zdarzenie, jeden wpis.
                 if (result.Foreground is { } foreground)
                 {

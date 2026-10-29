@@ -1086,16 +1086,23 @@ public class ConfigValidationTests
     [Theory]
     [InlineData("startingTimeout")]
     [InlineData("stoppingTimeout")]
+    [InlineData("cdpReconnectTimeout")]
     public void Timeout_of_600_seconds_is_accepted(string field)
     {
         var config = Loaded(settings: $$"""{ "{{field}}": 600 }""");
 
-        Assert.Equal(600, field == "startingTimeout" ? config.Settings.StartingTimeout : config.Settings.StoppingTimeout);
+        Assert.Equal(600, field switch
+        {
+            "startingTimeout" => config.Settings.StartingTimeout,
+            "stoppingTimeout" => config.Settings.StoppingTimeout,
+            _ => config.Settings.CdpReconnectTimeout,
+        });
     }
 
     [Theory]
     [InlineData("startingTimeout")]
     [InlineData("stoppingTimeout")]
+    [InlineData("cdpReconnectTimeout")]
     public void Timeout_above_600_seconds_is_rejected(string field)
     {
         var error = SingleError(settings: $$"""{ "{{field}}": 601 }""");

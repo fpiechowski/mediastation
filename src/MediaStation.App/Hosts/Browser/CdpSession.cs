@@ -17,6 +17,9 @@ namespace MediaStation.App.Hosts.Browser;
 /// </summary>
 internal interface ICdpTransport : IDisposable
 {
+    /// <summary>Adres WebSocket celu, z którym transport się połączył; reconnect wraca dokładnie do niego (story 6.3).</summary>
+    Uri Endpoint { get; }
+
     Task SendAsync(string message, CancellationToken cancellationToken);
 
     Task<string?> ReceiveAsync();
@@ -236,7 +239,13 @@ internal sealed class WebSocketCdpTransport : ICdpTransport
 {
     private readonly ClientWebSocket _socket;
 
-    private WebSocketCdpTransport(ClientWebSocket socket) => _socket = socket;
+    private WebSocketCdpTransport(ClientWebSocket socket, Uri endpoint)
+    {
+        _socket = socket;
+        Endpoint = endpoint;
+    }
+
+    public Uri Endpoint { get; }
 
     public static async Task<WebSocketCdpTransport> ConnectAsync(Uri uri, CancellationToken cancellationToken)
     {
@@ -248,7 +257,7 @@ internal sealed class WebSocketCdpTransport : ICdpTransport
             socket.Options.Proxy = null;
             socket.Options.DangerousDeflateOptions = null;
             await socket.ConnectAsync(uri, cancellationToken).ConfigureAwait(false);
-            return new WebSocketCdpTransport(socket);
+            return new WebSocketCdpTransport(socket, uri);
         }
         catch
         {
@@ -306,6 +315,8 @@ internal sealed class WebSocketCdpTransport : ICdpTransport
 /// <summary>
 /// Połączenie z CDP przeglądarki: odpytuje <c>http://127.0.0.1:&lt;port&gt;/json/list</c> co 250 ms (bez proxy), aż
 /// <see cref="CdpTargets"/> da adres loopback strony i WebSocket się połączy, albo token się anuluje (wtedy <c>null</c>).
+/// <see cref="ReconnectAsync"/> to jedna próba powrotu do tego samego celu (story 6.3); przerwy między próbami
+/// i termin trzyma <see cref="BrowserHost"/>.
 /// </summary>
 internal static class CdpConnector
 {
@@ -342,5 +353,30 @@ internal static class CdpConnector
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Jedna próba połączenia z dokładnie tym samym celem strony (<paramref name="endpoint"/> utraconego transportu):
+    /// bez <c>/json/list</c> i bez wyboru innego celu. Adres jest ponownie sprawdzany przez
+    /// <see cref="CdpTargets.LoopbackWebSocket"/>; adres spoza loopbacku portu, błąd połączenia albo anulowanie dają
+    /// <c>null</c>, nigdy wyjątek.
+    /// </summary>
+    public static async Task<ICdpTransport?> ReconnectAsync(Uri endpoint, int cdpPort, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(endpoint);
+        if (CdpTargets.LoopbackWebSocket(endpoint.OriginalString, cdpPort) is not { } uri)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await WebSocketCdpTransport.ConnectAsync(uri, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is WebSocketException or IOException or HttpRequestException or OperationCanceledException)
+        {
+            // Cel zniknął, port nie słucha albo minął termin: próba się nie udała, decyduje pętla hosta.
+            return null;
+        }
     }
 }

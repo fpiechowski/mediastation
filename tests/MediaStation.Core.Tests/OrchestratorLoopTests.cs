@@ -116,6 +116,48 @@ public class OrchestratorLoopTests
     }
 
     [Fact]
+    public void Cdp_lost_of_a_live_app_logs_handled_with_the_failed_state()
+    {
+        var log = new RecordingLog();
+        using var loop = CreateLoop(out var published, out _, log);
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        loop.Post(new LaunchApp("netflix"));
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        WaitFor(() => published.Count >= 3);
+        loop.Post(new CdpLost("netflix"));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "cdpLostHandled"));
+
+        var entry = Assert.Single(log.Entries, entry => entry.Msg == "cdpLostHandled");
+        Assert.Equal(LogLevel.Info, entry.Level);
+        Assert.Equal("orchestrator", entry.Src);
+        Assert.Equal("netflix", entry.Data!["appId"]);
+        Assert.Equal(AppLifecycleState.Failed, entry.Data["state"]);
+        WaitFor(() => published.Count >= 4);
+        Assert.Equal(AppLifecycleState.Failed, published.Last().Apps.Single(app => app.AppId == "netflix").State);
+    }
+
+    [Fact]
+    public void Ignored_cdp_lost_logs_handled_with_a_null_state()
+    {
+        var log = new RecordingLog();
+        using var loop = CreateLoop(out var published, out _, log);
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        loop.Post(new CdpLost("netflix"));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "cdpLostHandled"));
+
+        var entry = Assert.Single(log.Entries, entry => entry.Msg == "cdpLostHandled");
+        Assert.Equal(LogLevel.Info, entry.Level);
+        Assert.Equal("netflix", entry.Data!["appId"]);
+        Assert.True(entry.Data.ContainsKey("state"));
+        Assert.Null(entry.Data["state"]);
+        Assert.Single(published);
+    }
+
+    [Fact]
     public void Foreground_changed_is_logged_without_changing_state()
     {
         var log = new RecordingLog();

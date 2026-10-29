@@ -39,10 +39,14 @@ internal interface IBrowserProcessLauncher
 }
 
 /// <summary>
-/// BrowserHost (AD-1, AD-4, AD-13), tracer 6.2: uruchamia Edge/Chrome z wpisu <c>apps.json</c> z profilem
+/// BrowserHost (AD-1, AD-4, AD-10, AD-13): uruchamia Edge/Chrome z wpisu <c>apps.json</c> z profilem
 /// <c>profiles\&lt;appId&gt;</c>, flagami AD-1 i <c>--kiosk</c>; raportuje <see cref="AppWindowAttached"/>, gdy tylko okno
 /// istnieje (attach nie czeka na CDP), potem łączy surowy klient CDP na <c>127.0.0.1:&lt;cdpPort&gt;</c>, instaluje
 /// binding i minimalny PageRuntime, nawiguje na start URL z manifestu drivera i loguje <c>hello</c> strony.
+/// Story 6.3: binding wraca po każdej nawigacji głównej ramki, a zerwane CDP żywej sesji host łączy ponownie z tym
+/// samym celem strony (backoff, termin <c>cdpReconnectTimeout</c>) i instaluje binding, <c>Page.enable</c> i skrypt na
+/// nowej sesji; bez sukcesu w terminie wysyła <see cref="CdpLost"/>. W trakcie zerwania sesja nie ma kanału CDP i nic
+/// nie jest buforowane ani powtarzane po powrocie.
 /// Sam nigdy nie pokazuje, nie wynosi i nie minimalizuje okien (AD-14, AD-15). Metody portu tylko zlecają pracę
 /// w tle i nie rzucają przez granicę portu (AD-4). Sonda i odświeżenie sesji to na razie ciche no-opy (story 6.5).
 /// </summary>
@@ -58,16 +62,27 @@ internal sealed class BrowserHost : IAppHostPort
     private static readonly TimeSpan GracefulCloseTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
 
+    /// <summary>Przerwy przed kolejnymi próbami reconnectu; po wyczerpaniu listy obowiązuje ostatnia (2 s).</summary>
+    private static readonly TimeSpan[] ReconnectBackoff =
+    [
+        TimeSpan.FromMilliseconds(250),
+        TimeSpan.FromMilliseconds(500),
+        TimeSpan.FromSeconds(1),
+        TimeSpan.FromSeconds(2),
+    ];
+
     private readonly ILog _log;
     private readonly Action<IOrchestratorMessage> _post;
     private readonly IReadOnlyDictionary<string, WebApp> _apps;
     private readonly string _profilesDir;
     private readonly string _pageDir;
     private readonly TimeSpan _cdpConnectTimeout;
+    private readonly TimeSpan _cdpReconnectTimeout;
     private readonly Func<BrowserKind, string?> _resolveBrowser;
     private readonly IBrowserProcessLauncher _launcher;
     private readonly Func<int, WindowInfo?> _findWindow;
     private readonly Func<int, CancellationToken, Task<ICdpTransport?>> _connect;
+    private readonly Func<Uri, CancellationToken, Task<ICdpTransport?>> _reconnect;
     private readonly Func<string, string?> _readFile;
     private readonly TimeProvider _time;
     private readonly object _gate = new();
@@ -80,10 +95,12 @@ internal sealed class BrowserHost : IAppHostPort
         string profilesDir,
         string pageDir,
         TimeSpan cdpConnectTimeout,
+        TimeSpan cdpReconnectTimeout,
         Func<BrowserKind, string?> resolveBrowser,
         IBrowserProcessLauncher launcher,
         Func<int, WindowInfo?> findWindow,
         Func<int, CancellationToken, Task<ICdpTransport?>> connect,
+        Func<Uri, CancellationToken, Task<ICdpTransport?>> reconnect,
         Func<string, string?> readFile,
         TimeProvider time)
     {
@@ -93,10 +110,12 @@ internal sealed class BrowserHost : IAppHostPort
         ArgumentException.ThrowIfNullOrWhiteSpace(profilesDir);
         ArgumentException.ThrowIfNullOrWhiteSpace(pageDir);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cdpConnectTimeout, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cdpReconnectTimeout, TimeSpan.Zero);
         ArgumentNullException.ThrowIfNull(resolveBrowser);
         ArgumentNullException.ThrowIfNull(launcher);
         ArgumentNullException.ThrowIfNull(findWindow);
         ArgumentNullException.ThrowIfNull(connect);
+        ArgumentNullException.ThrowIfNull(reconnect);
         ArgumentNullException.ThrowIfNull(readFile);
         ArgumentNullException.ThrowIfNull(time);
 
@@ -112,10 +131,12 @@ internal sealed class BrowserHost : IAppHostPort
         _profilesDir = profilesDir;
         _pageDir = pageDir;
         _cdpConnectTimeout = cdpConnectTimeout;
+        _cdpReconnectTimeout = cdpReconnectTimeout;
         _resolveBrowser = resolveBrowser;
         _launcher = launcher;
         _findWindow = findWindow;
         _connect = connect;
+        _reconnect = reconnect;
         _readFile = readFile;
         _time = time;
     }
@@ -254,7 +275,7 @@ internal sealed class BrowserHost : IAppHostPort
                 var exited = process.HasExited;
 
                 // Zawsze: Stop mógł przyjść przed przypisaniem Process i nie zabić tego drzewa (idempotentne).
-                session.Stopping = true;
+                session.MarkStopping();
                 process.KillTree();
 
                 FailStart(
@@ -306,9 +327,11 @@ internal sealed class BrowserHost : IAppHostPort
             return;
         }
 
-        var cdp = new CdpSession(transport, (method, parameters) => OnCdpEvent(session, method, parameters));
-        session.Cdp = cdp;
-        if (session.Stopping)
+        // Cel strony zapamiętany dla reconnectu (story 6.3): tylko adres loopback portu aplikacji.
+        session.Endpoint = CdpTargets.LoopbackWebSocket(transport.Endpoint.OriginalString, app.CdpPort);
+
+        var cdp = CreateCdp(session, transport);
+        if (!session.TryAttach(cdp))
         {
             cdp.Dispose();
             CdpFailed(command, app, session, "notConnected", null);
@@ -318,12 +341,7 @@ internal sealed class BrowserHost : IAppHostPort
         cdp.Start();
         try
         {
-            // Bez Runtime.enable (AD-1): binding działa bez niego, ale nie przechodzi na nowy dokument, więc
-            // ponawiamy go po każdej nawigacji głównej ramki (OnCdpEvent). Serwis otwiera dopiero Page.navigate,
-            // gdy binding i skrypt już są, więc każdy dokument serwisu dostaje PageRuntime.
-            await cdp.SendAsync("Runtime.addBinding", new Dictionary<string, object?> { ["name"] = PageProtocol.BindingName }, token).ConfigureAwait(false);
-            await cdp.SendAsync("Page.enable", null, token).ConfigureAwait(false);
-            await cdp.SendAsync("Page.addScriptToEvaluateOnNewDocument", new Dictionary<string, object?> { ["source"] = initScript }, token).ConfigureAwait(false);
+            await InstallAsync(cdp, initScript, token).ConfigureAwait(false);
 
             // Odpowiedź na Page.navigate przychodzi dopiero po commicie nawigacji (sieć), więc nie liczy się do terminu
             // CDP: wolna sieć nie zamienia działającego CDP w CdpUnavailable. Czekanie przerywa tylko Stop albo wyjście.
@@ -353,33 +371,248 @@ internal sealed class BrowserHost : IAppHostPort
         }
         catch (Exception ex) when (ex is CdpException or OperationCanceledException)
         {
+            session.Detach(cdp);
             cdp.Dispose();
             CdpFailed(command, app, session, "setupFailed", ex.Message);
             return;
         }
 
+        // Reconnect dotyczy tylko sesji po zakończonym starcie: zamknięcie w trakcie setupu to ścieżka CdpUnavailable.
+        _post(new CommandCompleted(command.CmdId));
+        WatchCdp(session, app, initScript, cdp);
+    }
+
+    /// <summary>
+    /// Binding, <c>Page.enable</c> i skrypt PageRuntime na świeżej sesji CDP (start i reconnect). Bez
+    /// <c>Runtime.enable</c> (AD-1): binding działa bez niego, ale nie przechodzi na nowy dokument, więc ponawiamy go
+    /// po każdej nawigacji głównej ramki (<see cref="OnCdpEvent"/>). Skrypt rejestrujemy raz na sesję CDP: żyje tyle co
+    /// ona, a ponowna rejestracja przy nawigacji uruchomiłaby PageRuntime dwa razy w jednym dokumencie.
+    /// </summary>
+    private static async Task InstallAsync(CdpSession cdp, string initScript, CancellationToken token)
+    {
+        await cdp.SendAsync("Runtime.addBinding", new Dictionary<string, object?> { ["name"] = PageProtocol.BindingName }, token).ConfigureAwait(false);
+        await cdp.SendAsync("Page.enable", null, token).ConfigureAwait(false);
+        await cdp.SendAsync("Page.addScriptToEvaluateOnNewDocument", new Dictionary<string, object?> { ["source"] = initScript }, token).ConfigureAwait(false);
+    }
+
+    /// <summary>Sesja CDP, której zdarzenia mają skutek tylko wtedy, gdy jest bieżącym kanałem sesji aplikacji.</summary>
+    private CdpSession CreateCdp(Session session, ICdpTransport transport)
+    {
+        CdpSession? cdp = null;
+        cdp = new CdpSession(transport, (method, parameters) => OnCdpEvent(session, cdp!, method, parameters));
+        return cdp;
+    }
+
+    /// <summary>Zamknięcie bieżącej sesji CDP żywej aplikacji uruchamia reconnect (<see cref="OnCdpClosed"/>).</summary>
+    private void WatchCdp(Session session, WebApp app, string initScript, CdpSession cdp) =>
         _ = cdp.Closed.ContinueWith(
-            _ =>
-            {
-                if (!session.Stopping)
-                {
-                    // Reconnect i CdpLost to story 6.3; tu tylko fakt w logu.
-                    _log.Info(Src, "cdpClosed", new Dictionary<string, object?> { ["appId"] = session.AppId });
-                }
-            },
+            _ => OnCdpClosed(session, app, initScript, cdp),
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
 
-        _post(new CommandCompleted(command.CmdId));
+    /// <summary>
+    /// Socket CDP zamknął się bez Stopu i wyjścia procesu: sesja traci kanał (<c>Cdp == null</c>), a termin
+    /// <c>cdpReconnectTimeout</c> liczy się od tej chwili na zegarze hosta.
+    /// </summary>
+    private void OnCdpClosed(Session session, WebApp app, string initScript, CdpSession cdp)
+    {
+        try
+        {
+            if (!session.Detach(cdp))
+            {
+                return;
+            }
+
+            // Zwolnienie zaraz po zdjęciu: Stop, który zdążył pomiędzy, dostał już null i tej sesji nie zamknie.
+            cdp.Dispose();
+            if (session.Stopping)
+            {
+                return;
+            }
+
+            var closedAt = _time.GetTimestamp();
+            var deadline = new CancellationTokenSource(_cdpReconnectTimeout, _time);
+            _log.Info(Src, "cdpClosed", new Dictionary<string, object?>
+            {
+                ["appId"] = session.AppId,
+                ["timeoutSeconds"] = _cdpReconnectTimeout.TotalSeconds,
+            });
+            _ = Task.Run(() => ReconnectAsync(session, app, initScript, closedAt, deadline));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Error(Src, "cdpReconnectFailed", ex, new Dictionary<string, object?> { ["appId"] = session.AppId });
+        }
     }
 
-    private void OnCdpEvent(Session session, string method, JsonElement parameters)
+    /// <summary>
+    /// Pętla reconnectu do tego samego celu strony: przed kolejnymi próbami 250 ms, 500 ms, 1 s, potem co 2 s, liczone
+    /// od zamknięcia, a dalej od startu poprzedniej próby. Każda próba i każde wywołanie setupu jest ograniczone
+    /// terminem połączonym z tokenem stopu sesji. Wyjście procesu i Stop kończą pętlę po cichu; upływ terminu przy
+    /// żywym procesie daje <c>cdpLost</c> i jeden <see cref="CdpLost"/>, a sesja zostaje zarejestrowana, żeby
+    /// Close/Restart z AppMenu zatrzymały drzewo.
+    /// </summary>
+    private async Task ReconnectAsync(Session session, WebApp app, string initScript, long closedAt, CancellationTokenSource deadline)
     {
+        try
+        {
+            using (deadline)
+            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token, session.StopToken))
+            {
+                var token = linked.Token;
+                var attempts = 0;
+                var previous = closedAt;
+                try
+                {
+                    while (true)
+                    {
+                        var wait = ReconnectBackoff[Math.Min(attempts, ReconnectBackoff.Length - 1)] - _time.GetElapsedTime(previous);
+                        if (wait > TimeSpan.Zero)
+                        {
+                            await Task.Delay(wait, _time, token).ConfigureAwait(false);
+                        }
+
+                        token.ThrowIfCancellationRequested();
+                        previous = _time.GetTimestamp();
+                        attempts++;
+                        if (await TryReconnectOnceAsync(session, initScript, token).ConfigureAwait(false) is { } cdp)
+                        {
+                            _log.Info(Src, "cdpReconnected", new Dictionary<string, object?>
+                            {
+                                ["appId"] = session.AppId,
+                                ["attempts"] = attempts,
+                                ["elapsedMs"] = (long)_time.GetElapsedTime(closedAt).TotalMilliseconds,
+                            });
+                            WatchCdp(session, app, initScript, cdp);
+                            return;
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Termin, Stop albo wyjście procesu: rozstrzyga sprawdzenie poniżej.
+                }
+
+                // Wyjście procesu (ProcessExited już poszło) i Stop kończą reconnect bez CdpLost.
+                if (session.Stopping
+                    || session.StopToken.IsCancellationRequested
+                    || !deadline.IsCancellationRequested
+                    || session.Process is not { HasExited: false })
+                {
+                    return;
+                }
+
+                _log.Warn(Src, "cdpLost", new Dictionary<string, object?>
+                {
+                    ["appId"] = session.AppId,
+                    ["timeoutSeconds"] = _cdpReconnectTimeout.TotalSeconds,
+                    ["attempts"] = attempts,
+                });
+                _post(new CdpLost(session.AppId));
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Error(Src, "cdpReconnectFailed", ex, new Dictionary<string, object?> { ["appId"] = session.AppId });
+        }
+    }
+
+    /// <summary>
+    /// Jedna próba: transport do zapamiętanego celu i setup na nowej sesji; zwraca zainstalowaną bieżącą sesję albo
+    /// <c>null</c>. Transport, który przyjdzie po terminie, Stopie albo wyjściu procesu, jest zwalniany bez skutku.
+    /// </summary>
+    private async Task<CdpSession?> TryReconnectOnceAsync(Session session, string initScript, CancellationToken token)
+    {
+        if (session.Endpoint is not { } endpoint)
+        {
+            return null;
+        }
+
+        var attempt = ConnectSafelyAsync(endpoint, token);
+        ICdpTransport? transport;
+        try
+        {
+            transport = await attempt.WaitAsync(token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Spóźniony transport porzuconej próby nie może ożyć jako kanał sesji.
+            _ = attempt.ContinueWith(
+                late => late.Result?.Dispose(),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously | TaskContinuationOptions.OnlyOnRanToCompletion,
+                TaskScheduler.Default);
+            throw;
+        }
+
+        if (transport is null)
+        {
+            return null;
+        }
+
+        var cdp = CreateCdp(session, transport);
+        if (token.IsCancellationRequested || !session.TryAttach(cdp))
+        {
+            cdp.Dispose();
+            token.ThrowIfCancellationRequested();
+            return null;
+        }
+
+        cdp.Start();
+        try
+        {
+            // Tylko trzy wywołania setupu: bez Page.navigate (strona już jest) i bez powtarzania czegokolwiek z przerwy.
+            await InstallAsync(cdp, initScript, token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is CdpException or OperationCanceledException)
+        {
+            session.Detach(cdp);
+            cdp.Dispose();
+            token.ThrowIfCancellationRequested();
+            return null;
+        }
+
+        if (token.IsCancellationRequested || !session.IsCurrent(cdp))
+        {
+            session.Detach(cdp);
+            cdp.Dispose();
+            token.ThrowIfCancellationRequested();
+            return null;
+        }
+
+        return cdp;
+    }
+
+    /// <summary>Wywołanie seamu reconnectu, które nigdy nie rzuca: wyjątek albo anulowanie to nieudana próba.</summary>
+    private async Task<ICdpTransport?> ConnectSafelyAsync(Uri endpoint, CancellationToken token)
+    {
+        try
+        {
+            return await _reconnect(endpoint, token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Zdarzenia tylko z bieżącej sesji CDP: zdarzenie podmienionej albo zamkniętej sesji nie wysyła nic na nowej
+    /// i nie loguje <c>hello</c>.
+    /// </summary>
+    private void OnCdpEvent(Session session, CdpSession cdp, string method, JsonElement parameters)
+    {
+        if (!session.IsCurrent(cdp))
+        {
+            return;
+        }
+
         switch (method)
         {
             case "Page.frameNavigated":
-                if (IsMainFrame(parameters) && session.Cdp is { } cdp && !session.Stopping)
+                // Tylko binding: skrypt PageRuntime jest zarejestrowany raz na sesję CDP (InstallAsync).
+                if (IsMainFrame(parameters))
                 {
                     _ = RefreshBindingAsync(session, cdp);
                 }
@@ -407,11 +640,15 @@ internal sealed class BrowserHost : IAppHostPort
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            _log.Warn(Src, "bindingRefreshFailed", new Dictionary<string, object?>
+            // Zamknięta albo podmieniona sesja to nie błąd odświeżenia: jej zerwaniem zajmuje się reconnect.
+            if (session.IsCurrent(cdp) && !cdp.Closed.IsCompleted)
             {
-                ["appId"] = session.AppId,
-                ["reason"] = ex.Message,
-            });
+                _log.Warn(Src, "bindingRefreshFailed", new Dictionary<string, object?>
+                {
+                    ["appId"] = session.AppId,
+                    ["reason"] = ex.Message,
+                });
+            }
         }
     }
 
@@ -531,7 +768,7 @@ internal sealed class BrowserHost : IAppHostPort
                     return;
                 }
 
-                session.Stopping = true;
+                var cdp = session.MarkStopping();
                 Unregister(session);
                 _log.Info(Src, "processExited", new Dictionary<string, object?>
                 {
@@ -540,8 +777,8 @@ internal sealed class BrowserHost : IAppHostPort
                 });
                 _post(new ProcessExited(session.AppId));
 
-                // Po ProcessExited: zamknięte CDP i anulowane łączenie odpowiedzą dopiero teraz (cdpAbandoned).
-                session.Cdp?.Dispose();
+                // Po ProcessExited: zamknięte CDP i anulowane łączenie albo reconnect odpowiedzą dopiero teraz.
+                cdp?.Dispose();
                 session.CancelStart();
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -578,10 +815,10 @@ internal sealed class BrowserHost : IAppHostPort
     /// <summary>Zamknięcie CDP, łagodne zamknięcie okna głównego (do 3 s), potem zabicie całego drzewa procesów.</summary>
     private async Task StopSessionAsync(Session session)
     {
-        session.Stopping = true;
         session.StopRequested = true;
+        var cdp = session.MarkStopping();
         session.CancelStart();
-        session.Cdp?.Dispose();
+        cdp?.Dispose();
         if (session.Process is not { } process)
         {
             return;
@@ -650,15 +887,70 @@ internal sealed class BrowserHost : IAppHostPort
     private sealed class Session(string appId)
     {
         private readonly CancellationTokenSource _stop = new();
+        private readonly object _gate = new();
+
+        /// <summary>Bieżący kanał CDP; <c>null</c> przed połączeniem, w trakcie zerwania i po porażce setupu.</summary>
+        private CdpSession? _cdp;
+        private volatile bool _stopping;
 
         public string AppId { get; } = appId;
 
         public volatile IBrowserProcess? Process;
 
-        public volatile CdpSession? Cdp;
+        /// <summary>Adres WebSocket celu strony z pierwszego połączenia; reconnect wraca tylko do niego.</summary>
+        public volatile Uri? Endpoint;
 
         /// <summary>Sesja jest zamykana (Stop, ponowny start, timeout okna albo wyjście procesu): watcher milczy.</summary>
-        public volatile bool Stopping;
+        public bool Stopping => _stopping;
+
+        /// <summary>Oznacza sesję jako zamykaną i zwraca bieżący kanał CDP do zamknięcia (atomowo z <see cref="TryAttach"/>).</summary>
+        public CdpSession? MarkStopping()
+        {
+            lock (_gate)
+            {
+                _stopping = true;
+                return _cdp;
+            }
+        }
+
+        /// <summary>Ustawia bieżący kanał CDP; <c>false</c>, gdy sesja jest już zamykana (kanał trzeba zwolnić).</summary>
+        public bool TryAttach(CdpSession cdp)
+        {
+            lock (_gate)
+            {
+                if (_stopping)
+                {
+                    return false;
+                }
+
+                _cdp = cdp;
+                return true;
+            }
+        }
+
+        /// <summary>Zdejmuje <paramref name="cdp"/>, jeśli to nadal bieżący kanał; <c>false</c>, gdy już go podmieniono.</summary>
+        public bool Detach(CdpSession cdp)
+        {
+            lock (_gate)
+            {
+                if (!ReferenceEquals(_cdp, cdp))
+                {
+                    return false;
+                }
+
+                _cdp = null;
+                return true;
+            }
+        }
+
+        /// <summary>Kanał jest bieżący, a sesja nie jest zamykana: tylko jego zdarzenia mają skutek.</summary>
+        public bool IsCurrent(CdpSession cdp)
+        {
+            lock (_gate)
+            {
+                return !_stopping && ReferenceEquals(_cdp, cdp);
+            }
+        }
 
         /// <summary>Zamknięcie zażądane z zewnątrz (Stop albo ponowny start).</summary>
         public volatile bool StopRequested;

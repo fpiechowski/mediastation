@@ -41,8 +41,9 @@ public static class ConfigValidation
     public const int CdpPortMax = 9239;
 
     /// <summary>
-    /// Polityczna górna granica <c>startingTimeout</c> i <c>stoppingTimeout</c> w sekundach (F18): trzyma oba terminy
-    /// daleko poniżej limitu terminu akceptowanego przez wstrzykiwany zegar, więc scheduler zawsze może je utworzyć.
+    /// Polityczna górna granica <c>startingTimeout</c>, <c>stoppingTimeout</c> i <c>cdpReconnectTimeout</c> w sekundach
+    /// (F18): trzyma te terminy daleko poniżej limitu terminu akceptowanego przez wstrzykiwany zegar, więc scheduler
+    /// zawsze może je utworzyć.
     /// </summary>
     public const int MaxTimeoutSeconds = 600;
 
@@ -542,6 +543,7 @@ public static class ConfigValidation
         CheckPositive(settings.CdpReconnectTimeout, JsonErrorPath.Property("$", "cdpReconnectTimeout"), errors);
         CheckAtMost(settings.StartingTimeout, MaxTimeoutSeconds, "startingTimeout", errors);
         CheckAtMost(settings.StoppingTimeout, MaxTimeoutSeconds, "stoppingTimeout", errors);
+        CheckAtMost(settings.CdpReconnectTimeout, MaxTimeoutSeconds, "cdpReconnectTimeout", errors);
 
         if (settings.ForegroundSettleMs is < MinForegroundSettleMs or > MaxForegroundSettleMs)
         {

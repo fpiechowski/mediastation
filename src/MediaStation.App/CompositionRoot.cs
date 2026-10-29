@@ -371,10 +371,13 @@ public static class CompositionRoot
             Path.Combine(DataRoot, "profiles"),
             Path.Combine(AppContext.BaseDirectory, "page"),
             TimeSpan.FromSeconds(config.Settings.CdpConnectTimeout),
+            TimeSpan.FromSeconds(config.Settings.CdpReconnectTimeout),
             BrowserPlatform.ResolveBrowser,
             new ProcessBrowserLauncher(),
             BrowserPlatform.WindowFinder(new Win32WindowApi()),
             CdpConnector.ConnectAsync,
+            // Port celu jest już sprawdzony przez BrowserHost (port aplikacji); konektor ponownie pilnuje loopbacku.
+            (endpoint, token) => CdpConnector.ReconnectAsync(endpoint, endpoint.Port, token),
             BrowserPlatform.ReadFile,
             time);
     }

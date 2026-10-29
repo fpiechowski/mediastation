@@ -13,7 +13,8 @@ namespace MediaStation.Core.Tests;
 /// <summary>
 /// BrowserHost (story 6.2) na fake'ach procesu, okna i transportu CDP: kolejność Events, dokładne argumenty AD-1,
 /// metody CDP bez <c>Runtime.enable</c>, <c>hello</c> i odrzucane komunikaty strony, binding po nawigacji głównej
-/// ramki, termin CDP na <see cref="FakeTimeProvider"/>, porażki startu i Stop.
+/// ramki, termin CDP na <see cref="FakeTimeProvider"/>, porażki startu i Stop. Story 6.3: reconnect do tego samego
+/// celu z backoffem, termin <c>cdpReconnectTimeout</c>, <see cref="CdpLost"/> i Home na prawdziwym Orchestratorze.
 /// </summary>
 public class BrowserHostTests
 {
@@ -519,7 +520,7 @@ public class BrowserHostTests
     }
 
     [Fact]
-    public async Task Closed_cdp_socket_is_only_logged()
+    public async Task Closed_cdp_socket_logs_cdp_closed_with_the_reconnect_timeout_and_posts_nothing_yet()
     {
         using var h = new Harness();
         h.Host.Start(new StartApp(7, AppId));
@@ -529,6 +530,9 @@ public class BrowserHostTests
         var closed = await h.WaitLog("cdpClosed");
 
         Assert.Equal(LogLevel.Info, closed.Level);
+        Assert.Equal(AppId, closed.Data!["appId"]);
+        Assert.Equal(30d, closed.Data["timeoutSeconds"]);
+        Assert.True(h.Transport.Disposed);
         Assert.Equal(2, h.Posted.Count);
     }
 
@@ -867,6 +871,593 @@ public class BrowserHostTests
         Assert.True(h.Process.HasExited);
     }
 
+    // ── Story 6.3: binding po nawigacji i reconnect CDP ───────────────────────
+
+    [Fact]
+    public async Task Each_main_frame_navigation_re_adds_only_the_binding_and_never_the_script()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        h.Transport.Push("""{"method":"Page.frameNavigated","params":{"frame":{"id":"main","url":"https://www.netflix.com/browse"}}}""");
+        h.Transport.Push("""{"method":"Page.frameNavigated","params":{"frame":{"id":"main","url":"https://www.netflix.com/title/1"}}}""");
+        await Eventually(() => h.Transport.Methods().Length == 6);
+        await Task.Delay(100, Ct);
+
+        Assert.Equal(
+            ["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument", "Page.navigate", "Runtime.addBinding", "Runtime.addBinding"],
+            h.Transport.Methods());
+    }
+
+    [Fact]
+    public async Task Binding_refresh_cut_by_a_closing_socket_is_silent()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        h.Transport.HoldMethod = "Runtime.addBinding";
+        h.Transport.Push("""{"method":"Page.frameNavigated","params":{"frame":{"id":"main","url":"https://x/"}}}""");
+        await Eventually(() => h.Transport.Methods().Length == 5);
+        h.Transport.Close();
+        await h.WaitLog("cdpClosed");
+        await Task.Delay(100, Ct);
+
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "bindingRefreshFailed");
+    }
+
+    [Fact]
+    public async Task Drop_with_quick_recovery_reinstalls_on_the_same_target_without_navigate()
+    {
+        using var h = new Harness();
+        var second = new FakeTransport();
+        h.Reconnects.Enqueue(null);
+        h.Reconnects.Enqueue(second);
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        await StepToAttempt(h, closedAt, 750, 2);
+        var reconnected = await h.WaitLog("cdpReconnected");
+
+        Assert.Equal(LogLevel.Info, reconnected.Level);
+        Assert.Equal(AppId, reconnected.Data!["appId"]);
+        Assert.Equal(2, reconnected.Data["attempts"]);
+        Assert.Equal(750L, reconnected.Data["elapsedMs"]);
+        Assert.Equal([closedAt.AddMilliseconds(250), closedAt.AddMilliseconds(750)], h.ReconnectAt);
+        Assert.All(h.ReconnectEndpoints, endpoint => Assert.Equal(h.Transport.Endpoint, endpoint));
+
+        // Dokładnie trzy wywołania setupu na nowej sesji: bez Page.navigate, bez Runtime.enable, nic z przerwy.
+        Assert.Equal(["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument"], second.Methods());
+        Assert.Equal("__msBridge", second.Sent[0].GetProperty("params").GetProperty("name").GetString());
+        Assert.StartsWith("((config) => {}", second.Sent[2].GetProperty("params").GetProperty("source").GetString(), StringComparison.Ordinal);
+        Assert.Equal(["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument", "Page.navigate"], h.Transport.Methods());
+        Assert.Equal(2, h.Posted.Count);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Level is LogLevel.Warn or LogLevel.Error);
+
+        // Nowa sesja działa jak pierwsza: binding po nawigacji i hello strony.
+        second.Push("""{"method":"Page.frameNavigated","params":{"frame":{"id":"main","url":"https://www.netflix.com/browse"}}}""");
+        second.PushBinding("__msBridge", """{"v":1,"type":"hello","id":null,"payload":{"service":"netflix","driverVersion":"0.0.0","webdriver":false}}""");
+        await h.WaitLog("pageHello");
+        await Eventually(() => second.Methods().Length == 4);
+        Assert.Equal("Runtime.addBinding", second.Methods()[3]);
+    }
+
+    [Fact]
+    public async Task Drop_without_recovery_posts_cdp_lost_exactly_at_the_reconnect_timeout()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var closedAt = await Drop(h, h.Transport);
+        int[] schedule = [250, 750, 1750, .. Enumerable.Range(0, 14).Select(i => 3750 + (i * 2000))];
+        for (var i = 0; i < schedule.Length; i++)
+        {
+            await StepToAttempt(h, closedAt, schedule[i], i + 1);
+        }
+
+        Assert.Equal(29_750, schedule[^1]);
+        Assert.Equal(schedule.Select(ms => closedAt.AddMilliseconds(ms)), h.ReconnectAt);
+        h.Time.Advance(closedAt.AddMilliseconds(29_900) - h.Time.GetUtcNow());
+        await Task.Delay(100, Ct);
+        Assert.Equal(2, h.Posted.Count);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "cdpLost");
+
+        h.Time.Advance(TimeSpan.FromMilliseconds(100));
+        await h.WaitPosted(3);
+
+        Assert.Equal(new CdpLost(AppId), h.Posted[2]);
+        var lost = await h.WaitLog("cdpLost");
+        Assert.Equal(LogLevel.Warn, lost.Level);
+        Assert.Equal(AppId, lost.Data!["appId"]);
+        Assert.Equal(30d, lost.Data["timeoutSeconds"]);
+        Assert.Equal(17, lost.Data["attempts"]);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "cdpReconnected");
+
+        h.Time.Advance(TimeSpan.FromSeconds(30));
+        await Task.Delay(100, Ct);
+        Assert.Equal(3, h.Posted.Count);
+        Assert.Equal(17, h.ReconnectAttempts);
+        Assert.Equal(0, h.Process.KillCalls);
+    }
+
+    [Theory]
+    [InlineData("Runtime.addBinding")]
+    [InlineData("Page.enable")]
+    [InlineData("Page.addScriptToEvaluateOnNewDocument")]
+    public async Task Setup_failure_on_reconnect_disposes_the_transport_and_keeps_trying(string failMethod)
+    {
+        string[] setup = ["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument"];
+        using var h = new Harness();
+        var failing = new FakeTransport { FailMethod = failMethod };
+        var good = new FakeTransport();
+        h.Reconnects.Enqueue(failing);
+        h.Reconnects.Enqueue(good);
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        await Eventually(() => failing.Disposed);
+        await StepToAttempt(h, closedAt, 750, 2);
+        var reconnected = await h.WaitLog("cdpReconnected");
+
+        Assert.Equal(setup[..(Array.IndexOf(setup, failMethod) + 1)], failing.Methods());
+        Assert.Equal(2, reconnected.Data!["attempts"]);
+        Assert.Equal(["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument"], good.Methods());
+        Assert.Equal(2, h.Posted.Count);
+    }
+
+    [Fact]
+    public async Task Late_transport_after_the_deadline_is_disposed_without_a_second_cdp_lost()
+    {
+        var pending = new TaskCompletionSource<ICdpTransport?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var h = new Harness(reconnect: (_, _) => pending.Task);
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        h.Time.Advance(closedAt.AddSeconds(30) - h.Time.GetUtcNow());
+        await h.WaitPosted(3);
+        Assert.Equal(new CdpLost(AppId), h.Posted[2]);
+
+        var late = new FakeTransport();
+        pending.SetResult(late);
+        await Eventually(() => late.Disposed);
+        await Task.Delay(100, Ct);
+
+        Assert.Empty(late.Methods());
+        Assert.Equal(3, h.Posted.Count);
+        Assert.Equal(1, h.ReconnectAttempts);
+        Assert.Single(h.Log.Entries, e => e.Msg == "cdpLost");
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "cdpReconnected");
+    }
+
+    [Fact]
+    public async Task Stop_during_reconnect_cancels_it_and_a_late_transport_is_disposed()
+    {
+        var pending = new TaskCompletionSource<ICdpTransport?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tokens = new ConcurrentQueue<CancellationToken>();
+        using var h = new Harness(reconnect: (_, token) =>
+        {
+            tokens.Enqueue(token);
+            return pending.Task;
+        });
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        h.Host.Stop(new StopApp(8, AppId));
+        await h.WaitPosted(4);
+
+        Assert.Equal([new ProcessExited(AppId), new CommandCompleted(8)], h.Posted.Skip(2));
+        Assert.True(Assert.Single(tokens).IsCancellationRequested);
+        var late = new FakeTransport();
+        pending.SetResult(late);
+        await Eventually(() => late.Disposed);
+        h.Time.Advance(TimeSpan.FromSeconds(60));
+        await Task.Delay(100, Ct);
+
+        Assert.Empty(late.Methods());
+        Assert.Equal(4, h.Posted.Count);
+        Assert.Equal(1, h.ReconnectAttempts);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "cdpLost" or "cdpReconnected" or "processExited");
+    }
+
+    [Fact]
+    public async Task Stop_between_reconnect_attempts_ends_the_loop_with_only_the_stop_results()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        h.Host.Stop(new StopApp(8, AppId));
+        await h.WaitPosted(4);
+        h.Time.Advance(TimeSpan.FromSeconds(60));
+        await Task.Delay(100, Ct);
+
+        Assert.Equal([new ProcessExited(AppId), new CommandCompleted(8)], h.Posted.Skip(2));
+        Assert.Equal(4, h.Posted.Count);
+        Assert.Equal(1, h.ReconnectAttempts);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "cdpLost");
+    }
+
+    [Fact]
+    public async Task Process_exit_during_reconnect_ends_the_loop_without_cdp_lost()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        h.Process.Exit(0);
+        await h.WaitPosted(3);
+        h.Time.Advance(TimeSpan.FromSeconds(60));
+        await Task.Delay(100, Ct);
+
+        Assert.Equal(new ProcessExited(AppId), h.Posted[2]);
+        Assert.Equal(3, h.Posted.Count);
+        Assert.Equal(1, h.ReconnectAttempts);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "cdpLost");
+    }
+
+    [Fact]
+    public async Task Stale_session_traffic_after_replacement_is_ignored()
+    {
+        using var h = new Harness();
+        // Sesja z nieudanym setupem zostaje zwolniona, ale jej pętla odbioru dalej dostarcza zdarzenia.
+        var stale = new FakeTransport { FailMethod = "Page.enable", DeliverAfterDispose = true };
+        var current = new FakeTransport();
+        h.Reconnects.Enqueue(stale);
+        h.Reconnects.Enqueue(current);
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        await Eventually(() => stale.Disposed);
+        await StepToAttempt(h, closedAt, 750, 2);
+        await h.WaitLog("cdpReconnected");
+
+        // Stara sesja po podmianie: nawigacja głównej ramki i hello nie mają skutku.
+        var delivered = stale.Delivered;
+        stale.Push("""{"method":"Page.frameNavigated","params":{"frame":{"id":"main","url":"https://x/"}}}""");
+        stale.PushBinding("__msBridge", """{"v":1,"type":"hello","id":null,"payload":{"service":"netflix","driverVersion":"0.0.0","webdriver":false}}""");
+        stale.Push("""{"id":1,"result":{}}""");
+        await Eventually(() => stale.Delivered >= delivered + 3);
+        await Task.Delay(200, Ct);
+
+        Assert.Equal(["Runtime.addBinding", "Page.enable"], stale.Methods());
+        Assert.Equal(["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument"], current.Methods());
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "pageHello" or "pageMessageRejected" or "bindingRefreshFailed");
+        Assert.Equal(2, h.Posted.Count);
+        stale.Close();
+    }
+
+    [Fact]
+    public async Task Setup_reply_held_on_a_reconnected_transport_is_bounded_by_the_deadline()
+    {
+        using var h = new Harness();
+        var held = new FakeTransport { HoldMethod = "Runtime.addBinding" };
+        h.Reconnects.Enqueue(held);
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        await Eventually(() => held.Methods().Length == 1);
+        h.Time.Advance(closedAt.AddMilliseconds(29_900) - h.Time.GetUtcNow());
+        await Task.Delay(100, Ct);
+        Assert.Equal(2, h.Posted.Count);
+        Assert.False(held.Disposed);
+
+        h.Time.Advance(TimeSpan.FromMilliseconds(100));
+        await h.WaitPosted(3);
+
+        Assert.Equal(new CdpLost(AppId), h.Posted[2]);
+        Assert.Single(h.Log.Entries, e => e.Msg == "cdpLost");
+        await Eventually(() => held.Disposed);
+        Assert.Equal(["Runtime.addBinding"], held.Methods());
+        Assert.Equal(1, h.ReconnectAttempts);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "cdpReconnected");
+    }
+
+    [Fact]
+    public async Task Faulting_reconnect_seam_is_a_failed_attempt_and_ends_in_cdp_lost()
+    {
+        using var h = new Harness(reconnect: (_, _) => Task.FromException<ICdpTransport?>(new InvalidOperationException("x")));
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        await StepToAttempt(h, closedAt, 750, 2);
+        await StepToAttempt(h, closedAt, 1750, 3);
+        h.Time.Advance(closedAt.AddSeconds(30) - h.Time.GetUtcNow());
+        await h.WaitPosted(3);
+
+        Assert.Equal(new CdpLost(AppId), h.Posted[2]);
+        Assert.True(h.ReconnectAttempts > 1);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Level == LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task Late_transport_after_process_exit_is_disposed_and_posts_nothing_more()
+    {
+        var pending = new TaskCompletionSource<ICdpTransport?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var h = new Harness(reconnect: (_, _) => pending.Task);
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        h.Process.Exit(0);
+        await h.WaitPosted(3);
+        Assert.Equal(new ProcessExited(AppId), h.Posted[2]);
+
+        var late = new FakeTransport();
+        pending.SetResult(late);
+        await Eventually(() => late.Disposed);
+        h.Time.Advance(TimeSpan.FromSeconds(60));
+        await Task.Delay(100, Ct);
+
+        Assert.Empty(late.Methods());
+        Assert.Equal(3, h.Posted.Count);
+        Assert.Equal(1, h.ReconnectAttempts);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "cdpLost" or "cdpReconnected");
+    }
+
+    [Fact]
+    public async Task Two_successive_drops_both_recover_on_the_same_endpoint()
+    {
+        using var h = new Harness();
+        var second = new FakeTransport();
+        var third = new FakeTransport();
+        h.Reconnects.Enqueue(second);
+        h.Reconnects.Enqueue(third);
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var firstDrop = await Drop(h, h.Transport);
+        await StepToAttempt(h, firstDrop, 250, 1);
+        await Eventually(() => h.Log.Entries.Count(e => e.Msg == "cdpReconnected") == 1);
+
+        var secondDrop = await Drop(h, second);
+        await StepToAttempt(h, secondDrop, 250, 2);
+        await Eventually(() => h.Log.Entries.Count(e => e.Msg == "cdpReconnected") == 2);
+
+        Assert.True(second.Disposed);
+        Assert.Equal(["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument"], third.Methods());
+        Assert.Equal([h.Transport.Endpoint, h.Transport.Endpoint], h.ReconnectEndpoints);
+        Assert.Equal(2, h.Log.Entries.Count(e => e.Msg == "cdpClosed"));
+        Assert.Equal(2, h.Posted.Count);
+    }
+
+    [Fact]
+    public async Task Socket_closing_during_setup_keeps_the_cdp_unavailable_path_without_reconnect()
+    {
+        using var h = new Harness();
+        h.Transport.HoldMethod = "Page.enable";
+        h.Host.Start(new StartApp(7, AppId));
+        await Eventually(() => h.Transport.Methods().Contains("Page.enable"));
+
+        h.Transport.Close();
+        await h.WaitPosted(2);
+        h.Time.Advance(TimeSpan.FromSeconds(60));
+        await Task.Delay(100, Ct);
+
+        AssertSetupFailed(h);
+        Assert.Equal(0, h.ReconnectAttempts);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "cdpClosed" or "cdpLost");
+    }
+
+    [Fact]
+    public async Task Target_outside_the_app_loopback_port_is_never_reconnected_and_ends_in_cdp_lost()
+    {
+        var foreign = new FakeTransport { Endpoint = new Uri("ws://127.0.0.1:9333/devtools/page/X") };
+        using var h = new Harness(connect: (_, _) => Task.FromResult<ICdpTransport?>(foreign));
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        foreign.Close();
+        await h.WaitLog("cdpClosed");
+        h.Time.Advance(TimeSpan.FromSeconds(30));
+        await h.WaitPosted(3);
+
+        Assert.Equal(new CdpLost(AppId), h.Posted[2]);
+        Assert.Equal(0, h.ReconnectAttempts);
+        foreign.Dispose();
+    }
+
+    [Fact]
+    public async Task After_cdp_lost_stop_still_stops_the_live_tree()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        await Drop(h, h.Transport);
+        h.Time.Advance(TimeSpan.FromSeconds(30));
+        await h.WaitPosted(3);
+        Assert.False(h.Process.HasExited);
+
+        h.Host.Stop(new StopApp(8, AppId));
+        await h.WaitPosted(5);
+
+        Assert.Equal([new ProcessExited(AppId), new CommandCompleted(8)], h.Posted.Skip(3));
+        Assert.Equal(1, h.Process.CloseCalls);
+        Assert.True(h.Process.HasExited);
+    }
+
+    [Fact]
+    public async Task Home_during_the_outage_shows_the_shell_and_cdp_lost_from_the_host_fails_the_tile()
+    {
+        var (orchestrator, _) = OrchestratorTestSupport.Started();
+        OrchestratorTestSupport.Foreground(orchestrator, AppId);
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+        await Drop(h, h.Transport);
+
+        var home = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        Assert.Contains(home.Commands, command => command is ShowShell);
+        Assert.Equal(AppLifecycleState.Background, OrchestratorTestSupport.StateOf(home.Snapshot!, AppId));
+
+        h.Time.Advance(TimeSpan.FromSeconds(30));
+        await h.WaitPosted(3);
+        var lost = Assert.IsType<CdpLost>(h.Posted[2]);
+        var failed = orchestrator.Handle(lost);
+        Assert.Equal(AppLifecycleState.Failed, OrchestratorTestSupport.StateOf(failed.Snapshot!, AppId));
+
+        var homeAfter = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 2));
+        Assert.Contains(homeAfter.Commands, command => command is ShowShell);
+        Assert.Equal(AppLifecycleState.Failed, OrchestratorTestSupport.StateOf(homeAfter.Snapshot!, AppId));
+    }
+
+    [Fact]
+    public async Task Cdp_lost_while_foreground_fails_the_tile_and_shows_the_shell()
+    {
+        var (orchestrator, _) = OrchestratorTestSupport.Started();
+        OrchestratorTestSupport.Foreground(orchestrator, AppId);
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+        await Drop(h, h.Transport);
+
+        h.Time.Advance(TimeSpan.FromSeconds(30));
+        await h.WaitPosted(3);
+        var failed = orchestrator.Handle(Assert.IsType<CdpLost>(h.Posted[2]));
+
+        Assert.Equal(AppLifecycleState.Failed, OrchestratorTestSupport.StateOf(failed.Snapshot!, AppId));
+        Assert.Contains(failed.Commands, command => command is ShowShell);
+        var home = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        Assert.Contains(home.Commands, command => command is ShowShell);
+    }
+
+    [Theory]
+    [InlineData("ws://0.0.0.0:9222/devtools/page/X")]
+    [InlineData("ws://192.168.1.10:9222/devtools/page/X")]
+    [InlineData("ws://localhost:9222/devtools/page/X")]
+    [InlineData("ws://127.0.0.1:9333/devtools/page/X")]
+    [InlineData("wss://127.0.0.1:9222/devtools/page/X")]
+    public async Task Reconnect_rejects_an_endpoint_outside_the_app_loopback_port(string url)
+    {
+        var started = DateTime.UtcNow;
+
+        var transport = await CdpConnector.ReconnectAsync(new Uri(url), 9222, Ct);
+
+        Assert.Null(transport);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task Reconnect_on_an_unused_loopback_port_returns_null()
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        cts.CancelAfter(TimeSpan.FromSeconds(5));
+
+        var transport = await CdpConnector.ReconnectAsync(new Uri($"ws://127.0.0.1:{port}/devtools/page/X"), port, cts.Token);
+
+        Assert.Null(transport);
+    }
+
+    [Fact]
+    public async Task Reconnect_opens_the_same_target_path_on_a_real_loopback_socket()
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+            var endpoint = new Uri($"ws://127.0.0.1:{port}/devtools/page/{FakeTransport.TargetId}");
+            var server = Task.Run(() => ServeOneWebSocketEchoAsync(listener), Ct);
+
+            using var transport = await CdpConnector.ReconnectAsync(endpoint, port, Ct);
+
+            Assert.NotNull(transport);
+            Assert.Equal(endpoint, transport.Endpoint);
+            await transport.SendAsync("""{"id":1,"method":"Page.enable","params":{}}""", Ct);
+            Assert.Equal("""{"id":1,"method":"Page.enable","params":{}}""", await transport.ReceiveAsync().WaitAsync(Wait, Ct));
+            var request = await server.WaitAsync(Wait, Ct);
+            Assert.StartsWith($"GET /devtools/page/{FakeTransport.TargetId} HTTP/1.1", request, StringComparison.Ordinal);
+            Assert.DoesNotContain("\r\nOrigin:", request, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    /// <summary>Minimalny serwer WebSocket na loopbacku: handshake RFC 6455, jedna wiadomość odesłana echem.</summary>
+    private static async Task<string> ServeOneWebSocketEchoAsync(System.Net.Sockets.TcpListener listener)
+    {
+        using var client = await listener.AcceptTcpClientAsync(Ct);
+        var stream = client.GetStream();
+        var header = new List<byte>();
+        var one = new byte[1];
+        while (header.Count < 4 || !(header[^4] == '\r' && header[^3] == '\n' && header[^2] == '\r' && header[^1] == '\n'))
+        {
+            if (await stream.ReadAsync(one, Ct) == 0)
+            {
+                throw new IOException("Klient zamknął połączenie przed końcem nagłówków.");
+            }
+
+            header.Add(one[0]);
+        }
+
+        var request = System.Text.Encoding.ASCII.GetString([.. header]);
+        var key = System.Text.RegularExpressions.Regex.Match(
+            request,
+            "^Sec-WebSocket-Key:\\s*(\\S+)\\s*$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Multiline).Groups[1].Value;
+        var accept = Convert.ToBase64String(System.Security.Cryptography.SHA1.HashData(
+            System.Text.Encoding.ASCII.GetBytes(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")));
+        await stream.WriteAsync(System.Text.Encoding.ASCII.GetBytes(
+            $"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"), Ct);
+
+        using var socket = System.Net.WebSockets.WebSocket.CreateFromStream(stream, isServer: true, subProtocol: null, keepAliveInterval: Timeout.InfiniteTimeSpan);
+        var buffer = new byte[4096];
+        var received = await socket.ReceiveAsync(buffer.AsMemory(), Ct);
+        await socket.SendAsync(buffer.AsMemory(0, received.Count), System.Net.WebSockets.WebSocketMessageType.Text, endOfMessage: true, Ct);
+        return request;
+    }
+
+    /// <summary>Zamyka transport i czeka na kolejny wpis <c>cdpClosed</c>; zwraca chwilę zamknięcia na zegarze testu.</summary>
+    private static async Task<DateTimeOffset> Drop(Harness h, FakeTransport transport)
+    {
+        var before = h.Log.Entries.Count(e => e.Msg == "cdpClosed");
+        transport.Close();
+        await Eventually(() => h.Log.Entries.Count(e => e.Msg == "cdpClosed") == before + 1);
+        return h.Time.GetUtcNow();
+    }
+
+    /// <summary>
+    /// Przesuwa zegar tuż przed <paramref name="offsetMs"/> od zamknięcia (próba jeszcze nie może paść), potem dokładnie
+    /// na tę chwilę i czeka na próbę numer <paramref name="attempt"/>.
+    /// </summary>
+    private static async Task StepToAttempt(Harness h, DateTimeOffset closedAt, int offsetMs, int attempt)
+    {
+        var target = closedAt.AddMilliseconds(offsetMs);
+        h.Time.Advance(target - TimeSpan.FromMilliseconds(1) - h.Time.GetUtcNow());
+        await Task.Delay(30, Ct);
+        Assert.Equal(attempt - 1, h.ReconnectAttempts);
+
+        h.Time.Advance(TimeSpan.FromMilliseconds(1));
+        await Eventually(() => h.ReconnectAttempts == attempt);
+    }
+
     private static void AssertSetupFailed(Harness h)
     {
         Assert.Equal([new AppWindowAttached(AppId, 0x1234, 4242), new CommandFailed(7, ErrorCode.CdpUnavailable)], h.Posted);
@@ -968,12 +1559,15 @@ public class BrowserHostTests
     {
         public static readonly DateTimeOffset T0 = new(2026, 10, 29, 12, 0, 0, TimeSpan.Zero);
         private readonly ConcurrentQueue<IOrchestratorMessage> _posted = new();
+        private readonly ConcurrentQueue<Uri> _reconnectEndpoints = new();
+        private readonly ConcurrentQueue<DateTimeOffset> _reconnectAt = new();
         private int _connectCalls;
 
         public Harness(
             Func<BrowserKind, string?>? resolve = null,
             Func<int, WindowInfo?>? findWindow = null,
-            Func<int, CancellationToken, Task<ICdpTransport?>>? connect = null)
+            Func<int, CancellationToken, Task<ICdpTransport?>>? connect = null,
+            Func<Uri, CancellationToken, Task<ICdpTransport?>>? reconnect = null)
         {
             Files[RuntimePath] = "(config) => {}";
             Files[ManifestPath] = ManifestJson;
@@ -985,6 +1579,8 @@ public class BrowserHostTests
                 ProfilesDir,
                 PageDir,
                 TimeSpan.FromSeconds(15),
+                // Jak domyślne `cdpReconnectTimeout` z Settings.
+                TimeSpan.FromSeconds(30),
                 resolve ?? (_ => Exe),
                 Launcher,
                 // Każdy uruchomiony proces ma własne okno: 4242 → 0x1234, 4243 → 0x1235…
@@ -994,6 +1590,18 @@ public class BrowserHostTests
                     Interlocked.Increment(ref _connectCalls);
                     ConnectedPort = port;
                     return connect is null ? Task.FromResult<ICdpTransport?>(Transport) : connect(port, token);
+                },
+                (endpoint, token) =>
+                {
+                    // Próba jest liczona przed powrotem: test może przesunąć zegar, gdy tylko widzi jej numer.
+                    _reconnectEndpoints.Enqueue(endpoint);
+                    _reconnectAt.Enqueue(Time.GetUtcNow());
+                    if (reconnect is not null)
+                    {
+                        return reconnect(endpoint, token);
+                    }
+
+                    return Task.FromResult<ICdpTransport?>(Reconnects.TryDequeue(out var next) ? next : null);
                 },
                 path => Files.TryGetValue(path, out var text) ? text : null,
                 Time);
@@ -1017,6 +1625,16 @@ public class BrowserHostTests
 
         public int ConnectCalls => Volatile.Read(ref _connectCalls);
 
+        /// <summary>Kolejne odpowiedzi seamu reconnectu: transport albo <c>null</c> (nieudana próba); pusta = <c>null</c>.</summary>
+        public ConcurrentQueue<FakeTransport?> Reconnects { get; } = new();
+
+        public IReadOnlyList<Uri> ReconnectEndpoints => _reconnectEndpoints.ToArray();
+
+        public int ReconnectAttempts => _reconnectAt.Count;
+
+        /// <summary>Chwile prób reconnectu na zegarze testu.</summary>
+        public IReadOnlyList<DateTimeOffset> ReconnectAt => _reconnectAt.ToArray();
+
         public IReadOnlyList<IOrchestratorMessage> Posted => _posted.ToArray();
 
         public Task WaitPosted(int count) => Eventually(() => _posted.Count >= count);
@@ -1036,6 +1654,10 @@ public class BrowserHostTests
             }
 
             Transport.Dispose();
+            foreach (var transport in Reconnects)
+            {
+                transport?.Dispose();
+            }
         }
     }
 
@@ -1137,9 +1759,12 @@ public class BrowserHostTests
     /// <summary>Transport CDP w pamięci: zapisuje wysłane wiadomości i sam odpowiada na każde żądanie.</summary>
     private sealed class FakeTransport : ICdpTransport
     {
+        public const string TargetId = "5F1C0A";
+
         private readonly Channel<string> _incoming = Channel.CreateUnbounded<string>();
         private readonly ConcurrentQueue<JsonElement> _sent = new();
         private string? _held;
+        private int _delivered;
 
         public volatile string? FailMethod;
 
@@ -1150,6 +1775,14 @@ public class BrowserHostTests
         public volatile Exception? SendThrows;
 
         public volatile string NavigateResult = "{\"frameId\":\"F1\",\"loaderId\":\"L1\"}";
+
+        public Uri Endpoint { get; init; } = new($"ws://127.0.0.1:9222/devtools/page/{TargetId}");
+
+        /// <summary>
+        /// Dispose nie kończy kanału: pętla odbioru starej sesji dalej dostarcza zdarzenia (wyścig zwolnienia z
+        /// wiadomością w drodze). Kanał kończy dopiero <see cref="Close"/>.
+        /// </summary>
+        public volatile bool DeliverAfterDispose;
 
         public bool Disposed { get; private set; }
 
@@ -1196,12 +1829,16 @@ public class BrowserHostTests
             }
         }
 
+        /// <summary>Wiadomości oddane pętli odbioru (po każdej poprzednia jest już w pełni obsłużona).</summary>
+        public int Delivered => Volatile.Read(ref _delivered);
+
         public async Task<string?> ReceiveAsync()
         {
             while (await _incoming.Reader.WaitToReadAsync())
             {
                 if (_incoming.Reader.TryRead(out var message))
                 {
+                    Interlocked.Increment(ref _delivered);
                     return message;
                 }
             }
@@ -1223,7 +1860,10 @@ public class BrowserHostTests
         public void Dispose()
         {
             Disposed = true;
-            Close();
+            if (!DeliverAfterDispose)
+            {
+                Close();
+            }
         }
     }
 }
