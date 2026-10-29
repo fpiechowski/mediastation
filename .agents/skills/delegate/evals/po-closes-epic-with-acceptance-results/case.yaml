@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: po-closes-epic-with-acceptance-results
+expected_outcome: |
+  Creates exactly one new T3 thread (t3_thread_launch) whose first message tells the delegate to use bmad-agent-po, carries the acceptance verdict and per-scenario results with the plan path, and ends with a return contract naming this thread's threadId and environmentId and t3_thread_send; the reply gives the link and does not wait.

@@ -52,9 +52,11 @@ public sealed partial class Orchestrator
             return OnStopped(pending);
         }
 
-        // Proces z `Failed` (reguła zachowana przy żywym procesie) zginął: reguła znika, stan i widok bez zmian.
+        // Proces z `Failed` (reguła zachowana przy żywym procesie) zginął: reguła znika, stan i widok bez zmian,
+        // a spóźnione okno martwego procesu (DW-4) już nie przyjdzie.
         if (app.State == AppLifecycleState.Failed)
         {
+            app.LateWindowExpected = false;
             return ForgetRule(app) is { } forget
                 ? new OrchestratorResult([forget], null)
                 : OrchestratorResult.None;
@@ -93,6 +95,7 @@ public sealed partial class Orchestrator
     /// <see cref="MuteProcessTree"/> i <see cref="MinimizeWindow"/> (reguła i <c>RootPid</c> zostają do stopu),
     /// przy martwym <see cref="ForgetProcessTree"/> (i zerowanie <c>RootPid</c>), potem <see cref="ShowShell"/>,
     /// routing, na końcu timer. <c>ProcessExited</c> w tle zostawia tylko <see cref="ForgetProcessTree"/>.
+    /// <c>Failed</c> nie trzyma okna także po spóźnionym attachu (DW-4): ten zapisuje tylko <c>RootPid</c>.
     /// </summary>
     private OrchestratorResult EnterFailed(AppState app, bool wasForeground, bool processAlive)
     {

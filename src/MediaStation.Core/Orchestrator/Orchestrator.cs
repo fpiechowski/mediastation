@@ -240,6 +240,13 @@ public sealed partial class Orchestrator
         /// że w międzyczasie zapadła nowsza decyzja (Home, wybudzenie) i okno dostaje kompensację, a nie aktywację.
         /// </summary>
         public long ForegroundTransition { get; set; }
+
+        /// <summary>
+        /// DW-4: aplikacja weszła w <c>Failed</c> przez timeout <c>Starting</c>, więc host może jeszcze zgłosić spóźnione
+        /// okno. <see cref="OnAppWindowAttached"/> zużywa flagę na jedną kompensację (wyciszenie, minimalizacja, shell);
+        /// znika też przy stopie z <c>Failed</c> i przy <see cref="ProcessExited"/> w <c>Failed</c>.
+        /// </summary>
+        public bool LateWindowExpected { get; set; }
     }
 
     /// <summary>

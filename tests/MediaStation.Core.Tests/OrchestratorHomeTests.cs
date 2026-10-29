@@ -123,10 +123,11 @@ public class OrchestratorHomeTests
 
     /// <summary>
     /// Attach po timeoucie startu nie wskrzesza kafelka: <c>Failed</c> nie ma już czego aktywować,
-    /// a timeout zdjął korelację startu.
+    /// a timeout zdjął korelację startu. Okno dostaje tylko kompensację DW-4 (wyciszenie, minimalizacja, shell),
+    /// bez aktywacji, routingu i snapshotu.
     /// </summary>
     [Fact]
-    public void Attached_window_after_start_timeout_is_ignored()
+    public void Attached_window_after_start_timeout_does_not_revive_the_tile()
     {
         var time = new FakeTimeProvider(T0);
         var (orchestrator, _) = Started(time);
@@ -136,7 +137,8 @@ public class OrchestratorHomeTests
 
         var result = orchestrator.Handle(new AppWindowAttached("netflix", 0x1A2B, 4321));
 
-        Assert.Empty(result.Commands);
+        Assert.DoesNotContain(result.Commands, command => command is ActivateWindow or UnmuteProcessTree or SetInputRouting);
+        Assert.Equal([typeof(MuteProcessTree), typeof(MinimizeWindow), typeof(ShowShell)], result.Commands.Select(command => command.GetType()));
         Assert.Null(result.Snapshot);
     }
 

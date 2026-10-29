@@ -16,8 +16,9 @@ public sealed partial class Orchestrator
     /// AD-8. Gdy w międzyczasie zapadła nowsza decyzja (Home, wybudzenie), okno dostaje kompensację:
     /// <see cref="MuteProcessTree"/>, <see cref="MinimizeWindow"/> i <c>Background</c> bez <see cref="ActivateWindow"/> i bez routingu, bo shell
     /// ma zostać na wierzchu (AD-14). Timeout <c>Starting</c> jest wtedy zdejmowany, a zapisane <c>hwnd</c> pozwala
-    /// wrócić przez <c>LaunchApp</c>. Poza <c>NotRunning</c> i <c>Starting</c> fakt jest ignorowany: spóźniony attach
-    /// po <c>Failed</c> zostaje w DW-4.
+    /// wrócić przez <c>LaunchApp</c>. Spóźnione okno po timeoucie <c>Starting</c> (<c>Failed</c> z flagą, DW-4) dostaje
+    /// jedną kompensację w <see cref="OnLateWindow"/>. Poza tym fakt poza <c>NotRunning</c> i <c>Starting</c> jest
+    /// ignorowany.
     /// </summary>
     private OrchestratorResult OnAppWindowAttached(AppWindowAttached attached)
     {
@@ -31,6 +32,11 @@ public sealed partial class Orchestrator
         if (app.State == AppLifecycleState.NotRunning)
         {
             return OnAdopt(app, attached.Hwnd, attached.RootPid);
+        }
+
+        if (app.State == AppLifecycleState.Failed)
+        {
+            return app.LateWindowExpected ? OnLateWindow(app, attached) : OrchestratorResult.None;
         }
 
         if (app.State != AppLifecycleState.Starting)
@@ -69,6 +75,30 @@ public sealed partial class Orchestrator
         }
 
         return new OrchestratorResult(commands, Snapshot());
+    }
+
+    /// <summary>
+    /// Spóźnione okno po timeoucie <c>Starting</c> (DW-4): host nie minimalizuje okien (AD-14/15), więc Orchestrator
+    /// chowa je raz, w kolejności z <see cref="OnAdopt"/> (AD-5): <see cref="MuteProcessTree"/>,
+    /// <see cref="MinimizeWindow"/> i <see cref="ShowShell"/> tylko wtedy, gdy inna aplikacja nie jest aktywna.
+    /// Zapisuje wyłącznie <c>RootPid</c>, żeby Close/Restart odciszyły drzewo przed stopem i zapomniały regułę po nim;
+    /// <c>Failed</c> nadal nie ma <c>Hwnd</c>. Stan, snapshot, <c>transitionId</c> i fokus się nie zmieniają.
+    /// </summary>
+    private OrchestratorResult OnLateWindow(AppState app, AppWindowAttached attached)
+    {
+        app.LateWindowExpected = false;
+        app.RootPid = attached.RootPid;
+        var commands = new List<Command>
+        {
+            new MuteProcessTree(NextCmdId(), attached.RootPid),
+            new MinimizeWindow(NextCmdId(), attached.Hwnd),
+        };
+        if (!AnotherAppIsActive(app))
+        {
+            commands.Add(new ShowShell(NextCmdId()));
+        }
+
+        return new OrchestratorResult(commands, null);
     }
 
     /// <summary>

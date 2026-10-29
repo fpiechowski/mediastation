@@ -224,6 +224,154 @@ public class OrchestratorAttachTests
             StateOf(snapshot, "netflix"));
     }
 
+    // ── DW-4: spóźnione okno po timeoucie Starting ────────────────────────────
+
+    /// <summary>
+    /// Start, timeout <c>Starting</c> (<c>Failed</c>), potem okno: kompensacja jak przy adopcji (wyciszenie,
+    /// minimalizacja, shell), ale stan zostaje <c>Failed</c> bez <c>hwnd</c>, bez snapshotu i bez zmiany fokusu.
+    /// </summary>
+    [Fact]
+    public void Late_window_after_start_timeout_is_muted_minimized_and_hidden_behind_the_shell()
+    {
+        var (orchestrator, _) = Started();
+        TimedOut(orchestrator);
+
+        var result = orchestrator.Handle(new AppWindowAttached("netflix", 0x1A2B, 4321));
+
+        // Bez snapshotu nie ma też nowego żądania fokusu; bez `hwnd` nie ma SetManagedWindows ani routingu.
+        Assert.Collection(
+            result.Commands,
+            command => Assert.Equal(4321, Assert.IsType<MuteProcessTree>(command).RootPid),
+            command => Assert.Equal(0x1A2B, Assert.IsType<MinimizeWindow>(command).Hwnd),
+            command => Assert.IsType<ShowShell>(command));
+        Assert.Null(result.Snapshot);
+        var snapshot = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(snapshot, "netflix"));
+    }
+
+    /// <summary>Inna aplikacja jest aktywna: okno jest wyciszane i minimalizowane, ale shell nie wraca nad nią.</summary>
+    [Theory]
+    [InlineData("foreground")]
+    [InlineData("starting")]
+    public void Late_window_while_another_app_is_active_does_not_show_the_shell(string other)
+    {
+        var (orchestrator, _) = Started();
+        TimedOut(orchestrator);
+        if (other == "foreground")
+        {
+            Foreground(orchestrator, "plex", 0x2B3C);
+        }
+        else
+        {
+            orchestrator.Handle(new LaunchApp("plex"));
+        }
+
+        var result = orchestrator.Handle(new AppWindowAttached("netflix", 0x77, 77));
+
+        Assert.Collection(
+            result.Commands,
+            command => Assert.Equal(77, Assert.IsType<MuteProcessTree>(command).RootPid),
+            command => Assert.Equal(0x77, Assert.IsType<MinimizeWindow>(command).Hwnd));
+        Assert.Null(result.Snapshot);
+        var snapshot = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(snapshot, "netflix"));
+        Assert.Equal(other == "foreground" ? AppLifecycleState.Foreground : AppLifecycleState.Starting, StateOf(snapshot, "plex"));
+    }
+
+    /// <summary>Zapisany <c>RootPid</c> spóźnionego okna: restart odcisza drzewo przed stopem i zapomina regułę po nim.</summary>
+    [Fact]
+    public void Restart_after_late_window_unmutes_before_stop_and_forgets_the_tree_after_it()
+    {
+        var (orchestrator, _) = Started();
+        TimedOut(orchestrator);
+        orchestrator.Handle(new AppWindowAttached("netflix", 0x1A2B, 4321));
+
+        var restart = orchestrator.Handle(new RestartApp("netflix"));
+
+        Assert.Null(restart.IgnoredIntent);
+        Assert.Collection(
+            restart.Commands,
+            command => Assert.Equal(4321, Assert.IsType<UnmuteProcessTree>(command).RootPid),
+            command => Assert.Equal("netflix", Assert.IsType<StopApp>(command).AppId),
+            command => Assert.IsType<ScheduleTimer>(command));
+        var stop = restart.Commands.OfType<StopApp>().Single();
+
+        var stopped = orchestrator.Handle(new CommandCompleted(stop.CmdId));
+
+        Assert.Collection(
+            stopped.Commands,
+            command => Assert.Equal(4321, Assert.IsType<ForgetProcessTree>(command).RootPid),
+            command => Assert.Equal("netflix", Assert.IsType<StartApp>(command).AppId),
+            command => Assert.IsType<ScheduleTimer>(command),
+            command => Assert.IsType<CancelTimer>(command));
+        Assert.Equal(AppLifecycleState.Starting, StateOf(Assert.IsType<ShellSnapshot>(stopped.Snapshot), "netflix"));
+    }
+
+    /// <summary>
+    /// Flaga spóźnionego okna jest jednorazowa: drugi attach, attach po <see cref="ProcessExited"/> w <c>Failed</c>
+    /// i attach w <c>Failed</c> z innej awarii po zamknięciu kafelka są ignorowane (bez komend i snapshotu).
+    /// </summary>
+    [Theory]
+    [InlineData("second")]
+    [InlineData("afterProcessExited")]
+    [InlineData("afterClose")]
+    public void Late_window_compensation_is_single_use(string when)
+    {
+        var (orchestrator, _) = Started();
+        TimedOut(orchestrator);
+        switch (when)
+        {
+            case "second":
+                Assert.NotEmpty(orchestrator.Handle(new AppWindowAttached("netflix", 0x1A2B, 4321)).Commands);
+                break;
+            case "afterProcessExited":
+                orchestrator.Handle(new ProcessExited("netflix"));
+                break;
+            default:
+                var stop = Assert.Single(orchestrator.Handle(new CloseApp("netflix")).Commands.OfType<StopApp>());
+                orchestrator.Handle(new CommandCompleted(stop.CmdId));
+                orchestrator.Handle(new LaunchApp("netflix"));
+                orchestrator.Handle(new CdpLost("netflix"));
+                break;
+        }
+
+        var result = orchestrator.Handle(new AppWindowAttached("netflix", 0x77, 77));
+
+        Assert.Empty(result.Commands);
+        Assert.Null(result.Snapshot);
+        var snapshot = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(snapshot, "netflix"));
+    }
+
+    /// <summary>Flagę spóźnionego okna stawia tylko timeout <c>Starting</c>: <c>Failed</c> po timeoucie <c>Stopping</c> ignoruje attach.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Attach_after_a_stopping_timeout_is_ignored(bool restart)
+    {
+        var (orchestrator, _) = Started();
+        Background(orchestrator, "netflix");
+        var stop = orchestrator.Handle(restart ? new RestartApp("netflix") : new CloseApp("netflix"));
+        var timer = Assert.Single(stop.Commands.OfType<ScheduleTimer>());
+        var failed = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new TimerElapsed(timer.TimerId)).Snapshot);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(failed, "netflix"));
+
+        var result = orchestrator.Handle(new AppWindowAttached("netflix", 0x77, 77));
+
+        Assert.Empty(result.Commands);
+        Assert.Null(result.Snapshot);
+    }
+
+    /// <summary><c>LaunchApp</c> i timeout <c>Starting</c> (pierwszy timer): kafelek w <c>Failed</c> bez okna.</summary>
+    private static ShellSnapshot TimedOut(CoreOrchestrator orchestrator)
+    {
+        var launch = orchestrator.Handle(new LaunchApp("netflix"));
+        var timer = Assert.Single(launch.Commands.OfType<ScheduleTimer>());
+        var failed = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new TimerElapsed(timer.TimerId)).Snapshot);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(failed, "netflix"));
+        return failed;
+    }
+
     [Fact]
     public void Ignored_events_do_not_advance_rev()
     {

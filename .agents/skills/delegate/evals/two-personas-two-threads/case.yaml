@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: two-personas-two-threads
+expected_outcome: |
+  Creates two T3 threads, one using bmad-agent-architect and one using bmad-agent-ux-designer, each with the draft path, its own focus and the return contract back to this thread.

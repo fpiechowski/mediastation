@@ -45,6 +45,7 @@ public sealed partial class Orchestrator
 
         var cmdId = NextCmdId();
         var transitionId = restart ? NextTransitionId() : 0;
+        app.LateWindowExpected = false;
         app.State = AppLifecycleState.Stopping;
         _pendingStops.Add(cmdId, new PendingStop(app.AppId, restart, transitionId));
         commands.Add(new StopApp(cmdId, app.AppId));

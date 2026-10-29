@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: codex-worktree-fix-with-report-back
+expected_outcome: |
+  Creates one T3 thread on a Codex model (modelSelection taken from orchestrator_capabilities) with workspaceStrategy worktree; the brief carries the failing test, symptom and suspected race, and the return contract asks for a handoff naming commits/changed files.

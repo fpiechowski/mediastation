@@ -14,7 +14,9 @@ public sealed partial class Orchestrator
     /// <c>timerId → appId</c>, więc spóźniony <see cref="TimerElapsed"/> po potwierdzonym starcie/stopie,
     /// po <see cref="AppWindowAttached"/> albo po wejściu w <c>Failed</c> nie daje komend ani snapshotu.
     /// Żywy termin kończy start albo stop w <c>Failed</c> bez shella i fokusu (nie ma okna na pierwszym planie).
-    /// Korelacja znika przed <see cref="EnterFailed"/>, więc timeout nie anuluje sam siebie.
+    /// Korelacja znika przed <see cref="EnterFailed"/>, więc timeout nie anuluje sam siebie. Timeout <c>Starting</c>
+    /// zostawia flagę spóźnionego okna (DW-4): proces mógł jeszcze nie pokazać okna, a jego późniejszy
+    /// <see cref="AppWindowAttached"/> dostaje jedną kompensację zamiast zostać na wierzchu nad shellem.
     /// </summary>
     private OrchestratorResult OnTimerElapsed(TimerElapsed elapsed)
     {
@@ -25,9 +27,14 @@ public sealed partial class Orchestrator
 
         if (_startTimers.Remove(elapsed.TimerId, out var appId))
         {
-            return _appsById.TryGetValue(appId, out var app) && app.State == AppLifecycleState.Starting
-                ? EnterFailed(app, wasForeground: false, processAlive: true)
-                : OrchestratorResult.None;
+            if (!_appsById.TryGetValue(appId, out var app) || app.State != AppLifecycleState.Starting)
+            {
+                return OrchestratorResult.None;
+            }
+
+            var failed = EnterFailed(app, wasForeground: false, processAlive: true);
+            app.LateWindowExpected = true;
+            return failed;
         }
 
         if (_stopTimers.Remove(elapsed.TimerId, out var stoppingAppId))

@@ -527,3 +527,11 @@ location: src/MediaStation.App/Hosts/Browser/BrowserHost.cs (ProbeCoreAsync)
 source_spec: `tickets/epic-browserhost/tickets/story-probeexisting-i-renewsession-po-restarcie-oraz-wybudzeniu-plan.md`
 reason: maybe-false. The probe logs `probeExisting {noWindow}` and registers nothing (BrowserHost.ProbeCoreAsync), and the 6.4 preflight then refuses every start while the lockfile is held. This existed before 6.5 (the 6.4 start path had no adoption at all). Whether a kiosk Edge on its own user-data-dir ever stays running without a window is not proven. To settle it on UM760: close the kiosk window by hand (Alt+F4) and check for a surviving msedge.exe root with --user-data-dir=<profile> and no --type=. If one survives, adopt it without a window (register the session, no AppWindowAttached) so Stop can kill the tree.
 status: open
+
+### DW-58: DevHarnessHostPort still posts ProcessExited on every Stop even after its exit watcher already reported the exit, so a dev-harness restart can still hit the DW-3 outcome (a second ProcessExited
+origin: spec-deferred c29dc10e02e7
+location: src/MediaStation.App/Hosts/DevHarness/DevHarnessHostPort.cs
+source_spec: `tickets/epic-browserhost/tickets/story-refactor-sweep-plan.md`
+severity: low
+reason: Pre-existing, not caused by this change. StopApp handling in DevHarnessHostPort.cs (~L141) posts ProcessExited unconditionally, and its watcher (~L432) posts its own. The dev harness is opt-in (MEDIASTATION_DEV_HARNESS=1), and the accepted epic-5 checks use it, so 6.8 left it unchanged. Fix by mirroring the BrowserHost rule: one exit report per process, with Stop posting only CommandCompleted after a watcher report.
+status: open

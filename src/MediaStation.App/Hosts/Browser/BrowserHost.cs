@@ -51,7 +51,9 @@ internal interface IBrowserProcessLauncher
 /// <see cref="ErrorCode.ProfileInUse"/> albo <see cref="ErrorCode.PortInUse"/> bez startu; loguje <c>FileVersion</c>
 /// binarki i <c>Last Version</c> profilu (<c>browserVersion</c>, <c>browserVersionChanged</c> przed <c>appLaunch</c>),
 /// a po podpięciu potwierdza wersję przez <c>Browser.getVersion</c>. Stop czeka do 5 s na wyjście korzenia po zabiciu
-/// drzewa, więc kontrola ponownego startu nie widzi starej przeglądarki.
+/// drzewa, więc kontrola ponownego startu nie widzi starej przeglądarki. <see cref="ProcessExited"/> idzie najwyżej raz
+/// na uruchomiony albo adoptowany proces (DW-3): Stop po wyjściu zgłoszonym już przez watcher loguje
+/// <c>exitAlreadyReported</c> i wysyła tylko <see cref="CommandCompleted"/>.
 /// Story 6.5 (AD-10, AD-13): sonda <see cref="ProbeExisting"/> szuka w liniach poleceń procesów żywego korzenia
 /// z profilem aplikacji i oknem, adoptuje go bez drugiego startu (<see cref="AppWindowAttached"/>, watcher wyjścia),
 /// a potem łączy CDP na porcie aplikacji i instaluje tylko binding, <c>Page.enable</c> i skrypt. Adoptowana sesja
@@ -118,6 +120,12 @@ internal sealed class BrowserHost : IAppHostPort
     private readonly TimeProvider _time;
     private readonly object _gate = new();
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Aplikacje, których watcher zgłosił już <see cref="ProcessExited"/> i wyrejestrował bieżącą sesję (DW-3): Stop bez
+    /// sesji nie wysyła drugiego faktu. Rejestracja nowej sesji (start, adopcja) i Stop zdejmują wpis; pod <see cref="_gate"/>.
+    /// </summary>
+    private readonly HashSet<string> _exitsReported = new(StringComparer.Ordinal);
 
     /// <summary>Ostatnia sonda każdej aplikacji (nigdy nie kończy się wyjątkiem); Start czeka na nią przed swoją ścieżką.</summary>
     private readonly Dictionary<string, Task> _probes = new(StringComparer.Ordinal);
@@ -308,6 +316,7 @@ internal sealed class BrowserHost : IAppHostPort
             {
                 _sessions.Remove(app.Id, out previous);
                 _sessions[app.Id] = session;
+                _exitsReported.Remove(app.Id);
             }
 
             if (previous is not null)
@@ -534,6 +543,7 @@ internal sealed class BrowserHost : IAppHostPort
                 }
 
                 _sessions[app.Id] = session;
+                _exitsReported.Remove(app.Id);
             }
 
             outcome = "adopted";
@@ -1370,19 +1380,32 @@ internal sealed class BrowserHost : IAppHostPort
             try
             {
                 await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-                if (session.Stopping)
-                {
-                    return;
-                }
 
-                var cdp = session.MarkStopping();
-                Unregister(session);
-                _log.Info(Src, "processExited", new Dictionary<string, object?>
+                // DW-3: wyjście zgłasza ten, kto pierwszy zaznaczy zamykanie; Stop po nim nie wysyła drugiego faktu.
+                // Zajęcie, wyrejestrowanie i ProcessExited w jednej sekcji pod `_gate`: Stop, który widzi zgłoszone
+                // wyjście (wpis albo flagę sesji, oba czytane pod `_gate`), wysyła swój wynik zawsze po tym fakcie.
+                // `_post` tylko wkłada do kolejki pętli, więc nie blokuje pod zamkiem.
+                CdpSession? cdp;
+                lock (_gate)
                 {
-                    ["appId"] = session.AppId,
-                    ["exitCode"] = process.ExitCode,
-                });
-                _post(new ProcessExited(session.AppId));
+                    if (!session.TryMarkExited(out cdp))
+                    {
+                        return;
+                    }
+
+                    if (_sessions.TryGetValue(session.AppId, out var current) && ReferenceEquals(current, session))
+                    {
+                        _sessions.Remove(session.AppId);
+                        _exitsReported.Add(session.AppId);
+                    }
+
+                    _log.Info(Src, "processExited", new Dictionary<string, object?>
+                    {
+                        ["appId"] = session.AppId,
+                        ["exitCode"] = process.ExitCode,
+                    });
+                    _post(new ProcessExited(session.AppId));
+                }
 
                 // Po ProcessExited: zamknięte CDP i anulowane łączenie albo reconnect odpowiedzą dopiero teraz.
                 cdp?.Dispose();
@@ -1400,17 +1423,39 @@ internal sealed class BrowserHost : IAppHostPort
         try
         {
             Session? session;
+            bool exitReported;
             lock (_gate)
             {
                 _sessions.Remove(command.AppId, out session);
+                exitReported = _exitsReported.Remove(command.AppId);
             }
 
             if (session is not null)
             {
                 await StopSessionAsync(session).ConfigureAwait(false);
+
+                // Flaga pod `_gate`: watcher ustawia ją i wysyła ProcessExited w jednej sekcji, więc widziana flaga
+                // znaczy, że fakt już jest w kolejce przed CommandCompleted tego stopu.
+                lock (_gate)
+                {
+                    exitReported |= session.ExitReported;
+                }
             }
 
-            _post(new ProcessExited(command.AppId));
+            // DW-3: watcher zgłosił już wyjście tego procesu; drugi ProcessExited zamknąłby kolejny start aplikacji.
+            if (exitReported)
+            {
+                _log.Info(Src, "exitAlreadyReported", new Dictionary<string, object?>
+                {
+                    ["appId"] = command.AppId,
+                    ["cmdId"] = command.CmdId,
+                });
+            }
+            else
+            {
+                _post(new ProcessExited(command.AppId));
+            }
+
             _post(new CommandCompleted(command.CmdId));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -1534,6 +1579,9 @@ internal sealed class BrowserHost : IAppHostPort
         /// <summary>Sesja wysłała już <see cref="PageVersionRejected"/>; pod <see cref="_gate"/>.</summary>
         private bool _versionRejected;
 
+        /// <summary>Watcher zgłosił wyjście procesu sesji (<see cref="ProcessExited"/>); ustawiane pod <see cref="_gate"/>.</summary>
+        private volatile bool _exitReported;
+
         public string AppId { get; } = appId;
 
         /// <summary>Sesja żywej przeglądarki przejętej przez sondę po restarcie (story 6.5), nie uruchomionej przez host.</summary>
@@ -1606,6 +1654,31 @@ internal sealed class BrowserHost : IAppHostPort
                 }
 
                 _versionRejected = true;
+                return true;
+            }
+        }
+
+        /// <summary>Watcher zgłosił już <see cref="ProcessExited"/> tej sesji (DW-3); Stop wysyła wtedy tylko wynik komendy.</summary>
+        public bool ExitReported => _exitReported;
+
+        /// <summary>
+        /// Watcher zajmuje wyjście procesu (DW-3): atomowo oznacza sesję jako zamykaną i zgłoszoną oraz zwraca bieżący kanał
+        /// CDP; <c>false</c>, gdy sesja jest już zamykana (Stop, ponowny start), więc <see cref="ProcessExited"/> idzie
+        /// najwyżej raz na proces.
+        /// </summary>
+        public bool TryMarkExited(out CdpSession? cdp)
+        {
+            lock (_gate)
+            {
+                if (_stopping)
+                {
+                    cdp = null;
+                    return false;
+                }
+
+                _stopping = true;
+                _exitReported = true;
+                cdp = _cdp;
                 return true;
             }
         }

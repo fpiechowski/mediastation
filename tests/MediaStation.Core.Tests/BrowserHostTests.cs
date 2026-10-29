@@ -20,6 +20,7 @@ namespace MediaStation.Core.Tests;
 /// Story 6.5: adopcja żywego korzenia przez sondę (bez drugiego procesu), CDP po adopcji albo <see cref="CdpLost"/>,
 /// Start w trakcie sondy, odświeżenie sesji po wybudzeniu i spóźnione fakty na prawdziwym Orchestratorze.
 /// Story 6.7: J4 (restart kafelka <c>Failed</c> jednym OK) na prawdziwym Orchestratorze i prawdziwym hoście (<see cref="J4Pump"/>).
+/// Story 6.8: DW-3 (jeden <see cref="ProcessExited"/> na proces) i DW-4 (spóźnione okno po timeoucie <c>Starting</c>).
 /// </summary>
 public class BrowserHostTests
 {
@@ -3221,6 +3222,219 @@ public class BrowserHostTests
         await pump.AssertQuiet();
     }
 
+    // ── Story 6.8: DW-3 — ProcessExited najwyżej raz na proces ───────────────
+
+    [Fact]
+    public async Task Stop_after_the_watcher_reported_the_exit_posts_only_completion()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+        h.Process.Exit(0);
+        await h.WaitPosted(3);
+        Assert.Equal(new ProcessExited(AppId), h.Posted[2]);
+
+        h.Host.Stop(new StopApp(8, AppId));
+        await h.WaitPosted(4);
+        await Task.Delay(100, Ct);
+
+        Assert.Equal(new CommandCompleted(8), h.Posted[3]);
+        Assert.Equal(4, h.Posted.Count);
+        var already = await h.WaitLog("exitAlreadyReported");
+        Assert.Equal(LogLevel.Info, already.Level);
+        Assert.Equal(AppId, already.Data!["appId"]);
+        Assert.Equal(8L, Convert.ToInt64(already.Data!["cmdId"]));
+    }
+
+    /// <summary>
+    /// DW-3, kolejność: watcher zajął wyjście i właśnie wysyła <see cref="ProcessExited"/>, gdy przychodzi Stop. Wynik
+    /// Stopu nie może wyprzedzić faktu watchera, bo Orchestrator domknąłby stop na <see cref="CommandCompleted"/>,
+    /// a spóźniony <see cref="ProcessExited"/> trafiłby w nowy start.
+    /// </summary>
+    [Fact]
+    public async Task Stop_during_the_watchers_exit_post_completes_only_after_that_exit()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        h.BeforePost = message =>
+        {
+            if (message is ProcessExited)
+            {
+                entered.Set();
+                release.Wait(Wait, Ct);
+            }
+        };
+
+        h.Process.Exit(0);
+        Assert.True(entered.Wait(Wait, Ct));
+        h.Host.Stop(new StopApp(8, AppId));
+        await Task.Delay(200, Ct);
+        release.Set();
+        await h.WaitPosted(4);
+        await Task.Delay(100, Ct);
+
+        Assert.Equal([new ProcessExited(AppId), new CommandCompleted(8)], h.Posted.Skip(2));
+        Assert.Single(h.Posted.OfType<ProcessExited>());
+        Assert.Contains(h.Log.Entries, e => e.Msg == "exitAlreadyReported");
+    }
+
+    [Fact]
+    public async Task Stop_of_a_new_session_after_a_reported_exit_reports_its_exit_again()
+    {
+        var transports = new ConcurrentQueue<FakeTransport>();
+        using var h = new Harness(connect: FreshTransports(transports));
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+        h.Process.Exit(0);
+        await h.WaitPosted(3);
+
+        h.Host.Start(new StartApp(9, AppId));
+        await h.WaitPosted(5);
+        Assert.Equal([new AppWindowAttached(AppId, 0x1235, 4243), new CommandCompleted(9)], h.Posted.Skip(3));
+
+        h.Host.Stop(new StopApp(10, AppId));
+        await h.WaitPosted(7);
+        await Task.Delay(100, Ct);
+
+        Assert.Equal([new ProcessExited(AppId), new CommandCompleted(10)], h.Posted.Skip(5));
+        Assert.Equal(7, h.Posted.Count);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "exitAlreadyReported");
+        Assert.True(h.Launcher.Processes[1].HasExited);
+    }
+
+    /// <summary>
+    /// DW-3 na prawdziwym Orchestratorze: proces aplikacji w tle ginie, a <see cref="RestartApp"/> zostaje obsłużony,
+    /// zanim <see cref="ProcessExited"/> watchera dotrze do Orchestratora. Fakt watchera domyka stop, Stop hosta daje
+    /// tylko <see cref="CommandCompleted"/>, więc restart kończy się nowym korzeniem na pierwszym planie, nie w <c>Failed</c>.
+    /// </summary>
+    [Fact]
+    public async Task Restart_handled_before_the_watchers_exit_reaches_the_orchestrator_brings_a_new_root_to_the_foreground()
+    {
+        var transports = new ConcurrentQueue<FakeTransport>();
+        using var h = new Harness(connect: FreshTransports(transports));
+        var pump = new J4Pump(h);
+        await pump.Launch();
+        pump.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        Assert.Equal(AppLifecycleState.Background, pump.State);
+
+        h.Process.Exit(0);
+        await h.WaitPosted(3);
+        Assert.Equal(new ProcessExited(AppId), h.Posted[2]);
+
+        var restart = pump.Handle(new RestartApp(AppId));
+        Assert.Null(restart.IgnoredIntent);
+        var stop = Assert.Single(restart.Commands.OfType<StopApp>());
+
+        // Wynik Stopu hosta przed podaniem faktu watchera: dopiero ten fakt zleca hostowi nowy start.
+        await h.WaitPosted(4);
+        var results = await pump.Feed(6);
+
+        var start = Assert.Single(results.SelectMany(result => result.Commands).OfType<StartApp>());
+        Assert.Equal(
+            [
+                new ProcessExited(AppId), new CommandCompleted(stop.CmdId),
+                new AppWindowAttached(AppId, 0x1235, 4243), new CommandCompleted(start.CmdId),
+            ],
+            h.Posted.Skip(2));
+        Assert.Equal(stop.CmdId, Convert.ToInt64((await h.WaitLog("exitAlreadyReported")).Data!["cmdId"]));
+        Assert.Contains(results[2].Commands, command => command is ActivateWindow { Hwnd: 0x1235 });
+        Assert.Equal(
+            [
+                AppLifecycleState.Starting, AppLifecycleState.Foreground, AppLifecycleState.Background,
+                AppLifecycleState.Stopping, AppLifecycleState.Starting, AppLifecycleState.Foreground,
+            ],
+            pump.States);
+        Assert.Equal(2, h.Launcher.Starts.Count);
+        Assert.False(h.Launcher.Processes[1].HasExited);
+        await pump.AssertQuiet();
+    }
+
+    // ── Story 6.8: DW-4 — spóźnione okno po timeoucie Starting ────────────────
+
+    /// <summary>
+    /// Okno prawdziwego hosta pojawia się po <see cref="TimerElapsed"/> Orchestratora (<c>startingTimeout</c> 5 s):
+    /// kompensacja (wyciszenie, minimalizacja, shell) bez wyjścia z <c>Failed</c>, spóźniony wynik startu jest
+    /// ignorowany, a Restart zabija drzewo i uruchamia nowy korzeń na pierwszym planie.
+    /// </summary>
+    [Fact]
+    public async Task Window_after_the_orchestrators_start_timeout_is_hidden_and_restart_relaunches()
+    {
+        var windowUp = false;
+        var polls = 0;
+        var transports = new ConcurrentQueue<FakeTransport>();
+        using var h = new Harness(
+            findWindow: pid =>
+            {
+                Interlocked.Increment(ref polls);
+                return Volatile.Read(ref windowUp) ? Window with { Hwnd = Window.Hwnd + pid - Window.Pid, Pid = pid } : null;
+            },
+            connect: FreshTransports(transports));
+        var config = OrchestratorTestSupport.TwoApps() with { Settings = new Settings { StartingTimeout = 5 } };
+        var pump = new J4Pump(h, OrchestratorTestSupport.StartedWith(config).Orchestrator);
+
+        var launch = pump.Handle(new LaunchApp(AppId));
+        var start = Assert.Single(launch.Commands.OfType<StartApp>());
+        var timer = Assert.Single(launch.Commands.OfType<ScheduleTimer>());
+        Assert.Equal(OrchestratorTestSupport.T0.AddSeconds(5), timer.Due);
+        await Eventually(() => Volatile.Read(ref polls) >= 1);
+        pump.Handle(new TimerElapsed(timer.TimerId));
+        Assert.Equal(AppLifecycleState.Failed, pump.State);
+
+        Volatile.Write(ref windowUp, true);
+        for (var i = 0; i < 40 && h.Posted.Count == 0; i++)
+        {
+            await Task.Delay(5, Ct);
+            h.Time.Advance(TimeSpan.FromMilliseconds(100));
+        }
+
+        var attached = Assert.Single(await pump.Feed(1));
+        Assert.Equal(new AppWindowAttached(AppId, 0x1234, 4242), h.Posted[0]);
+        Assert.Collection(
+            attached.Commands,
+            command => Assert.Equal(4242, Assert.IsType<MuteProcessTree>(command).RootPid),
+            command => Assert.Equal(0x1234, Assert.IsType<MinimizeWindow>(command).Hwnd),
+            command => Assert.IsType<ShowShell>(command));
+        Assert.Null(attached.Snapshot);
+
+        var late = Assert.Single(await pump.Feed(2));
+        Assert.Equal(new CommandCompleted(start.CmdId), h.Posted[1]);
+        Assert.Empty(late.Commands);
+        Assert.Null(late.Snapshot);
+
+        var restart = pump.Handle(new RestartApp(AppId));
+        Assert.Null(restart.IgnoredIntent);
+        Assert.Collection(
+            restart.Commands,
+            command => Assert.Equal(4242, Assert.IsType<UnmuteProcessTree>(command).RootPid),
+            command => Assert.Equal(AppId, Assert.IsType<StopApp>(command).AppId),
+            command => Assert.IsType<ScheduleTimer>(command));
+        var stop = restart.Commands.OfType<StopApp>().Single();
+        var results = await pump.Feed(6);
+
+        var restarted = Assert.Single(results.SelectMany(result => result.Commands).OfType<StartApp>());
+        Assert.Equal(
+            [
+                new ProcessExited(AppId), new CommandCompleted(stop.CmdId),
+                new AppWindowAttached(AppId, 0x1235, 4243), new CommandCompleted(restarted.CmdId),
+            ],
+            h.Posted.Skip(2));
+        Assert.Contains(results[0].Commands, command => command is ForgetProcessTree { RootPid: 4242 });
+        Assert.Contains(results[2].Commands, command => command is ActivateWindow { Hwnd: 0x1235 });
+        Assert.Equal(
+            [
+                AppLifecycleState.Starting, AppLifecycleState.Failed, AppLifecycleState.Stopping,
+                AppLifecycleState.Starting, AppLifecycleState.Foreground,
+            ],
+            pump.States);
+        Assert.True(h.Process.HasExited);
+        Assert.Equal(1, h.Process.KillCalls);
+        Assert.Equal(2, h.Launcher.Starts.Count);
+        await pump.AssertQuiet();
+    }
+
     /// <summary>Connector, który przy każdym łączeniu daje świeży transport (sesja restartu ma własny kanał CDP).</summary>
     private static Func<int, CancellationToken, Task<ICdpTransport?>> FreshTransports(ConcurrentQueue<FakeTransport> transports) =>
         (_, _) =>
@@ -3361,7 +3575,11 @@ public class BrowserHostTests
                 Launcher.Processes.Any(p => p.Id == pid) || (Orphans.ContainsKey(pid) && !_windowless.ContainsKey(pid));
             Host = new BrowserHost(
                 Log,
-                _posted.Enqueue,
+                message =>
+                {
+                    BeforePost?.Invoke(message);
+                    _posted.Enqueue(message);
+                },
                 [Netflix],
                 ProfilesDir,
                 PageDir,
@@ -3506,6 +3724,9 @@ public class BrowserHostTests
 
         public IReadOnlyList<IOrchestratorMessage> Posted => _posted.ToArray();
 
+        /// <summary>Wołane na wątku hosta przed zapisem faktu (np. żeby zatrzymać wysyłkę i zbadać wyścig).</summary>
+        public volatile Action<IOrchestratorMessage>? BeforePost;
+
         public Task WaitPosted(int count) => Eventually(() => _posted.Count >= count);
 
         public async Task<LogEntry> WaitLog(string msg)
@@ -3541,9 +3762,9 @@ public class BrowserHostTests
     /// hosta wracają do Orchestratora w kolejności wysłania. Stan kafelka jest zbierany po każdej zmianie, tak jak
     /// <c>appStateChanged</c> w pętli App.
     /// </summary>
-    private sealed class J4Pump(Harness h)
+    private sealed class J4Pump(Harness h, CoreOrchestrator? orchestrator = null)
     {
-        private readonly CoreOrchestrator _orchestrator = OrchestratorTestSupport.Started().Orchestrator;
+        private readonly CoreOrchestrator _orchestrator = orchestrator ?? OrchestratorTestSupport.Started().Orchestrator;
 
         /// <summary>Kolejne różne stany kafelka z wyników kroków (bez stanu z zimnego startu).</summary>
         public List<AppLifecycleState> States { get; } = [];
