@@ -36,6 +36,31 @@ internal static class BrowserPlatform
         }
     }
 
+    /// <summary>
+    /// Żywy proces o danym PID dla adopcji (story 6.5) albo <c>null</c>, gdy go nie ma, już się zakończył albo nie da się
+    /// go obsłużyć (brak dostępu).
+    /// </summary>
+    public static IBrowserProcess? OpenProcess(int pid)
+    {
+        Process? process = null;
+        try
+        {
+            process = Process.GetProcessById(pid);
+            if (process.HasExited)
+            {
+                process.Dispose();
+                return null;
+            }
+
+            return new ProcessBrowserProcess(process);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception)
+        {
+            process?.Dispose();
+            return null;
+        }
+    }
+
     /// <summary>Główne okno przeglądarki (<c>Chrome_WidgetWin_1</c>, widoczne, bez właściciela) w drzewie procesu <paramref name="rootPid"/>.</summary>
     public static Func<int, WindowInfo?> WindowFinder(IWindowApi windows)
     {

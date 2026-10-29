@@ -382,6 +382,9 @@ public static class CompositionRoot
             BrowserPreflight.ReadFileVersion,
             BrowserPreflight.IsProfileInUse,
             BrowserPreflight.IsPortInUse,
+            // Adopcja po restarcie (story 6.5): WMI jest wolne, BrowserHost woła je tylko w tle.
+            ProcessCommandLines.HarnessApps,
+            BrowserPlatform.OpenProcess,
             time);
     }
 

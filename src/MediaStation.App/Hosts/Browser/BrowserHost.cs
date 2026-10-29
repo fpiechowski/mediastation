@@ -52,8 +52,15 @@ internal interface IBrowserProcessLauncher
 /// binarki i <c>Last Version</c> profilu (<c>browserVersion</c>, <c>browserVersionChanged</c> przed <c>appLaunch</c>),
 /// a po podpięciu potwierdza wersję przez <c>Browser.getVersion</c>. Stop czeka do 5 s na wyjście korzenia po zabiciu
 /// drzewa, więc kontrola ponownego startu nie widzi starej przeglądarki.
+/// Story 6.5 (AD-10, AD-13): sonda <see cref="ProbeExisting"/> szuka w liniach poleceń procesów żywego korzenia
+/// z profilem aplikacji i oknem, adoptuje go bez drugiego startu (<see cref="AppWindowAttached"/>, watcher wyjścia),
+/// a potem łączy CDP na porcie aplikacji i instaluje tylko binding, <c>Page.enable</c> i skrypt. Adoptowana sesja
+/// działa jak uruchomiona (reconnect, Stop, odświeżenie); bez CDP daje <c>cdpUnavailable</c> i <see cref="CdpLost"/>,
+/// a zostaje zarejestrowana, żeby Close/Restart zabiły osierocone drzewo. Start w trakcie sondy czeka na nią i
+/// używa gotowej adoptowanej sesji zamiast startu. <see cref="RenewSession"/> po wybudzeniu zdejmuje bieżący kanał
+/// CDP i uruchamia pętlę reconnectu 6.3 do tego samego celu.
 /// Sam nigdy nie pokazuje, nie wynosi i nie minimalizuje okien (AD-14, AD-15). Metody portu tylko zlecają pracę
-/// w tle i nie rzucają przez granicę portu (AD-4). Sonda i odświeżenie sesji to na razie ciche no-opy (story 6.5).
+/// w tle i nie rzucają przez granicę portu (AD-4).
 /// </summary>
 internal sealed class BrowserHost : IAppHostPort
 {
@@ -70,6 +77,12 @@ internal sealed class BrowserHost : IAppHostPort
     private static readonly TimeSpan GracefulCloseTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan KillExitTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>Wyzwalacz pętli reconnectu w logach: zamknięty socket bieżącej sesji CDP.</summary>
+    private const string ClosedTrigger = "cdpClosed";
+
+    /// <summary>Wyzwalacz pętli reconnectu w logach: <see cref="RenewSession"/> po wybudzeniu.</summary>
+    private const string RenewTrigger = "renewSession";
 
     /// <summary>Przerwy przed kolejnymi próbami reconnectu; po wyczerpaniu listy obowiązuje ostatnia (2 s).</summary>
     private static readonly TimeSpan[] ReconnectBackoff =
@@ -96,9 +109,14 @@ internal sealed class BrowserHost : IAppHostPort
     private readonly Func<string, string?> _readFileVersion;
     private readonly Func<string, bool> _isProfileInUse;
     private readonly Func<int, bool> _isPortInUse;
+    private readonly Func<IReadOnlyList<KeyValuePair<int, string>>> _commandLines;
+    private readonly Func<int, IBrowserProcess?> _openProcess;
     private readonly TimeProvider _time;
     private readonly object _gate = new();
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
+
+    /// <summary>Ostatnia sonda każdej aplikacji (nigdy nie kończy się wyjątkiem); Start czeka na nią przed swoją ścieżką.</summary>
+    private readonly Dictionary<string, Task> _probes = new(StringComparer.Ordinal);
 
     internal BrowserHost(
         ILog log,
@@ -117,6 +135,8 @@ internal sealed class BrowserHost : IAppHostPort
         Func<string, string?> readFileVersion,
         Func<string, bool> isProfileInUse,
         Func<int, bool> isPortInUse,
+        Func<IReadOnlyList<KeyValuePair<int, string>>> commandLines,
+        Func<int, IBrowserProcess?> openProcess,
         TimeProvider time)
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -135,6 +155,8 @@ internal sealed class BrowserHost : IAppHostPort
         ArgumentNullException.ThrowIfNull(readFileVersion);
         ArgumentNullException.ThrowIfNull(isProfileInUse);
         ArgumentNullException.ThrowIfNull(isPortInUse);
+        ArgumentNullException.ThrowIfNull(commandLines);
+        ArgumentNullException.ThrowIfNull(openProcess);
         ArgumentNullException.ThrowIfNull(time);
 
         var byId = new Dictionary<string, WebApp>(StringComparer.Ordinal);
@@ -159,6 +181,8 @@ internal sealed class BrowserHost : IAppHostPort
         _readFileVersion = readFileVersion;
         _isProfileInUse = isProfileInUse;
         _isPortInUse = isPortInUse;
+        _commandLines = commandLines;
+        _openProcess = openProcess;
         _time = time;
     }
 
@@ -195,16 +219,46 @@ internal sealed class BrowserHost : IAppHostPort
         }
     }
 
-    /// <summary>Adopcja należy do story 6.5: do tego czasu sonda milczy (cisza jest poprawną odpowiedzią).</summary>
+    /// <summary>
+    /// Sonda w tle (story 6.5, AD-10): żywy korzeń z profilem aplikacji i oknem jest adoptowany bez startu, potem host
+    /// łączy CDP. Brak korzenia albo okna to cisza (tylko wpis <c>probeExisting</c>). Zadanie sondy nigdy nie kończy się
+    /// wyjątkiem, a Start tej samej aplikacji czeka na nie; sonda nie jest ponawiana.
+    /// </summary>
     public void Probe(ProbeExisting command)
     {
         ArgumentNullException.ThrowIfNull(command);
+
+        try
+        {
+            // Rejestracja przed powrotem z metody portu: StartApp wysłany po sondzie zawsze ją zobaczy.
+            lock (_gate)
+            {
+                _probes[command.AppId] = Task.Run(() => ProbeCoreAsync(command));
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Error(Src, "browserCommandFailed", ex, new Dictionary<string, object?> { ["cmdId"] = command.CmdId });
+        }
     }
 
-    /// <summary>Odświeżenie sesji po wybudzeniu należy do story 6.5: do tego czasu komenda milczy.</summary>
+    /// <summary>
+    /// Odświeżenie sesji po wybudzeniu (story 6.5, AD-10) w tle: gotowa sesja z bieżącym kanałem CDP traci go, a pętla
+    /// reconnectu 6.3 łączy się z tym samym celem; porażka kończy się <see cref="CdpLost"/>. W pozostałych przypadkach
+    /// tylko wpis <c>renewSession</c> z powodem.
+    /// </summary>
     public void Renew(RenewSession command)
     {
         ArgumentNullException.ThrowIfNull(command);
+
+        try
+        {
+            _ = Task.Run(() => RenewCore(command));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Error(Src, "browserCommandFailed", ex, new Dictionary<string, object?> { ["cmdId"] = command.CmdId });
+        }
     }
 
     private async Task StartCoreAsync(StartApp command)
@@ -217,27 +271,18 @@ internal sealed class BrowserHost : IAppHostPort
                 return;
             }
 
+            // Start w trakcie sondy czeka na nią: bez tego nowa sesja trafiłaby w ProfileInUse, a sierota nie zginęłaby.
+            await AwaitProbeAsync(app.Id).ConfigureAwait(false);
+            if (TryReuseAdopted(command, app))
+            {
+                return;
+            }
+
             // Zasoby strony czytane z dysku przy każdym starcie (hotfix drivera, AD-13); bez nich nic nie startuje.
-            var runtimePath = Path.Combine(_pageDir, RuntimeFileName);
-            var runtime = _readFile(runtimePath);
-            if (string.IsNullOrWhiteSpace(runtime))
+            var assets = LoadPageAssets(app);
+            if (assets.InitScript is not { } initScript || assets.Manifest is not { } manifest)
             {
-                FailStart(command, runtime is null ? "pageAssetMissing" : "pageAssetInvalid", runtimePath);
-                return;
-            }
-
-            var manifestPath = Path.Combine(_pageDir, "drivers", app.Service, "manifest.json");
-            var manifestText = _readFile(manifestPath);
-            if (manifestText is null)
-            {
-                FailStart(command, "pageAssetMissing", manifestPath);
-                return;
-            }
-
-            var parsed = DriverManifest.Parse(manifestText, app.Service);
-            if (parsed.Manifest is not { } manifest)
-            {
-                FailStart(command, "pageAssetInvalid", manifestPath, parsed.Reason);
+                FailStart(command, assets.Reason ?? "pageAssetInvalid", assets.File, assets.Detail);
                 return;
             }
 
@@ -248,7 +293,6 @@ internal sealed class BrowserHost : IAppHostPort
                 return;
             }
 
-            var initScript = BrowserLaunch.BuildInitScript(runtime, PageProtocol.BindingName, app.Service, manifest.DriverVersion);
             var profileDir = Path.Combine(_profilesDir, app.Id);
             var args = BrowserLaunch.BuildArguments(profileDir, app.CdpPort);
 
@@ -343,6 +387,389 @@ internal sealed class BrowserHost : IAppHostPort
         }
     }
 
+    /// <summary>Zasoby strony aplikacji: skrypt PageRuntime z configiem i manifest drivera albo powód porażki z plikiem.</summary>
+    private readonly record struct PageAssets(string? InitScript, DriverManifest? Manifest, string? Reason, string? File, string? Detail);
+
+    /// <summary>
+    /// <c>runtime.js</c> i manifest drivera czytane z dysku przy każdym użyciu (hotfix drivera, AD-13), wspólne dla
+    /// startu i adopcji: brak pliku to <c>pageAssetMissing</c>, pusty runtime albo zły manifest <c>pageAssetInvalid</c>.
+    /// </summary>
+    private PageAssets LoadPageAssets(WebApp app)
+    {
+        var runtimePath = Path.Combine(_pageDir, RuntimeFileName);
+        var runtime = _readFile(runtimePath);
+        if (string.IsNullOrWhiteSpace(runtime))
+        {
+            return new PageAssets(null, null, runtime is null ? "pageAssetMissing" : "pageAssetInvalid", runtimePath, null);
+        }
+
+        var manifestPath = Path.Combine(_pageDir, "drivers", app.Service, "manifest.json");
+        var manifestText = _readFile(manifestPath);
+        if (manifestText is null)
+        {
+            return new PageAssets(null, null, "pageAssetMissing", manifestPath, null);
+        }
+
+        var parsed = DriverManifest.Parse(manifestText, app.Service);
+        if (parsed.Manifest is not { } manifest)
+        {
+            return new PageAssets(null, null, "pageAssetInvalid", manifestPath, parsed.Reason);
+        }
+
+        var initScript = BrowserLaunch.BuildInitScript(runtime, PageProtocol.BindingName, app.Service, manifest.DriverVersion);
+        return new PageAssets(initScript, manifest, null, null, null);
+    }
+
+    /// <summary>Czeka na ostatnią sondę aplikacji; zadanie sondy nigdy nie kończy się wyjątkiem.</summary>
+    private async Task AwaitProbeAsync(string appId)
+    {
+        Task? probe;
+        lock (_gate)
+        {
+            _probes.TryGetValue(appId, out probe);
+        }
+
+        if (probe is not null)
+        {
+            await probe.ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Start po sondzie, która adoptowała gotową sesję (bieżący kanał CDP, żywy korzeń): to samo okno i korzeń jeszcze
+    /// raz plus <see cref="CommandCompleted"/>, bez kontroli, stopu i startu. Orchestrator stosuje pierwszy z dwóch
+    /// <see cref="AppWindowAttached"/> i ignoruje drugi, więc kolejność nie zmienia jego stanu.
+    /// </summary>
+    private bool TryReuseAdopted(StartApp command, WebApp app)
+    {
+        Session? session;
+        lock (_gate)
+        {
+            _sessions.TryGetValue(app.Id, out session);
+        }
+
+        if (session is not { Adopted: true, Ready: true, Stopping: false }
+            || !session.HasChannel
+            || session.Process is not { HasExited: false } process)
+        {
+            return false;
+        }
+
+        _log.Info(Src, "startReusedAdopted", new Dictionary<string, object?>
+        {
+            ["appId"] = app.Id,
+            ["rootPid"] = process.Id,
+        });
+        _post(new AppWindowAttached(app.Id, session.Hwnd, process.Id));
+        _post(new CommandCompleted(command.CmdId));
+        return true;
+    }
+
+    /// <summary>
+    /// Sonda: pierwszy korzeń z profilem aplikacji (bez <c> --type=</c>) z oknem przeglądarki zostaje adoptowany, o ile
+    /// aplikacja nie ma sesji. Host niczego nie uruchamia ani nie zabija; okno i dźwięk to adopcja Orchestratora
+    /// (wyciszenie, minimalizacja, shell; AD-5). Każda sonda kończy się jednym wpisem <c>probeExisting</c>.
+    /// </summary>
+    private async Task ProbeCoreAsync(ProbeExisting command)
+    {
+        var outcome = "notRunning";
+        int? rootPid = null;
+        try
+        {
+            if (!_apps.TryGetValue(command.AppId, out var app))
+            {
+                outcome = "unknownApp";
+                return;
+            }
+
+            if (HasSession(app.Id))
+            {
+                outcome = "sessionExists";
+                return;
+            }
+
+            var profileDir = Path.Combine(_profilesDir, app.Id);
+            IBrowserProcess? process = null;
+            WindowInfo? window = null;
+            string? rootLine = null;
+            foreach (var (pid, line) in _commandLines())
+            {
+                if (!BrowserLaunch.CommandLineMatchesProfile(line, profileDir) || !BrowserLaunch.IsBrowserRoot(line))
+                {
+                    continue;
+                }
+
+                if (_findWindow(pid) is not { } found)
+                {
+                    outcome = "noWindow";
+                    continue;
+                }
+
+                // Korzeń zniknął między odczytem linii poleceń a otwarciem: nie ma czego adoptować.
+                if (_openProcess(pid) is { } opened)
+                {
+                    process = opened;
+                    window = found;
+                    rootLine = line;
+                    break;
+                }
+            }
+
+            if (process is null || window is null || rootLine is null)
+            {
+                return;
+            }
+
+            var session = new Session(app.Id, adopted: true) { Process = process, Hwnd = window.Hwnd };
+            lock (_gate)
+            {
+                if (_sessions.ContainsKey(app.Id))
+                {
+                    outcome = "sessionExists";
+                    return;
+                }
+
+                _sessions[app.Id] = session;
+            }
+
+            outcome = "adopted";
+            rootPid = process.Id;
+            _log.Info(Src, "appAdopted", new Dictionary<string, object?>
+            {
+                ["appId"] = app.Id,
+                ["rootPid"] = process.Id,
+                ["hwnd"] = window.Hwnd,
+                ["class"] = window.ClassName,
+            });
+            _post(new AppWindowAttached(app.Id, window.Hwnd, process.Id));
+            WatchExit(session, process);
+
+            await AdoptCdpAsync(app, session, rootLine).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Nieudana sonda (np. WMI) to nie „nic do adopcji”: wpis końcowy mówi failed.
+            outcome = "failed";
+            _log.Error(Src, "browserProbeFailed", ex, new Dictionary<string, object?> { ["appId"] = command.AppId });
+        }
+        finally
+        {
+            var data = new Dictionary<string, object?>
+            {
+                ["appId"] = command.AppId,
+                ["outcome"] = outcome,
+            };
+            if (rootPid is not null)
+            {
+                data["rootPid"] = rootPid;
+            }
+
+            _log.Info(Src, "probeExisting", data);
+        }
+    }
+
+    private bool HasSession(string appId)
+    {
+        lock (_gate)
+        {
+            return _sessions.ContainsKey(appId);
+        }
+    }
+
+    /// <summary>
+    /// CDP po adopcji: tylko gdy korzeń ma port aplikacji, w terminie <c>cdpConnectTimeout</c> połączonym z tokenem
+    /// stopu sesji, z samym <see cref="InstallAsync"/> (bez <c>Page.navigate</c> i odczytu wersji, AD-13). Sukces czyni
+    /// sesję gotową i obserwowaną jak po starcie; porażka przy żywym korzeniu daje <c>cdpUnavailable</c> i
+    /// <see cref="CdpLost"/>, a sesja zostaje dla Close/Restart.
+    /// </summary>
+    private async Task AdoptCdpAsync(WebApp app, Session session, string rootLine)
+    {
+        var assets = LoadPageAssets(app);
+        if (assets.InitScript is not { } initScript)
+        {
+            AdoptedCdpFailed(app, session, assets.Reason ?? "pageAssetInvalid", assets.File, assets.Detail);
+            return;
+        }
+
+        if (!BrowserLaunch.HasDebuggingPort(rootLine, app.CdpPort))
+        {
+            AdoptedCdpFailed(app, session, "portMismatch", null, null);
+            return;
+        }
+
+        using var deadline = new CancellationTokenSource(_cdpConnectTimeout, _time);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token, session.StopToken);
+        var token = linked.Token;
+
+        ICdpTransport? transport;
+        try
+        {
+            transport = await _connect(app.CdpPort, token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            transport = null;
+        }
+
+        if (transport is null)
+        {
+            AdoptedCdpFailed(app, session, "notConnected", null, null);
+            return;
+        }
+
+        // Pierwszy cel strony z /json/list konektora (jak przy starcie) zostaje celem reconnectu i odświeżenia.
+        session.Endpoint = CdpTargets.LoopbackWebSocket(transport.Endpoint.OriginalString, app.CdpPort);
+
+        var cdp = CreateCdp(session, transport);
+        if (!session.TryAttach(cdp))
+        {
+            cdp.Dispose();
+            AdoptedCdpFailed(app, session, "notConnected", null, null);
+            return;
+        }
+
+        cdp.Start();
+        try
+        {
+            // Strona już działa: bez Page.navigate i bez Browser.getVersion („nie przy adopcji”, AD-13).
+            await InstallAsync(cdp, initScript, token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is CdpException or OperationCanceledException)
+        {
+            session.Detach(cdp);
+            cdp.Dispose();
+            AdoptedCdpFailed(app, session, "setupFailed", null, ex.Message);
+            return;
+        }
+
+        if (!session.IsCurrent(cdp))
+        {
+            // Stop albo wyjście procesu w trakcie setupu: kanał zabrał Stop, nic więcej nie idzie.
+            session.Detach(cdp);
+            cdp.Dispose();
+            AdoptedCdpFailed(app, session, "setupFailed", null, "stopping");
+            return;
+        }
+
+        _log.Info(Src, "cdpConnected", new Dictionary<string, object?>
+        {
+            ["appId"] = app.Id,
+            ["cdpPort"] = app.CdpPort,
+            ["adopted"] = true,
+        });
+        session.MarkReady(initScript);
+        WatchCdp(session, app, initScript, cdp);
+    }
+
+    /// <summary>
+    /// Adopcja bez CDP: przy żywym korzeniu i bez Stopu <c>cdpUnavailable</c> i jeden <see cref="CdpLost"/> (AD-10);
+    /// po Stopie albo wyjściu procesu tylko wpis informacyjny, bo te ścieżki raportują same.
+    /// </summary>
+    private void AdoptedCdpFailed(WebApp app, Session session, string reason, string? file, string? detail)
+    {
+        var exited = session.Process is not { HasExited: false };
+        if (session.Stopping || session.StopToken.IsCancellationRequested || exited)
+        {
+            _log.Info(Src, "cdpAbandoned", new Dictionary<string, object?>
+            {
+                ["appId"] = app.Id,
+                ["reason"] = exited ? "processExited" : "stopped",
+                ["adopted"] = true,
+            });
+            return;
+        }
+
+        var data = new Dictionary<string, object?>
+        {
+            ["appId"] = app.Id,
+            ["cdpPort"] = app.CdpPort,
+            ["reason"] = reason,
+            ["adopted"] = true,
+        };
+        if (file is not null)
+        {
+            data["file"] = file;
+        }
+
+        if (detail is not null)
+        {
+            data["detail"] = detail;
+        }
+
+        _log.Warn(Src, "cdpUnavailable", data);
+        _post(new CdpLost(app.Id));
+    }
+
+    /// <summary>
+    /// Odświeżenie: zarejestrowana, niezamykana, gotowa sesja bez trwającego reconnectu oddaje atomowo bieżący kanał,
+    /// który jest zamykany, a pętla reconnectu (backoff i termin 6.3) łączy się z zapamiętanym celem. Zamknięty stary
+    /// kanał nie uruchamia drugiej pętli, bo <see cref="Session.Detach"/> zwraca dla niego <c>false</c>.
+    /// </summary>
+    private void RenewCore(RenewSession command)
+    {
+        try
+        {
+            Session? session;
+            lock (_gate)
+            {
+                _sessions.TryGetValue(command.AppId, out session);
+            }
+
+            CdpSession? old = null;
+            WebApp? app = null;
+            string outcome;
+            if (session is null || !_apps.TryGetValue(command.AppId, out app))
+            {
+                outcome = "noSession";
+            }
+            else if (session.Stopping)
+            {
+                outcome = "stopping";
+            }
+            else if (!session.Ready)
+            {
+                outcome = "notReady";
+            }
+            else if (session.Reconnecting)
+            {
+                outcome = "reconnecting";
+            }
+            else if ((old = session.DetachCurrent()) is null)
+            {
+                outcome = "noCdp";
+            }
+            else
+            {
+                session.Reconnecting = true;
+                outcome = "renewing";
+            }
+
+            if (old is null || session is null || app is null || session.InitScript is not { } initScript)
+            {
+                LogRenew(command.AppId, outcome);
+                return;
+            }
+
+            // Chwila odświeżenia i termin przed wpisem: backoff i termin liczą się od zdjęcia kanału.
+            old.Dispose();
+            var renewedAt = _time.GetTimestamp();
+            var deadline = new CancellationTokenSource(_cdpReconnectTimeout, _time);
+            LogRenew(command.AppId, outcome);
+            _ = Task.Run(() => ReconnectAsync(session, app, initScript, renewedAt, deadline, RenewTrigger));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _log.Error(Src, "renewSessionFailed", ex, new Dictionary<string, object?> { ["appId"] = command.AppId });
+        }
+    }
+
+    private void LogRenew(string appId, string outcome) =>
+        _log.Info(Src, "renewSession", new Dictionary<string, object?>
+        {
+            ["appId"] = appId,
+            ["outcome"] = outcome,
+        });
+
     private async Task ConnectCdpAsync(
         StartApp command,
         WebApp app,
@@ -422,6 +849,8 @@ internal sealed class BrowserHost : IAppHostPort
         }
 
         // Reconnect dotyczy tylko sesji po zakończonym starcie: zamknięcie w trakcie setupu to ścieżka CdpUnavailable.
+        // Od teraz sesja jest gotowa, więc RenewSession może ją odświeżyć.
+        session.MarkReady(initScript);
         _post(new CommandCompleted(command.CmdId));
         WatchCdp(session, app, initScript, cdp);
     }
@@ -557,12 +986,13 @@ internal sealed class BrowserHost : IAppHostPort
 
             var closedAt = _time.GetTimestamp();
             var deadline = new CancellationTokenSource(_cdpReconnectTimeout, _time);
+            session.Reconnecting = true;
             _log.Info(Src, "cdpClosed", new Dictionary<string, object?>
             {
                 ["appId"] = session.AppId,
                 ["timeoutSeconds"] = _cdpReconnectTimeout.TotalSeconds,
             });
-            _ = Task.Run(() => ReconnectAsync(session, app, initScript, closedAt, deadline));
+            _ = Task.Run(() => ReconnectAsync(session, app, initScript, closedAt, deadline, ClosedTrigger));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -575,10 +1005,14 @@ internal sealed class BrowserHost : IAppHostPort
     /// od zamknięcia, a dalej od startu poprzedniej próby. Każda próba i każde wywołanie setupu jest ograniczone
     /// terminem połączonym z tokenem stopu sesji. Wyjście procesu i Stop kończą pętlę po cichu; upływ terminu przy
     /// żywym procesie daje <c>cdpLost</c> i jeden <see cref="CdpLost"/>, a sesja zostaje zarejestrowana, żeby
-    /// Close/Restart z AppMenu zatrzymały drzewo.
+    /// Close/Restart z AppMenu zatrzymały drzewo. <paramref name="trigger"/> (<c>cdpClosed</c> albo <c>renewSession</c>)
+    /// trafia do <c>cdpReconnected</c> i <c>cdpLost</c>. Flaga <see cref="Session.Reconnecting"/> jest ustawiona przed
+    /// startem pętli i zdejmowana na jej końcu (przy sukcesie przed obserwacją nowego kanału, którego zamknięcie zaczyna
+    /// własną pętlę).
     /// </summary>
-    private async Task ReconnectAsync(Session session, WebApp app, string initScript, long closedAt, CancellationTokenSource deadline)
+    private async Task ReconnectAsync(Session session, WebApp app, string initScript, long closedAt, CancellationTokenSource deadline, string trigger)
     {
+        var reconnecting = true;
         try
         {
             using (deadline)
@@ -602,11 +1036,15 @@ internal sealed class BrowserHost : IAppHostPort
                         attempts++;
                         if (await TryReconnectOnceAsync(session, initScript, token).ConfigureAwait(false) is { } cdp)
                         {
+                            // Flaga zdjęta przed wpisem: kolejne odświeżenie po `cdpReconnected` nie trafi w `reconnecting`.
+                            reconnecting = false;
+                            session.Reconnecting = false;
                             _log.Info(Src, "cdpReconnected", new Dictionary<string, object?>
                             {
                                 ["appId"] = session.AppId,
                                 ["attempts"] = attempts,
                                 ["elapsedMs"] = (long)_time.GetElapsedTime(closedAt).TotalMilliseconds,
+                                ["trigger"] = trigger,
                             });
                             WatchCdp(session, app, initScript, cdp);
                             return;
@@ -632,6 +1070,7 @@ internal sealed class BrowserHost : IAppHostPort
                     ["appId"] = session.AppId,
                     ["timeoutSeconds"] = _cdpReconnectTimeout.TotalSeconds,
                     ["attempts"] = attempts,
+                    ["trigger"] = trigger,
                 });
                 _post(new CdpLost(session.AppId));
             }
@@ -639,6 +1078,13 @@ internal sealed class BrowserHost : IAppHostPort
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _log.Error(Src, "cdpReconnectFailed", ex, new Dictionary<string, object?> { ["appId"] = session.AppId });
+        }
+        finally
+        {
+            if (reconnecting)
+            {
+                session.Reconnecting = false;
+            }
         }
     }
 
@@ -1039,7 +1485,7 @@ internal sealed class BrowserHost : IAppHostPort
         _post(new CommandFailed(command.CmdId, ErrorCode.Unexpected));
     }
 
-    private sealed class Session(string appId)
+    private sealed class Session(string appId, bool adopted = false)
     {
         private readonly CancellationTokenSource _stop = new();
         private readonly object _gate = new();
@@ -1047,8 +1493,54 @@ internal sealed class BrowserHost : IAppHostPort
         /// <summary>Bieżący kanał CDP; <c>null</c> przed połączeniem, w trakcie zerwania i po porażce setupu.</summary>
         private CdpSession? _cdp;
         private volatile bool _stopping;
+        private volatile string? _initScript;
 
         public string AppId { get; } = appId;
+
+        /// <summary>Sesja żywej przeglądarki przejętej przez sondę po restarcie (story 6.5), nie uruchomionej przez host.</summary>
+        public bool Adopted { get; } = adopted;
+
+        /// <summary>Okno adoptowanej przeglądarki (powtarzane przez Start, który ją ponownie używa); 0 dla startu.</summary>
+        public long Hwnd { get; init; }
+
+        /// <summary>Skrypt PageRuntime zainstalowanej sesji; <c>null</c> do końca startu albo udanego CDP po adopcji.</summary>
+        public string? InitScript => _initScript;
+
+        /// <summary>Start zakończony (albo CDP po adopcji gotowe): sesję można odświeżyć i ponownie użyć.</summary>
+        public bool Ready => _initScript is not null;
+
+        /// <summary>Trwa pętla reconnectu (po zamknięciu socketu albo odświeżeniu); ustawiana przed jej startem.</summary>
+        public volatile bool Reconnecting;
+
+        public void MarkReady(string initScript) => _initScript = initScript;
+
+        /// <summary>Sesja ma bieżący kanał CDP i nie jest zamykana.</summary>
+        public bool HasChannel
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return !_stopping && _cdp is not null;
+                }
+            }
+        }
+
+        /// <summary>Zdejmuje i zwraca bieżący kanał (atomowo); <c>null</c>, gdy go nie ma albo sesja jest zamykana.</summary>
+        public CdpSession? DetachCurrent()
+        {
+            lock (_gate)
+            {
+                if (_stopping)
+                {
+                    return null;
+                }
+
+                var cdp = _cdp;
+                _cdp = null;
+                return cdp;
+            }
+        }
 
         public volatile IBrowserProcess? Process;
 

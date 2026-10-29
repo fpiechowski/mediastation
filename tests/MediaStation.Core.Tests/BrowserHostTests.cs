@@ -15,6 +15,8 @@ namespace MediaStation.Core.Tests;
 /// metody CDP bez <c>Runtime.enable</c>, <c>hello</c> i odrzucane komunikaty strony, binding po nawigacji głównej
 /// ramki, termin CDP na <see cref="FakeTimeProvider"/>, porażki startu i Stop. Story 6.3: reconnect do tego samego
 /// celu z backoffem, termin <c>cdpReconnectTimeout</c>, <see cref="CdpLost"/> i Home na prawdziwym Orchestratorze.
+/// Story 6.5: adopcja żywego korzenia przez sondę (bez drugiego procesu), CDP po adopcji albo <see cref="CdpLost"/>,
+/// Start w trakcie sondy, odświeżenie sesji po wybudzeniu i spóźnione fakty na prawdziwym Orchestratorze.
 /// </summary>
 public class BrowserHostTests
 {
@@ -549,15 +551,20 @@ public class BrowserHostTests
     }
 
     [Fact]
-    public void Probe_and_renew_are_silent()
+    public async Task Probe_and_renew_without_any_process_are_silent()
     {
         using var h = new Harness();
 
         h.Host.Probe(new ProbeExisting(1, AppId));
         h.Host.Renew(new RenewSession(2, AppId));
+        var probe = await h.WaitLog("probeExisting");
+        var renew = await h.WaitLog("renewSession");
 
+        Assert.Equal("notRunning", probe.Data!["outcome"]);
+        Assert.Equal("noSession", renew.Data!["outcome"]);
         Assert.Empty(h.Posted);
         Assert.Empty(h.Launcher.Starts);
+        Assert.Equal(0, h.ConnectCalls);
     }
 
     [Fact]
@@ -1930,6 +1937,850 @@ public class BrowserHostTests
         Assert.True(h.Process.HasExited);
     }
 
+    // ── Story 6.5: ProbeExisting i RenewSession ───────────────────────────────
+
+    /// <summary>Jedyne wywołania CDP po adopcji i na odświeżonej albo odzyskanej sesji.</summary>
+    private static readonly string[] InstallSetup = ["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument"];
+
+    private const string HelloPayload = """{"v":1,"type":"hello","id":null,"payload":{"service":"netflix","driverVersion":"0.0.0","webdriver":false}}""";
+
+    private const string MainFrameNavigated = """{"method":"Page.frameNavigated","params":{"frame":{"id":"main","url":"https://www.netflix.com/browse"}}}""";
+
+    private static readonly AppWindowAttached OrphanAttached = new(AppId, Harness.OrphanHwnd, Harness.OrphanPid);
+
+    /// <summary>Sonda z osieroconym korzeniem (profil i port aplikacji, okno); czeka na wpis końca sondy.</summary>
+    private static async Task<FakeProcess> Adopt(Harness h)
+    {
+        var orphan = h.AddOrphan();
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        await h.WaitLog("probeExisting");
+        return orphan;
+    }
+
+    [Fact]
+    public async Task Probe_adopts_the_live_root_without_a_launch_and_installs_only_binding_page_enable_and_script()
+    {
+        using var h = new Harness();
+        // Proces pomocniczy z oknem przed korzeniem: `--type=` wyklucza go mimo okna.
+        h.AddOrphan(Harness.OrphanPid - 1, Harness.BrowserLine() + " --type=renderer");
+        h.AddOrphan();
+
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        var probe = await h.WaitLog("probeExisting");
+
+        Assert.Equal("adopted", probe.Data!["outcome"]);
+        Assert.Equal(Harness.OrphanPid, probe.Data["rootPid"]);
+        Assert.Equal([OrphanAttached], h.Posted);
+        Assert.Equal(InstallSetup, h.Transport.Methods());
+        Assert.Equal("__msBridge", h.Transport.Sent[0].GetProperty("params").GetProperty("name").GetString());
+        Assert.StartsWith("((config) => {}", h.Transport.Sent[2].GetProperty("params").GetProperty("source").GetString(), StringComparison.Ordinal);
+        Assert.Equal(9222, h.ConnectedPort);
+        Assert.Equal([Harness.OrphanPid], h.Opened);
+
+        // Bez drugiego procesu i bez kontroli startu albo odczytu wersji (AD-13: „nie przy adopcji”).
+        Assert.Empty(h.Launcher.Starts);
+        Assert.Empty(h.ProfileChecks);
+        Assert.Empty(h.PortChecks);
+        Assert.Empty(h.VersionReads);
+
+        var adopted = Assert.Single(h.Log.Entries, e => e.Msg == "appAdopted");
+        Assert.Equal(LogLevel.Info, adopted.Level);
+        Assert.Equal(AppId, adopted.Data!["appId"]);
+        Assert.Equal(Harness.OrphanPid, adopted.Data["rootPid"]);
+        Assert.Equal(Harness.OrphanHwnd, adopted.Data["hwnd"]);
+        Assert.Equal("Chrome_WidgetWin_1", adopted.Data["class"]);
+        var connected = Assert.Single(h.Log.Entries, e => e.Msg == "cdpConnected");
+        Assert.Equal(true, connected.Data!["adopted"]);
+        Assert.Equal(9222, connected.Data["cdpPort"]);
+        var messages = h.Log.Entries.Select(e => e.Msg).ToList();
+        Assert.True(messages.IndexOf("appAdopted") < messages.IndexOf("cdpConnected"));
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "appLaunch" or "browserVersion" or "appWindowAttached");
+        Assert.DoesNotContain(h.Log.Entries, e => e.Level is LogLevel.Warn or LogLevel.Error);
+
+        // Most działa jak po starcie: binding po nawigacji głównej ramki i hello strony.
+        h.Transport.Push(MainFrameNavigated);
+        h.Transport.PushBinding("__msBridge", HelloPayload);
+        await h.WaitLog("pageHello");
+        await Eventually(() => h.Transport.Methods().Length == 4);
+        Assert.Equal("Runtime.addBinding", h.Transport.Methods()[3]);
+    }
+
+    [Theory]
+    [InlineData("none", "notRunning")]
+    [InlineData("helperOnly", "notRunning")]
+    [InlineData("siblingProfile", "notRunning")]
+    [InlineData("otherProfile", "notRunning")]
+    [InlineData("rootGone", "notRunning")]
+    [InlineData("rootWithoutWindow", "noWindow")]
+    public async Task Probe_without_an_adoptable_root_is_silent_and_never_retried(string scenario, string outcome)
+    {
+        using var h = new Harness();
+        switch (scenario)
+        {
+            case "helperOnly":
+                h.AddOrphan(commandLine: Harness.BrowserLine() + " --type=gpu-process");
+                break;
+            case "siblingProfile":
+                h.AddOrphan(commandLine: Harness.BrowserLine(profileDir: ProfileDir + "2"));
+                break;
+            case "otherProfile":
+                h.AddCommandLine(Harness.OrphanPid, Harness.BrowserLine(profileDir: Path.Combine(ProfilesDir, "other")));
+                break;
+            case "rootGone":
+                h.AddOrphan().Exit(0);
+                break;
+            case "rootWithoutWindow":
+                h.AddOrphan(window: false);
+                break;
+        }
+
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        var probe = await h.WaitLog("probeExisting");
+        h.Time.Advance(TimeSpan.FromMinutes(1));
+        await Task.Delay(100, Ct);
+
+        Assert.Equal(LogLevel.Info, probe.Level);
+        Assert.Equal(outcome, probe.Data!["outcome"]);
+        Assert.False(probe.Data.ContainsKey("rootPid"));
+        Assert.Empty(h.Posted);
+        Assert.Empty(h.Launcher.Starts);
+        Assert.Equal(0, h.ConnectCalls);
+        Assert.Equal(1, h.CommandLineScans);
+        Assert.Single(h.Log.Entries, e => e.Msg == "probeExisting");
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "appAdopted" || e.Level is LogLevel.Warn or LogLevel.Error);
+        Assert.All(h.Orphans.Values, orphan => Assert.Equal(0, orphan.KillCalls + orphan.CloseCalls));
+    }
+
+    [Fact]
+    public async Task Failing_command_line_scan_logs_probe_failed_then_probe_existing_failed_and_posts_nothing()
+    {
+        using var h = new Harness();
+        h.AddOrphan();
+        h.CommandLinesThrow = new InvalidOperationException("WMI down");
+
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        var probe = await h.WaitLog("probeExisting");
+
+        Assert.Equal("failed", probe.Data!["outcome"]);
+        Assert.False(probe.Data.ContainsKey("rootPid"));
+        var messages = h.Log.Entries.Select(e => e.Msg).ToList();
+        Assert.True(messages.IndexOf("browserProbeFailed") >= 0 && messages.IndexOf("browserProbeFailed") < messages.IndexOf("probeExisting"));
+        Assert.Equal(LogLevel.Error, h.Log.Entries.Single(e => e.Msg == "browserProbeFailed").Level);
+        Assert.Empty(h.Posted);
+        Assert.Equal(0, h.ConnectCalls);
+        Assert.Empty(h.Launcher.Starts);
+    }
+
+    [Fact]
+    public async Task Probe_takes_the_first_root_that_has_a_window()
+    {
+        using var h = new Harness();
+        h.AddOrphan(Harness.OrphanPid - 5, window: false);
+        h.AddOrphan();
+
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        var probe = await h.WaitLog("probeExisting");
+
+        Assert.Equal("adopted", probe.Data!["outcome"]);
+        Assert.Equal(Harness.OrphanPid, probe.Data["rootPid"]);
+        Assert.Equal([OrphanAttached], h.Posted);
+        Assert.Equal([Harness.OrphanPid], h.Opened);
+    }
+
+    [Fact]
+    public async Task Probe_stands_down_when_the_app_already_has_a_session()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+        h.AddOrphan();
+
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        var probe = await h.WaitLog("probeExisting");
+
+        Assert.Equal("sessionExists", probe.Data!["outcome"]);
+        Assert.Equal(2, h.Posted.Count);
+        Assert.Empty(h.Opened);
+        Assert.Equal(1, h.ConnectCalls);
+    }
+
+    [Fact]
+    public async Task Probe_of_an_unknown_app_logs_unknown_app()
+    {
+        using var h = new Harness();
+        h.AddOrphan();
+
+        h.Host.Probe(new ProbeExisting(1, "plex"));
+        var probe = await h.WaitLog("probeExisting");
+
+        Assert.Equal("unknownApp", probe.Data!["outcome"]);
+        Assert.Equal("plex", probe.Data["appId"]);
+        Assert.Empty(h.Posted);
+        Assert.Equal(0, h.CommandLineScans);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(92220)]
+    [InlineData(9223)]
+    public async Task Adopted_root_without_the_app_debugging_port_is_cdp_lost_and_stop_still_kills_its_tree(int? port)
+    {
+        using var h = new Harness();
+        var orphan = h.AddOrphan(commandLine: Harness.BrowserLine(port));
+        orphan.IgnoreClose = true;
+
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        var probe = await h.WaitLog("probeExisting");
+
+        Assert.Equal("adopted", probe.Data!["outcome"]);
+        Assert.Equal([OrphanAttached, new CdpLost(AppId)], h.Posted);
+        var warn = Assert.Single(h.Log.Entries, e => e.Msg == "cdpUnavailable");
+        Assert.Equal(LogLevel.Warn, warn.Level);
+        Assert.Equal(AppId, warn.Data!["appId"]);
+        Assert.Equal("portMismatch", warn.Data["reason"]);
+        Assert.Equal(true, warn.Data["adopted"]);
+        Assert.Equal(9222, warn.Data["cdpPort"]);
+        Assert.Equal(0, h.ConnectCalls);
+        Assert.False(orphan.HasExited);
+        Assert.Equal(0, orphan.KillCalls);
+
+        // Sesja zostaje zarejestrowana: Close z AppMenu zamyka okno (3 s), potem zabija drzewo sieroty.
+        h.Host.Stop(new StopApp(8, AppId));
+        await Eventually(() => orphan.TimedWaits == 1);
+        h.Time.Advance(TimeSpan.FromSeconds(3));
+        await h.WaitPosted(4);
+
+        Assert.Equal([new ProcessExited(AppId), new CommandCompleted(8)], h.Posted.Skip(2));
+        Assert.Equal(1, orphan.CloseCalls);
+        Assert.Equal(1, orphan.KillCalls);
+        Assert.True(orphan.HasExited);
+        Assert.Empty(h.Launcher.Starts);
+    }
+
+    [Fact]
+    public async Task Adopted_cdp_that_never_answers_is_cdp_lost_exactly_at_the_connect_deadline()
+    {
+        using var h = new Harness(connect: async (_, token) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return null;
+        });
+        var orphan = h.AddOrphan();
+
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        await h.WaitPosted(1);
+        await Eventually(() => h.ConnectCalls == 1);
+        Assert.Equal([OrphanAttached], h.Posted);
+
+        h.Time.Advance(TimeSpan.FromMilliseconds(14_900));
+        await Task.Delay(100, Ct);
+        Assert.Single(h.Posted);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "cdpUnavailable" or "probeExisting");
+
+        h.Time.Advance(TimeSpan.FromMilliseconds(100));
+        await h.WaitPosted(2);
+        var probe = await h.WaitLog("probeExisting");
+
+        Assert.Equal(new CdpLost(AppId), h.Posted[1]);
+        var warn = Assert.Single(h.Log.Entries, e => e.Msg == "cdpUnavailable");
+        Assert.Equal("notConnected", warn.Data!["reason"]);
+        Assert.Equal(true, warn.Data["adopted"]);
+        Assert.Equal("adopted", probe.Data!["outcome"]);
+        Assert.False(orphan.HasExited);
+
+        h.Time.Advance(TimeSpan.FromSeconds(60));
+        await Task.Delay(100, Ct);
+        Assert.Equal(2, h.Posted.Count);
+        Assert.Equal(0, orphan.KillCalls);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Adopted_cdp_cut_by_stop_or_process_exit_posts_no_cdp_lost(bool stop)
+    {
+        using var h = new Harness(connect: async (_, token) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return null;
+        });
+        var orphan = h.AddOrphan();
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        await h.WaitPosted(1);
+        await Eventually(() => h.ConnectCalls == 1);
+
+        if (stop)
+        {
+            h.Host.Stop(new StopApp(8, AppId));
+        }
+        else
+        {
+            orphan.Exit(0);
+        }
+
+        await h.WaitLog("probeExisting");
+        h.Time.Advance(TimeSpan.FromSeconds(60));
+        await Task.Delay(100, Ct);
+
+        IOrchestratorMessage[] expected = stop
+            ? [OrphanAttached, new ProcessExited(AppId), new CommandCompleted(8)]
+            : [OrphanAttached, new ProcessExited(AppId)];
+        Assert.Equal(expected, h.Posted);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "cdpUnavailable" or "cdpLost");
+        var abandoned = Assert.Single(h.Log.Entries, e => e.Msg == "cdpAbandoned");
+        Assert.Equal(true, abandoned.Data!["adopted"]);
+    }
+
+    [Fact]
+    public async Task Adopted_setup_error_is_cdp_unavailable_and_cdp_lost()
+    {
+        using var h = new Harness();
+        h.Transport.FailMethod = "Page.enable";
+
+        await Adopt(h);
+
+        Assert.Equal([OrphanAttached, new CdpLost(AppId)], h.Posted);
+        var warn = Assert.Single(h.Log.Entries, e => e.Msg == "cdpUnavailable");
+        Assert.Equal("setupFailed", warn.Data!["reason"]);
+        Assert.Equal(true, warn.Data["adopted"]);
+        Assert.Equal(["Runtime.addBinding", "Page.enable"], h.Transport.Methods());
+        Assert.True(h.Transport.Disposed);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "cdpConnected");
+    }
+
+    [Theory]
+    [InlineData("runtime")]
+    [InlineData("manifest")]
+    public async Task Missing_page_asset_on_adoption_is_cdp_lost_without_connecting(string missing)
+    {
+        using var h = new Harness();
+        var path = missing == "runtime" ? RuntimePath : ManifestPath;
+        h.Files.TryRemove(path, out _);
+
+        await Adopt(h);
+
+        Assert.Equal([OrphanAttached, new CdpLost(AppId)], h.Posted);
+        var warn = Assert.Single(h.Log.Entries, e => e.Msg == "cdpUnavailable");
+        Assert.Equal("pageAssetMissing", warn.Data!["reason"]);
+        Assert.Equal(path, warn.Data["file"]);
+        Assert.Equal(0, h.ConnectCalls);
+    }
+
+    [Fact]
+    public async Task Adopted_session_reconnects_after_a_drop_to_the_same_endpoint()
+    {
+        using var h = new Harness();
+        var second = new FakeTransport { Endpoint = OtherTarget };
+        h.Reconnects.Enqueue(second);
+        await Adopt(h);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        var reconnected = await h.WaitLog("cdpReconnected");
+
+        Assert.Equal("cdpClosed", reconnected.Data!["trigger"]);
+        Assert.Equal(1, reconnected.Data["attempts"]);
+        Assert.Equal([h.Transport.Endpoint], h.ReconnectEndpoints);
+        Assert.Equal(InstallSetup, second.Methods());
+        Assert.Equal([OrphanAttached], h.Posted);
+    }
+
+    [Fact]
+    public async Task Adopted_session_drop_without_recovery_is_cdp_lost_at_30_seconds()
+    {
+        using var h = new Harness();
+        var orphan = await Adopt(h);
+
+        await Drop(h, h.Transport);
+        h.Time.Advance(TimeSpan.FromMilliseconds(29_900));
+        await Task.Delay(100, Ct);
+        Assert.Single(h.Posted);
+
+        h.Time.Advance(TimeSpan.FromMilliseconds(100));
+        await h.WaitPosted(2);
+
+        Assert.Equal(new CdpLost(AppId), h.Posted[1]);
+        var lost = await h.WaitLog("cdpLost");
+        Assert.Equal("cdpClosed", lost.Data!["trigger"]);
+        Assert.False(orphan.HasExited);
+    }
+
+    [Fact]
+    public async Task Stop_of_an_adopted_session_closes_the_window_kills_the_tree_and_reports_exit()
+    {
+        using var h = new Harness();
+        var orphan = h.AddOrphan();
+        orphan.IgnoreClose = true;
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        await h.WaitLog("probeExisting");
+
+        h.Host.Stop(new StopApp(8, AppId));
+        await Eventually(() => orphan.TimedWaits == 1);
+        h.Time.Advance(TimeSpan.FromSeconds(3));
+        await h.WaitPosted(3);
+        await Task.Delay(100, Ct);
+
+        Assert.Equal([OrphanAttached, new ProcessExited(AppId), new CommandCompleted(8)], h.Posted);
+        Assert.Equal(1, orphan.CloseCalls);
+        Assert.Equal(1, orphan.KillCalls);
+        Assert.True(orphan.HasExited);
+        Assert.True(h.Transport.Disposed);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "cdpClosed" or "processExited");
+    }
+
+    [Fact]
+    public async Task Start_during_the_probe_waits_for_it_and_reuses_the_adopted_session_without_a_launch()
+    {
+        var connect = new TaskCompletionSource<ICdpTransport?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var h = new Harness(connect: (_, token) => connect.Task.WaitAsync(token));
+        h.AddOrphan();
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        await h.WaitPosted(1);
+        await Eventually(() => h.ConnectCalls == 1);
+
+        h.Host.Start(new StartApp(7, AppId));
+        await Task.Delay(200, Ct);
+        Assert.Equal([OrphanAttached], h.Posted);
+
+        connect.SetResult(h.Transport);
+        await h.WaitPosted(3);
+        await Task.Delay(100, Ct);
+
+        Assert.Equal([OrphanAttached, OrphanAttached, new CommandCompleted(7)], h.Posted);
+        Assert.Empty(h.Launcher.Starts);
+        Assert.Empty(h.ProfileChecks);
+        Assert.Empty(h.PortChecks);
+        Assert.Equal(InstallSetup, h.Transport.Methods());
+        var reused = Assert.Single(h.Log.Entries, e => e.Msg == "startReusedAdopted");
+        Assert.Equal(AppId, reused.Data!["appId"]);
+        Assert.Equal(Harness.OrphanPid, reused.Data["rootPid"]);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "appLaunch" or "browserStartFailed");
+    }
+
+    [Fact]
+    public async Task Start_after_an_adoption_without_cdp_stops_the_orphan_and_launches_as_before()
+    {
+        using var h = new Harness();
+        var orphan = h.AddOrphan(commandLine: Harness.BrowserLine(cdpPort: null));
+        h.Host.Probe(new ProbeExisting(1, AppId));
+        await h.WaitLog("probeExisting");
+
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(4);
+
+        Assert.Equal(
+            [OrphanAttached, new CdpLost(AppId), new AppWindowAttached(AppId, 0x1234, 4242), new CommandCompleted(7)],
+            h.Posted);
+        Assert.True(orphan.HasExited);
+        Assert.Equal(1, orphan.CloseCalls);
+        Assert.Single(h.Launcher.Starts);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "startReusedAdopted" or "processExited");
+    }
+
+    [Fact]
+    public async Task Start_after_an_adopted_session_lost_cdp_stops_the_orphan_and_launches_instead_of_reusing()
+    {
+        // Pierwsze połączenie (adopcja) dostaje Harness.Transport, start po CdpLost świeży transport.
+        var fresh = new FakeTransport();
+        Harness? harness = null;
+        var connects = 0;
+        using var h = harness = new Harness(connect: (_, _) =>
+            Task.FromResult<ICdpTransport?>(Interlocked.Increment(ref connects) == 1 ? harness!.Transport : fresh));
+        var orphan = await Adopt(h);
+        await Drop(h, h.Transport);
+        h.Time.Advance(TimeSpan.FromSeconds(30));
+        await h.WaitPosted(2);
+        Assert.Equal(new CdpLost(AppId), h.Posted[1]);
+
+        // Sesja jest gotowa i ma żywy korzeń, ale nie ma kanału CDP: Start idzie ścieżką 6.4.
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(4);
+
+        Assert.Equal([new AppWindowAttached(AppId, 0x1234, 4242), new CommandCompleted(7)], h.Posted.Skip(2));
+        Assert.True(orphan.HasExited);
+        Assert.Equal(1, orphan.CloseCalls);
+        Assert.Single(h.Launcher.Starts);
+        Assert.Equal(StartSetup, fresh.Methods());
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "startReusedAdopted");
+        fresh.Dispose();
+    }
+
+    [Fact]
+    public async Task Second_renew_after_a_successful_renew_renews_again()
+    {
+        using var h = new Harness();
+        var second = new FakeTransport();
+        var third = new FakeTransport { Endpoint = OtherTarget };
+        h.Reconnects.Enqueue(second);
+        h.Reconnects.Enqueue(third);
+        await Adopt(h);
+
+        var firstAt = h.Time.GetUtcNow();
+        h.Host.Renew(new RenewSession(2, AppId));
+        await h.WaitLog("renewSession");
+        await StepToAttempt(h, firstAt, 250, 1);
+        await Eventually(() => h.Log.Entries.Count(e => e.Msg == "cdpReconnected") == 1);
+
+        await AssertRenewsAgain(h, second, third, attemptsSoFar: 1);
+    }
+
+    [Fact]
+    public async Task Renew_after_a_recovered_drop_renews_again()
+    {
+        using var h = new Harness();
+        var second = new FakeTransport();
+        var third = new FakeTransport { Endpoint = OtherTarget };
+        h.Reconnects.Enqueue(second);
+        h.Reconnects.Enqueue(third);
+        await Adopt(h);
+
+        var closedAt = await Drop(h, h.Transport);
+        await StepToAttempt(h, closedAt, 250, 1);
+        Assert.Equal("cdpClosed", (await h.WaitLog("cdpReconnected")).Data!["trigger"]);
+
+        await AssertRenewsAgain(h, second, third, attemptsSoFar: 1);
+    }
+
+    /// <summary>Po udanym reconnekcie flaga <c>Reconnecting</c> jest zdjęta: kolejne odświeżenie zamyka bieżący kanał i łączy trzeci.</summary>
+    private static async Task AssertRenewsAgain(Harness h, FakeTransport current, FakeTransport next, int attemptsSoFar)
+    {
+        var renewsBefore = h.Log.Entries.Count(e => e.Msg == "renewSession");
+        var reconnectsBefore = h.Log.Entries.Count(e => e.Msg == "cdpReconnected");
+        var renewedAt = h.Time.GetUtcNow();
+
+        h.Host.Renew(new RenewSession(3, AppId));
+        await Eventually(() => h.Log.Entries.Count(e => e.Msg == "renewSession") == renewsBefore + 1);
+        Assert.Equal("renewing", h.Log.Entries.Last(e => e.Msg == "renewSession").Data!["outcome"]);
+        Assert.True(current.Disposed);
+
+        await StepToAttempt(h, renewedAt, 250, attemptsSoFar + 1);
+        await Eventually(() => h.Log.Entries.Count(e => e.Msg == "cdpReconnected") == reconnectsBefore + 1);
+
+        Assert.Equal("renewSession", h.Log.Entries.Last(e => e.Msg == "cdpReconnected").Data!["trigger"]);
+        Assert.Equal(InstallSetup, next.Methods());
+        Assert.All(h.ReconnectEndpoints, endpoint => Assert.Equal(h.Transport.Endpoint, endpoint));
+        Assert.Equal([OrphanAttached], h.Posted);
+    }
+
+    [Fact]
+    public async Task Renew_reconnects_the_adopted_session_to_its_endpoint_on_the_reconnect_schedule()
+    {
+        using var h = new Harness();
+        var second = new FakeTransport { Endpoint = OtherTarget };
+        h.Reconnects.Enqueue(null);
+        h.Reconnects.Enqueue(second);
+        await Adopt(h);
+
+        var renewedAt = h.Time.GetUtcNow();
+        h.Host.Renew(new RenewSession(2, AppId));
+        var renew = await h.WaitLog("renewSession");
+        Assert.Equal(LogLevel.Info, renew.Level);
+        Assert.Equal("renewing", renew.Data!["outcome"]);
+        Assert.True(h.Transport.Disposed);
+
+        await StepToAttempt(h, renewedAt, 250, 1);
+        await StepToAttempt(h, renewedAt, 750, 2);
+        var reconnected = await h.WaitLog("cdpReconnected");
+
+        Assert.Equal("renewSession", reconnected.Data!["trigger"]);
+        Assert.Equal(2, reconnected.Data["attempts"]);
+        Assert.Equal(750L, reconnected.Data["elapsedMs"]);
+        Assert.Equal([renewedAt.AddMilliseconds(250), renewedAt.AddMilliseconds(750)], h.ReconnectAt);
+        Assert.All(h.ReconnectEndpoints, endpoint => Assert.Equal(h.Transport.Endpoint, endpoint));
+        Assert.Equal(InstallSetup, second.Methods());
+        Assert.Equal(InstallSetup, h.Transport.Methods());
+        Assert.Equal([OrphanAttached], h.Posted);
+
+        // Zamknięty stary kanał nie zaczyna drugiej pętli (Detach zwraca dla niego false).
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "cdpClosed");
+        Assert.Equal(2, h.ReconnectAttempts);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Level is LogLevel.Warn or LogLevel.Error);
+
+        second.Push(MainFrameNavigated);
+        second.PushBinding("__msBridge", HelloPayload);
+        await h.WaitLog("pageHello");
+        await Eventually(() => second.Methods().Length == 4);
+    }
+
+    [Fact]
+    public async Task Renew_of_a_started_session_reconnects_with_the_renew_trigger()
+    {
+        using var h = new Harness();
+        var second = new FakeTransport();
+        h.Reconnects.Enqueue(second);
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var renewedAt = h.Time.GetUtcNow();
+        h.Host.Renew(new RenewSession(2, AppId));
+        Assert.Equal("renewing", (await h.WaitLog("renewSession")).Data!["outcome"]);
+        await StepToAttempt(h, renewedAt, 250, 1);
+        var reconnected = await h.WaitLog("cdpReconnected");
+
+        Assert.Equal("renewSession", reconnected.Data!["trigger"]);
+        Assert.Equal(StartSetup, h.Transport.Methods());
+        Assert.Equal(InstallSetup, second.Methods());
+        Assert.Equal(2, h.Posted.Count);
+    }
+
+    [Fact]
+    public async Task Renew_that_never_reconnects_is_cdp_lost_exactly_at_the_reconnect_timeout()
+    {
+        using var h = new Harness();
+        await Adopt(h);
+
+        var renewedAt = h.Time.GetUtcNow();
+        h.Host.Renew(new RenewSession(2, AppId));
+        await h.WaitLog("renewSession");
+        var schedule = NeverBackScheduleMs;
+        for (var i = 0; i < schedule.Length; i++)
+        {
+            await StepToAttempt(h, renewedAt, schedule[i], i + 1);
+        }
+
+        Assert.Equal(schedule.Select(ms => renewedAt.AddMilliseconds(ms)), h.ReconnectAt);
+        h.Time.Advance(renewedAt.AddMilliseconds(29_900) - h.Time.GetUtcNow());
+        await Task.Delay(100, Ct);
+        Assert.Single(h.Posted);
+
+        h.Time.Advance(TimeSpan.FromMilliseconds(100));
+        await h.WaitPosted(2);
+
+        Assert.Equal(new CdpLost(AppId), h.Posted[1]);
+        var lost = await h.WaitLog("cdpLost");
+        Assert.Equal("renewSession", lost.Data!["trigger"]);
+        Assert.Equal(17, lost.Data["attempts"]);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "cdpReconnected" or "cdpClosed");
+    }
+
+    [Fact]
+    public async Task Renew_while_the_start_is_in_progress_is_not_ready()
+    {
+        using var h = new Harness(connect: async (_, token) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return null;
+        });
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(1);
+        await Eventually(() => h.ConnectCalls == 1);
+
+        await AssertRenewSkipped(h, "notReady", posted: 1);
+    }
+
+    [Fact]
+    public async Task Renew_during_a_reconnect_is_skipped_and_starts_no_second_loop()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+        var closedAt = await Drop(h, h.Transport);
+
+        await AssertRenewSkipped(h, "reconnecting", posted: 2);
+        await StepToAttempt(h, closedAt, 250, 1);
+        await StepToAttempt(h, closedAt, 750, 2);
+    }
+
+    [Fact]
+    public async Task Renew_after_cdp_lost_has_no_channel_and_after_stop_no_session()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+        await Drop(h, h.Transport);
+        h.Time.Advance(TimeSpan.FromSeconds(30));
+        await h.WaitPosted(3);
+        await h.WaitLog("cdpLost");
+
+        await AssertRenewSkipped(h, "noCdp", posted: 3);
+
+        h.Host.Stop(new StopApp(8, AppId));
+        await h.WaitPosted(5);
+        h.Host.Renew(new RenewSession(3, AppId));
+        await Eventually(() => h.Log.Entries.Count(e => e.Msg == "renewSession") == 2);
+        Assert.Equal("noSession", h.Log.Entries.Last(e => e.Msg == "renewSession").Data!["outcome"]);
+        Assert.Equal(5, h.Posted.Count);
+    }
+
+    [Fact]
+    public async Task Stale_traffic_from_the_channel_replaced_by_renew_is_ignored()
+    {
+        using var h = new Harness();
+        // Zwolniony stary kanał dalej dostarcza zdarzenia (wiadomość w drodze w chwili odświeżenia).
+        h.Transport.DeliverAfterDispose = true;
+        var second = new FakeTransport();
+        h.Reconnects.Enqueue(second);
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        var renewedAt = h.Time.GetUtcNow();
+        h.Host.Renew(new RenewSession(2, AppId));
+        await h.WaitLog("renewSession");
+        Assert.True(h.Transport.Disposed);
+        await StepToAttempt(h, renewedAt, 250, 1);
+        await h.WaitLog("cdpReconnected");
+
+        var delivered = h.Transport.Delivered;
+        h.Transport.Push(MainFrameNavigated);
+        h.Transport.PushBinding("__msBridge", HelloPayload);
+        await Eventually(() => h.Transport.Delivered >= delivered + 2);
+        await Task.Delay(200, Ct);
+
+        Assert.Equal(StartSetup, h.Transport.Methods());
+        Assert.Equal(InstallSetup, second.Methods());
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "pageHello" or "pageMessageRejected" or "bindingRefreshFailed" or "cdpClosed");
+        Assert.Equal(2, h.Posted.Count);
+        h.Transport.Close();
+        await Task.Delay(100, Ct);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "cdpClosed");
+    }
+
+    /// <summary>Odświeżenie pominięte z danym powodem: nic nie wysłane, nic nie zgłoszone, żadnej nowej próby.</summary>
+    private static async Task AssertRenewSkipped(Harness h, string outcome, int posted)
+    {
+        var methods = h.Transport.Methods();
+        var attempts = h.ReconnectAttempts;
+        var before = h.Log.Entries.Count(e => e.Msg == "renewSession");
+
+        h.Host.Renew(new RenewSession(2, AppId));
+        await Eventually(() => h.Log.Entries.Count(e => e.Msg == "renewSession") == before + 1);
+        await Task.Delay(100, Ct);
+
+        var renew = h.Log.Entries.Last(e => e.Msg == "renewSession");
+        Assert.Equal(LogLevel.Info, renew.Level);
+        Assert.Equal(outcome, renew.Data!["outcome"]);
+        Assert.Equal(methods, h.Transport.Methods());
+        Assert.Equal(attempts, h.ReconnectAttempts);
+        Assert.Equal(posted, h.Posted.Count);
+    }
+
+    // ── Story 6.5: spóźnione fakty hosta na prawdziwym Orchestratorze ────────
+
+    [Fact]
+    public async Task Probe_adoption_on_the_orchestrator_is_background_with_mute_minimize_and_shell()
+    {
+        var orchestrator = OrchestratorTestSupport.Create();
+        var probe = orchestrator.Handle(new OrchestratorStarted()).Commands.OfType<ProbeExisting>().Single(p => p.AppId == AppId);
+        using var h = new Harness();
+        h.AddOrphan();
+        h.Host.Probe(probe);
+        await h.WaitLog("probeExisting");
+
+        var adopted = orchestrator.Handle(Assert.Single(h.Posted));
+
+        Assert.Equal(AppLifecycleState.Background, OrchestratorTestSupport.StateOf(adopted.Snapshot!, AppId));
+        var commands = adopted.Commands.ToList();
+        var mute = commands.FindIndex(c => c is MuteProcessTree { RootPid: Harness.OrphanPid });
+        var minimize = commands.FindIndex(c => c is MinimizeWindow m && m.Hwnd == Harness.OrphanHwnd);
+        var shell = commands.FindIndex(c => c is ShowShell);
+        Assert.True(mute >= 0 && mute < minimize && minimize < shell);
+        Assert.DoesNotContain(commands, c => c is ActivateWindow);
+    }
+
+    [Fact]
+    public async Task Adoption_after_another_app_was_launched_mutes_and_minimizes_without_showing_the_shell()
+    {
+        var (orchestrator, _) = OrchestratorTestSupport.Started();
+        Assert.Contains(orchestrator.Handle(new LaunchApp("plex")).Commands, c => c is StartApp);
+        using var h = new Harness();
+        await Adopt(h);
+
+        var adopted = orchestrator.Handle(Assert.Single(h.Posted));
+
+        Assert.Equal(AppLifecycleState.Background, OrchestratorTestSupport.StateOf(adopted.Snapshot!, AppId));
+        Assert.Contains(adopted.Commands, c => c is MuteProcessTree { RootPid: Harness.OrphanPid });
+        Assert.Contains(adopted.Commands, c => c is MinimizeWindow m && m.Hwnd == Harness.OrphanHwnd);
+        Assert.DoesNotContain(adopted.Commands, c => c is ShowShell or ActivateWindow);
+    }
+
+    [Fact]
+    public async Task Adoption_after_a_wake_is_background_without_activation()
+    {
+        var (orchestrator, _) = OrchestratorTestSupport.Started();
+        orchestrator.Handle(new SystemResumed("PBT_APMRESUMEAUTOMATIC"));
+        using var h = new Harness();
+        await Adopt(h);
+
+        var adopted = orchestrator.Handle(Assert.Single(h.Posted));
+
+        Assert.Equal(AppLifecycleState.Background, OrchestratorTestSupport.StateOf(adopted.Snapshot!, AppId));
+        Assert.Contains(adopted.Commands, c => c is MuteProcessTree);
+        Assert.DoesNotContain(adopted.Commands, c => c is ActivateWindow);
+    }
+
+    [Fact]
+    public async Task Start_during_the_probe_on_the_orchestrator_gives_one_foreground_with_the_adopted_window()
+    {
+        var orchestrator = OrchestratorTestSupport.Create();
+        var probe = orchestrator.Handle(new OrchestratorStarted()).Commands.OfType<ProbeExisting>().Single(p => p.AppId == AppId);
+        var connect = new TaskCompletionSource<ICdpTransport?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var h = new Harness(connect: (_, token) => connect.Task.WaitAsync(token));
+        h.AddOrphan();
+        h.Host.Probe(probe);
+        await h.WaitPosted(1);
+        await Eventually(() => h.ConnectCalls == 1);
+
+        // Kafelek wybrany, zanim Orchestrator zobaczył adopcję: StartApp idzie do hosta w trakcie sondy.
+        var start = Assert.Single(orchestrator.Handle(new LaunchApp(AppId)).Commands.OfType<StartApp>());
+        h.Host.Start(start);
+        connect.SetResult(h.Transport);
+        await h.WaitPosted(3);
+
+        var results = h.Posted.Select(orchestrator.Handle).ToList();
+
+        Assert.Equal([OrphanAttached, OrphanAttached, new CommandCompleted(start.CmdId)], h.Posted);
+        var activations = results.SelectMany(r => r.Commands).OfType<ActivateWindow>().ToList();
+        Assert.Equal(Harness.OrphanHwnd, Assert.Single(activations).Hwnd);
+        Assert.Equal(AppLifecycleState.Foreground, OrchestratorTestSupport.StateOf(results[0].Snapshot!, AppId));
+        Assert.Empty(results[1].Commands);
+        Assert.Null(results[1].Snapshot);
+        Assert.Empty(h.Launcher.Starts);
+    }
+
+    [Fact]
+    public async Task Wake_renews_the_adopted_session_and_a_later_cdp_lost_fails_the_tile()
+    {
+        var orchestrator = OrchestratorTestSupport.Create();
+        var probe = orchestrator.Handle(new OrchestratorStarted()).Commands.OfType<ProbeExisting>().Single(p => p.AppId == AppId);
+        using var h = new Harness();
+        h.AddOrphan();
+        h.Host.Probe(probe);
+        await h.WaitLog("probeExisting");
+        orchestrator.Handle(Assert.Single(h.Posted));
+
+        var resumed = orchestrator.Handle(new SystemResumed("PBT_APMRESUMEAUTOMATIC"));
+        var renew = Assert.Single(resumed.Commands.OfType<RenewSession>());
+        Assert.Equal(AppId, renew.AppId);
+        h.Host.Renew(renew);
+        Assert.Equal("renewing", (await h.WaitLog("renewSession")).Data!["outcome"]);
+
+        h.Time.Advance(TimeSpan.FromSeconds(30));
+        await h.WaitPosted(2);
+        var failed = orchestrator.Handle(Assert.IsType<CdpLost>(h.Posted[1]));
+
+        Assert.Equal(AppLifecycleState.Failed, OrchestratorTestSupport.StateOf(failed.Snapshot!, AppId));
+        Assert.Equal("renewSession", (await h.WaitLog("cdpLost")).Data!["trigger"]);
+    }
+
+    [Fact]
+    public async Task Starting_window_attached_after_home_gets_compensation_not_foreground()
+    {
+        var (orchestrator, _) = OrchestratorTestSupport.Started();
+        var start = Assert.Single(orchestrator.Handle(new LaunchApp(AppId)).Commands.OfType<StartApp>());
+        var home = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        Assert.Contains(home.Commands, c => c is ShowShell);
+        using var h = new Harness();
+
+        h.Host.Start(start);
+        await h.WaitPosted(2);
+        var attached = orchestrator.Handle(h.Posted[0]);
+
+        Assert.Equal(AppLifecycleState.Background, OrchestratorTestSupport.StateOf(attached.Snapshot!, AppId));
+        Assert.Contains(attached.Commands, c => c is MuteProcessTree { RootPid: 4242 });
+        Assert.Contains(attached.Commands, c => c is MinimizeWindow { Hwnd: 0x1234 });
+        Assert.DoesNotContain(attached.Commands, c => c is ActivateWindow);
+    }
+
     // ── Granice AD-1 w repo ───────────────────────────────────────────────────
 
     [Fact]
@@ -2012,7 +2863,11 @@ public class BrowserHostTests
         private readonly ConcurrentQueue<(string, bool)> _profileChecks = new();
         private readonly ConcurrentQueue<int> _portChecks = new();
         private readonly ConcurrentQueue<string> _versionReads = new();
+        private readonly ConcurrentQueue<KeyValuePair<int, string>> _commandLines = new();
+        private readonly ConcurrentDictionary<int, bool> _windowless = new();
+        private readonly ConcurrentQueue<int> _opened = new();
         private int _connectCalls;
+        private int _commandLineScans;
 
         public Harness(
             Func<BrowserKind, string?>? resolve = null,
@@ -2023,6 +2878,8 @@ public class BrowserHostTests
             Files[RuntimePath] = "(config) => {}";
             Files[ManifestPath] = ManifestJson;
             Launcher = new FakeLauncher(Process);
+            bool HasWindow(int pid) =>
+                Launcher.Processes.Any(p => p.Id == pid) || (Orphans.ContainsKey(pid) && !_windowless.ContainsKey(pid));
             Host = new BrowserHost(
                 Log,
                 _posted.Enqueue,
@@ -2034,8 +2891,8 @@ public class BrowserHostTests
                 TimeSpan.FromSeconds(30),
                 resolve ?? (_ => Exe),
                 Launcher,
-                // Każdy uruchomiony proces ma własne okno: 4242 → 0x1234, 4243 → 0x1235…
-                findWindow ?? (pid => Launcher.Processes.Any(p => p.Id == pid) ? Window with { Hwnd = Window.Hwnd + pid - Process.Id, Pid = pid } : null),
+                // Każdy uruchomiony (i osierocony z oknem) proces ma własne okno: 4242 → 0x1234, 4243 → 0x1235…
+                findWindow ?? (pid => HasWindow(pid) ? Window with { Hwnd = Window.Hwnd + pid - Process.Id, Pid = pid } : null),
                 (port, token) =>
                 {
                     Interlocked.Increment(ref _connectCalls);
@@ -2070,8 +2927,59 @@ public class BrowserHostTests
                     _portChecks.Enqueue(port);
                     return PortHeld;
                 },
+                () =>
+                {
+                    Interlocked.Increment(ref _commandLineScans);
+                    return CommandLinesThrow is { } thrown ? throw thrown : _commandLines.ToArray();
+                },
+                pid =>
+                {
+                    _opened.Enqueue(pid);
+                    return Orphans.TryGetValue(pid, out var orphan) && !orphan.HasExited ? orphan : null;
+                },
                 Time);
         }
+
+        /// <summary>PID korzenia przeglądarki, która przeżyła restart MediaStation (domyślnie: brak takich procesów).</summary>
+        public const int OrphanPid = 7000;
+
+        /// <summary>Okno osieroconego korzenia według reguły okien harnessu (0x1234 dla PID 4242); stała, bo pola statyczne obu klas odwołują się do siebie.</summary>
+        public const long OrphanHwnd = 0x1234 + OrphanPid - 4242;
+
+        /// <summary>Linia poleceń przeglądarki uruchomionej przez BrowserHost (AD-1) z danym portem CDP i profilem.</summary>
+        public static string BrowserLine(int? cdpPort = 9222, string? profileDir = null) =>
+            $"\"{Exe}\" \"--user-data-dir={profileDir ?? ProfileDir}\""
+            + (cdpPort is { } port ? $" --remote-debugging-port={port}" : string.Empty)
+            + " --no-first-run --no-default-browser-check --autoplay-policy=no-user-gesture-required --kiosk about:blank";
+
+        /// <summary>Żywe procesy widoczne dla seamu otwierania procesu (adopcja).</summary>
+        public ConcurrentDictionary<int, FakeProcess> Orphans { get; } = new();
+
+        /// <summary>Wyjątek rzucany przez seam linii poleceń (padnięte WMI).</summary>
+        public volatile Exception? CommandLinesThrow;
+
+        /// <summary>Liczba odczytów linii poleceń (sonda nie jest ponawiana).</summary>
+        public int CommandLineScans => Volatile.Read(ref _commandLineScans);
+
+        public IReadOnlyList<int> Opened => _opened.ToArray();
+
+        /// <summary>Dodaje żywy proces z linią poleceń (domyślnie korzeń z profilem i portem aplikacji) i oknem.</summary>
+        public FakeProcess AddOrphan(int pid = OrphanPid, string? commandLine = null, bool window = true)
+        {
+            var process = new FakeProcess(pid);
+            Orphans[pid] = process;
+            if (!window)
+            {
+                _windowless[pid] = true;
+            }
+
+            _commandLines.Enqueue(new KeyValuePair<int, string>(pid, commandLine ?? BrowserLine()));
+            return process;
+        }
+
+        /// <summary>Linia poleceń procesu bez obiektu procesu (np. cudzy profil).</summary>
+        public void AddCommandLine(int pid, string commandLine) =>
+            _commandLines.Enqueue(new KeyValuePair<int, string>(pid, commandLine));
 
         /// <summary><c>FileVersion</c> binarki zwracane przez seam (domyślnie zgodne z <c>product</c> transportu).</summary>
         public volatile string? ExeVersion = CurrentVersion;
@@ -2133,6 +3041,11 @@ public class BrowserHostTests
             foreach (var process in Launcher.Processes)
             {
                 process.Exit(0);
+            }
+
+            foreach (var orphan in Orphans.Values)
+            {
+                orphan.Exit(0);
             }
 
             Transport.Dispose();

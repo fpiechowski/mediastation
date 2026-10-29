@@ -520,3 +520,10 @@ source_spec: `tickets/epic-browserhost/tickets/story-binding-po-nawigacji-i-reco
 severity: medium
 reason: Real, not caused by this change: before 6.3 a drop lost binding and script for good. Recovery would need `Page.reload` or `Runtime.evaluate`, both excluded by AD-1 and this story's Never list, or a `hello` watchdog after `cdpReconnected` that turns a silent page into `CdpLost`/Failed. Netflix is a single-page app, so main-frame navigations are rare and the window can be long. Settle as a product decision: either a post-reconnect hello watchdog (needs a page message on the new session, see the item above) or an AD-1 amendment allowing one reload after reconnect.
 status: open
+
+### DW-57: A browser root that holds the app profile but has no browser window (for example Edge kept alive in background mode) is not adopted, so a later start fails with ProfileInUse, and Close or Restart
+origin: spec-deferred ed39a55fa93c
+location: src/MediaStation.App/Hosts/Browser/BrowserHost.cs (ProbeCoreAsync)
+source_spec: `tickets/epic-browserhost/tickets/story-probeexisting-i-renewsession-po-restarcie-oraz-wybudzeniu-plan.md`
+reason: maybe-false. The probe logs `probeExisting {noWindow}` and registers nothing (BrowserHost.ProbeCoreAsync), and the 6.4 preflight then refuses every start while the lockfile is held. This existed before 6.5 (the 6.4 start path had no adoption at all). Whether a kiosk Edge on its own user-data-dir ever stays running without a window is not proven. To settle it on UM760: close the kiosk window by hand (Alt+F4) and check for a surviving msedge.exe root with --user-data-dir=<profile> and no --type=. If one survives, adopt it without a window (register the session, no AppWindowAttached) so Stop can kill the tree.
+status: open

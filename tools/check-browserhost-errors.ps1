@@ -18,8 +18,9 @@
       B   `Last Version` = garbage: `browserVersion.previous` = unknown, no change entry.
       C   a TcpListener on 127.0.0.1:9237: `browserStartFailed {portInUse}`, `commandFailed {PortInUse}`, no `appLaunch`,
           no browser on the profile.
-      D   an Edge started by this script on the profile: `browserStartFailed {profileInUse}`, `commandFailed
-          {ProfileInUse}`, no `appLaunch`, the profile's browser processes unchanged.
+      D   an Edge started by this script on the profile after the startup probe logged `probeExisting {notRunning}`
+          (an Edge already there at startup is adopted since story 6.5): `browserStartFailed {profileInUse}`,
+          `commandFailed {ProfileInUse}`, no `appLaunch`, the profile's browser processes unchanged.
       E   `devtools.remote_debugging.allowed=false` in the profile's `Local State`: `appWindowAttached`, then
           (>= cdpConnectTimeout after `appLaunch`) `cdpUnavailable` with `browserVersion` and `commandFailed
           {CdpUnavailable}`, no `processExited`; the Edge root alive, its window IsIconic and IsWindowVisible, the shell
@@ -350,11 +351,17 @@ function Invoke-VersionScenario {
 
 # Scenarios C and D: a held resource gives a distinguishable CommandFailed and nothing is launched.
 function Invoke-HeldScenario {
-    param([string]$Scenario, [string]$Reason, [string]$ErrorCode, [scriptblock]$ProcessSnapshot)
+    param([string]$Scenario, [string]$Reason, [string]$ErrorCode, [scriptblock]$ProcessSnapshot, [scriptblock]$AfterProbe = $null)
     $app = $null
     try {
-        $before = & $ProcessSnapshot
         $app = Start-Run
+        # Story 6.5: the startup probe adopts a live browser on the profile, so a held profile is set up only after
+        # the probe found nothing; the scenario then checks the start path's own ProfileInUse.
+        if (-not (Wait-Log -App $app -Msg 'probeExisting' -Seconds 20)) { Problem $Scenario 'no probeExisting within 20s'; return }
+        $probe = @(Get-RunEntries -ProcessId $app.Id -Msg 'probeExisting')[0]
+        if ($probe.data.outcome -ne 'notRunning') { Problem $Scenario "probeExisting outcome $($probe.data.outcome), expected notRunning" }
+        if ($null -ne $AfterProbe) { & $AfterProbe }
+        $before = & $ProcessSnapshot
         Send-Ok -App $app
         if (-not (Wait-Log -App $app -Msg 'commandFailed' -Seconds 20)) { Problem $Scenario 'no commandFailed within 20s'; return }
         Start-Sleep -Seconds 3
@@ -431,18 +438,20 @@ try {
     $listener.Stop(); $listener = $null
 
     Note '=== D ==='
-    $foreignEdge = Start-Process -FilePath $edgeExe -ArgumentList @("--user-data-dir=`"$profileDir`"", '--no-first-run', '--no-default-browser-check', 'about:blank') -PassThru
-    if (-not (Wait-For -Seconds 20 -Condition { Test-LockHeld })) { Problem 'D' 'the script-started Edge did not take the profile lockfile within 20s' }
-    # Let the child set settle so the before/after comparison reflects BrowserHost, not Edge's own startup.
-    $stable = Get-ProfilePids
-    for ($i = 0; $i -lt 30; $i++) {
-        Start-Sleep -Seconds 1
-        $now = Get-ProfilePids
-        if (($now -join ',') -eq ($stable -join ',') -and $i -ge 4) { break }
-        $stable = $now
+    $startForeignEdge = {
+        $script:foreignEdge = Start-Process -FilePath $edgeExe -ArgumentList @("--user-data-dir=`"$profileDir`"", '--no-first-run', '--no-default-browser-check', 'about:blank') -PassThru
+        if (-not (Wait-For -Seconds 20 -Condition { Test-LockHeld })) { Problem 'D' 'the script-started Edge did not take the profile lockfile within 20s' }
+        # Let the child set settle so the before/after comparison reflects BrowserHost, not Edge's own startup.
+        $stable = Get-ProfilePids
+        for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Seconds 1
+            $now = Get-ProfilePids
+            if (($now -join ',') -eq ($stable -join ',') -and $i -ge 4) { break }
+            $stable = $now
+        }
+        Note ("script Edge pid {0}, profile processes {1}" -f $script:foreignEdge.Id, ($stable -join ','))
     }
-    Note ("script Edge pid {0}, profile processes {1}" -f $foreignEdge.Id, ($stable -join ','))
-    Invoke-HeldScenario -Scenario 'D' -Reason 'profileInUse' -ErrorCode 'profileInUse' -ProcessSnapshot { Get-ProfilePids }
+    Invoke-HeldScenario -Scenario 'D' -Reason 'profileInUse' -ErrorCode 'profileInUse' -ProcessSnapshot { Get-ProfilePids } -AfterProbe $startForeignEdge
     $foreignEdge = $null
 
     Note '=== E ==='

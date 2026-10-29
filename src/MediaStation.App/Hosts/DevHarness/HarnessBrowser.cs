@@ -34,58 +34,13 @@ internal static class HarnessBrowser
     /// <summary>Wartość argumentu <c>--user-data-dir</c> dla aplikacji (wspólna z BrowserHostem, <see cref="BrowserLaunch"/>).</summary>
     public static string ProfileArgument(string profileDir) => BrowserLaunch.ProfileArgument(profileDir);
 
-    /// <summary>
-    /// Czy linia poleceń należy do przeglądarki harnessu z profilem <paramref name="profileDir"/>: argument
-    /// <c>--user-data-dir</c> równy profilowi (z cudzysłowem lub bez, bez rozróżniania wielkości liter i końcowego ukośnika).
-    /// </summary>
-    public static bool CommandLineMatchesProfile(string? commandLine, string profileDir)
-    {
-        if (string.IsNullOrEmpty(commandLine))
-        {
-            return false;
-        }
+    /// <summary>Czy linia poleceń należy do przeglądarki z profilem <paramref name="profileDir"/> (wspólne z BrowserHostem, <see cref="BrowserLaunch"/>).</summary>
+    public static bool CommandLineMatchesProfile(string? commandLine, string profileDir) =>
+        BrowserLaunch.CommandLineMatchesProfile(commandLine, profileDir);
 
-        // Cudzysłowy (cały argument albo sama ścieżka) nie niosą znaczenia dla porównania, więc znikają.
-        var line = commandLine.Replace("\"", string.Empty, StringComparison.Ordinal);
-        var needle = ProfileArgument(profileDir.TrimEnd('\\', '/'));
-        var from = 0;
-        while (line.IndexOf(needle, from, StringComparison.OrdinalIgnoreCase) is var at and >= 0)
-        {
-            var end = at + needle.Length;
-            if (end == line.Length || line[end] is ' ' or '\\' or '/')
-            {
-                return true;
-            }
-
-            from = end;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// PID-y procesów z profilem aplikacji, w kolejności prób adopcji: proces główny (bez <c>--type=</c>) przed
-    /// procesami pomocniczymi (renderer, GPU), bo to on jest korzeniem drzewa z oknem.
-    /// </summary>
-    public static IReadOnlyList<int> MatchingRoots(IEnumerable<KeyValuePair<int, string>> commandLines, string profileDir)
-    {
-        ArgumentNullException.ThrowIfNull(commandLines);
-
-        var main = new List<int>();
-        var helpers = new List<int>();
-        foreach (var (pid, line) in commandLines)
-        {
-            if (!CommandLineMatchesProfile(line, profileDir))
-            {
-                continue;
-            }
-
-            (line.Contains(" --type=", StringComparison.Ordinal) ? helpers : main).Add(pid);
-        }
-
-        main.AddRange(helpers);
-        return main;
-    }
+    /// <summary>PID-y procesów z profilem aplikacji, proces główny przed pomocniczymi (wspólne z BrowserHostem, <see cref="BrowserLaunch"/>).</summary>
+    public static IReadOnlyList<int> MatchingRoots(IEnumerable<KeyValuePair<int, string>> commandLines, string profileDir) =>
+        BrowserLaunch.MatchingRoots(commandLines, profileDir);
 
     /// <summary>Harness działa tylko dla wartości dokładnie <c>1</c>; literówka nigdy go nie włącza.</summary>
     public static bool IsEnabled(string? value) => string.Equals(value?.Trim(), "1", StringComparison.Ordinal);
