@@ -334,3 +334,42 @@ Nowy pass wyłącznie dla rekordów niewykonanych albo niezaliczonych w poprzedn
 | S25 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
 | S26 |  |  |
 | S27 |  |  |
+
+## 2026-10-29, HEAD 6a6504e, UM760 — wznowienie po poprawce Netflix kiosk activation
+
+Nowy pass po naprawie zgłoszonego black-screen/static przy uruchomieniu Netflixa. Zakres: S15–S17, S20–S24, S26–S27; pozostałe scenariusze zachowują wcześniejsze wyniki i nie są powtarzane. MediaStation musi startować z MEDIASTATION_DEV_HARNESS=1 oraz MEDIASTATION_HARNESS_URL=https://www.netflix.com/; Netflix uruchamia użytkownik przez kafelek.
+
+| # | Wynik | Dowód |
+|---|---|---|
+| P0 | pass (2026-10-29, HEAD 6a6504e, UM760) | P0.1 machine MEDIASTATION / F7BSI / EliteMini Series; HEAD 6a6504e. Working tree includes this acceptance-plan update and unrelated backlog note. P0.2 dotnet publish succeeded; fresh publish\\MediaStation.exe exists; Core tests 1/1 and web typecheck/build succeeded. P0.5 check-home-s10 -SelfTest passed; inject-power -SelfTest OK: 9 cases; check-netflix-preflight -SelfTest passed. P0.6 acceptance say pl-PL spoken=true. P0.7 no MediaStation or Netflix-profile Edge process before launch; Netflix will be launched by user through the tile. |
+| S1 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S2 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S3 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S4 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S5 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S6 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S7 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S8 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S9 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S10 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S11 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S12 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S13 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S14 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S15 | pass (2026-10-29, HEAD 6a6504e, UM760; użytkownik: Netflix otworzył się bez gaśnięcia ekranu, odtworzony odcinek z dźwiękiem) | Log 2026-10-29T13:41:20Z: action ok; appLaunch appId=netflix url=https://www.netflix.com/; appWindowAttached hwnd=2230030 rootPid=20340; audioRuleApplied muted=false sessions=0. User observation: Netflix opened through the MediaStation tile without black screen/static; user played an episode with audible sound and reported that everything works. |
+| S16 | fail (2026-10-29, HEAD 6a6504e, UM760) | window since 2026-10-29T13:42:46.975Z until 2026-10-29T13:43:23.391Z; `msg=audioRuleApplied,data.muted=true,data.sessions,data.sessions!=0:>=1` want >=1, got 1; `msg=windowCommand,data.type=MinimizeWindow,data.result=completed:1` want 1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing; msg=devHarnessEnabled, 0); order broken, first seen: msg=windowCommand,data.type=MinimizeWindow,data.result=completed:1, msg=audioRuleApplied,data.muted=true,data.sessions,data.sessions!=0:>=1<br>`{"ts":"2026-10-29T13:43:20.883Z","level":"info","src":"audio","msg":"audioRuleApplied","data":{"rootPid":20340,"muted":true,"sessions":2}}` |
+| S17 | pass (2026-10-29, HEAD 6a6504e, UM760; użytkownik: Netflix ucichł po Home) | Obserwacja użytkownika po fizycznym Home: dźwięk Netflixa ucichł, choć odcinek pozostał uruchomiony w tle. |
+| S18 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S19 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S20 | pass (2026-10-29, HEAD 6a6504e, UM760; przejście wyciszone→odciszone potwierdzone; Moonlight nie był ponownie uruchamiany zgodnie z zakresem) | window since 2026-10-29T13:42:46.975Z until 2026-10-29T13:47:58.288Z; `msg=audioRuleApplied,data.muted=true:>=1` want >=1, got 1; `msg=audioRuleApplied,data.muted=false:>=1` want >=1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing; msg=devHarnessEnabled, 0); order ok<br>`{"ts":"2026-10-29T13:43:20.883Z","level":"info","src":"audio","msg":"audioRuleApplied","data":{"rootPid":20340,"muted":true,"sessions":2}}` |
+| S21 | n/d (2026-10-29, HEAD 6a6504e, UM760) | Nie uruchamiano ponownie Moonlighta zgodnie z zakresem odbioru, więc nie było konkurencyjnego źródła dźwięku do porównania. Netflix był jedynym uruchomionym źródłem; nie jest to dowód izolacji względem Moonlighta. |
+| S21 (rerun 1) | pass (2026-10-29, HEAD 6a6504e, UM760; użytkownik: Moonlight ucichł, widać i słychać tylko Netflix) | Log: Moonlight appWindowAttached rootPid=8316; Home 13:56:32.166Z; audioRuleApplied rootPid=8316 muted=true sessions=1; OK na Netflix 13:56:34.676Z; audioRuleApplied rootPid=20340 muted=false sessions=2; foreground app netflix. Użytkownik potwierdził obraz i dźwięk wyłącznie Netflixa. |
+| S22 | 2026-10-29, HEAD 6a6504e, UM760: sessions 2 → 2 | Pomiar logu dla rootPid=20340: ostatnie muted=false przed S16 miało sessions=0 (13:41:20.901Z); po S16 muted=true miało sessions=2 (13:43:20.883Z); po powrocie Netflix muted=false sessions=2 (13:47:21.428Z); po zmianie odcinka i Home muted=true sessions=2 (13:50:13.642Z). Nowa sesja nie została zaobserwowana. |
+| S23 | pass (2026-10-29, HEAD 6a6504e, UM760) | Po fizycznym Home po zmianie odcinka: log 2026-10-29T13:50:13.642Z audioRuleApplied rootPid=20340 muted=true sessions=2; brak audioSessionFailed i audioUnavailable w obserwowanym przebiegu. |
+| S24 | pass (2026-10-29, HEAD 6a6504e, UM760; użytkownik: cisza przez ponad minutę) | Obserwacja użytkownika po fizycznym Home: z telewizora nie było słychać dźwięku Netflixa przez ponad minutę. |
+| S25 | n/a — poza zakresem tego passu; wynik z poprzednich odbiorów zachowany | Nie uruchamiać ponownie. |
+| S26 | n/d (2026-10-29, HEAD 6a6504e, UM760) | Scenariusz wymaga aktywnego drugiego źródła audio w tle i ręcznego odciszenia go w mikserze. S18–S19 (uruchomienie Moonlighta) pozostają poza zakresem tego passu zgodnie z decyzją użytkownika, więc nie ma warunków do wykonania S26. |
+| S26 (rerun 1) | pass (2026-10-29, HEAD 6a6504e, UM760; użytkownik: każde przejście przez Home wycisza tło) | Log: Moonlight foreground rootPid=8316 audioRuleApplied muted=false sessions=1 at 13:59:14.597Z; Home at 13:59:16.934Z; audioSessionMuted rootPid=8316 and audioRuleApplied muted=true sessions=1 at 13:59:16.949Z. Subsequent Netflix/Home transition also muted Netflix. User confirmed Moonlight plays when active and becomes silent after Home. |
+| S27 | pass (2026-10-29, HEAD 6a6504e, UM760) | Log after physical close/restart: audioRuleForgotten rootPid=20340 at 14:01:46.062Z; new appLaunch/appWindowAttached for netflix rootPid=12744 at 14:01:48.619Z/14:01:48.972Z; audioRuleApplied muted=false sessions=0 at 14:01:48.991Z; no process failure/error observed. |
+
+User verdict (2026-10-29, HEAD 6a6504e, UM760): **accepted** — użytkownik potwierdził, że poprawka usunęła black-screen/static przy uruchomieniu Netflixa; S15, S17, S20, S21 rerun, S22, S23, S24, S26 rerun i S27 zostały zaakceptowane. S16 pozostaje formalnym fail, ponieważ kolejność `MinimizeWindow` i `audioRuleApplied` w logu nie odpowiada asercji, mimo że wartości wyciszenia i minimalizacji były poprawne. S21 i S26 zostały dodatkowo odebrane po uruchomieniu Moonlighta przez MediaStation z hostem `192.168.0.64`. Epika pozostaje otwarta dla Sofii; issue S16 przekazany do nowego ticketu.
