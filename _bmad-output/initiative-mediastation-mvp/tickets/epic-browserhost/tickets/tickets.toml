@@ -82,7 +82,7 @@ description = "Integruje BrowserHost z AppMenu i Orchestrator lifecycle. Kafelek
 verify = "`dotnet test` pokrywa RestartApp, kolejność stanów, błędny restart i brak eskalacji. Na UM760 scenariusz J4 z EXPERIENCE.md: jedno OK na Failed, jedno OK na restart i aplikacja działa na pierwszym planie; druga awaria zostawia Failed."
 covers = ["R6"]
 after = ["epic-home-screen", "epic-orchestrator-lifecycle", 5, 6]
-hitl = true
+hitl = false
 risk = "high"
 references = ["epic-browserhost/epic-browserhost.md, Requirement 6", "ux-mediastation/EXPERIENCE.md, Key Flow J4", "architecture-mediastation/architecture-mediastation.md, AD-10, AD-16"]
 
