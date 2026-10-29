@@ -1,0 +1,6 @@
+{
+  "service": "netflix",
+  "matches": ["https://www.netflix.com/*"],
+  "startUrl": "https://www.netflix.com/browse",
+  "driverVersion": "0.0.0"
+}

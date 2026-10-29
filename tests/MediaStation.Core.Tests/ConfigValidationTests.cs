@@ -603,6 +603,33 @@ public class ConfigValidationTests
         Loaded(apps: AppsJson(Web(id: id)));
     }
 
+    [Theory]
+    [InlineData("Netflix")]
+    [InlineData("prime_video")]
+    [InlineData("")]
+    [InlineData("../netflix")]
+    [InlineData("netflix/x")]
+    [InlineData("prime--video")]
+    [InlineData("1netflix")]
+    public void Web_service_must_be_kebab_case_because_it_is_a_path_segment(string service)
+    {
+        var error = SingleError(apps: AppsJson(
+            $$"""{ "type": "web", "id": "netflix", "category": "video", "title": "T", "icon": "i.png", "service": "{{service}}", "browser": "edge", "cdpPort": 9222 }"""));
+
+        Assert.Equal("$.apps[0].service", error.Path);
+        Assert.Contains("kebab-case", error.Reason);
+    }
+
+    [Theory]
+    [InlineData("netflix")]
+    [InlineData("prime-video")]
+    [InlineData("hbo2")]
+    public void Kebab_case_services_are_accepted(string service)
+    {
+        Loaded(apps: AppsJson(
+            $$"""{ "type": "web", "id": "netflix", "category": "video", "title": "T", "icon": "i.png", "service": "{{service}}", "browser": "edge", "cdpPort": 9222 }"""));
+    }
+
     [Fact]
     public void Duplicate_id_is_reported_on_second_entry_pointing_at_first()
     {

@@ -52,6 +52,15 @@
     <DefineConstants Condition="'$(MediaStationShellFromDevServer)' == 'true'">$(DefineConstants);SHELL_DEV_SERVER</DefineConstants>
   </PropertyGroup>
 
+  <!--
+    Page bundle (AD-6, AD-13): BrowserHost czyta page\runtime.js i page\drivers\<service>\manifest.json z dysku przy
+    każdym starcie, więc pliki trafiają obok exe w buildzie i w publish. Hotfix = podmiana pliku w page\.
+  -->
+  <ItemGroup>
+    <Content Include="$(MediaStationWebDir)page\runtime\runtime.js" Link="page\runtime.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(MediaStationWebDir)page\drivers\**\manifest.json" Link="page\drivers\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <Target Name="BuildWeb" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true' and '$(SkipWebBuild)' != 'true'">
     <MSBuild Projects="$(MediaStationCoreTestsProject)" Targets="Build" Properties="Configuration=$(Configuration)" RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishReadyToRun;PublishSingleFile;_IsPublishing;TargetFramework" />
 

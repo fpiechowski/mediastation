@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using MediaStation.App.Config;
 using MediaStation.App.Diagnostics;
 using MediaStation.App.Hosts;
+using MediaStation.App.Hosts.Browser;
 using MediaStation.App.Hosts.DevHarness;
 using MediaStation.App.Logging;
 using MediaStation.App.Orchestrator;
@@ -238,7 +239,7 @@ public static class CompositionRoot
         // Adaptery „brak hosta” odpowiadają w kolejce pętli, a pętla powstaje po routerze, więc delegat czyta ją leniwie.
         var hosts = new Dictionary<AppType, IAppHostPort>
         {
-            [AppType.Web] = CreateHarnessHost(log, config, AppType.Web, message => postsTo?.Post(message)),
+            [AppType.Web] = CreateWebHost(log, config, time, message => postsTo?.Post(message)),
             [AppType.Moonlight] = CreateHarnessHost(log, config, AppType.Moonlight, message => postsTo?.Post(message)),
             [AppType.Native] = new MissingHostPort(log, message => postsTo?.Post(message)),
         };
@@ -347,6 +348,35 @@ public static class CompositionRoot
             // Padnięty InputHub nie może zabić startu: aplikacja żyje bez pilota i klawiatury.
             log.Error(LogActionSink.Src, "inputHubStartFailed", ex);
         }
+    }
+
+    /// <summary>
+    /// Host aplikacji <c>web</c>: z <c>MEDIASTATION_DEV_HARNESS=1</c> dalej dev harness (jawny opt-in, epika 5),
+    /// w przeciwnym razie <see cref="BrowserHost"/> (AD-1): Edge/Chrome z CDP na loopbacku, zasoby strony z
+    /// <c>page\</c> obok exe czytane przy każdym starcie (AD-13).
+    /// </summary>
+    private static IAppHostPort CreateWebHost(ILog log, LoadedConfig config, TimeProvider time, Action<IOrchestratorMessage> post)
+    {
+        if (HarnessBrowser.IsEnabled(Environment.GetEnvironmentVariable(HarnessBrowser.EnvVarName)))
+        {
+            return CreateHarnessHost(log, config, AppType.Web, post);
+        }
+
+        var apps = config.Apps.Apps.OfType<WebApp>().ToList();
+        log.Info(Src, "browserHostEnabled", new Dictionary<string, object?> { ["apps"] = apps.Count });
+        return new BrowserHost(
+            log,
+            post,
+            apps,
+            Path.Combine(DataRoot, "profiles"),
+            Path.Combine(AppContext.BaseDirectory, "page"),
+            TimeSpan.FromSeconds(config.Settings.CdpConnectTimeout),
+            BrowserPlatform.ResolveBrowser,
+            new ProcessBrowserLauncher(),
+            BrowserPlatform.WindowFinder(new Win32WindowApi()),
+            CdpConnector.ConnectAsync,
+            BrowserPlatform.ReadFile,
+            time);
     }
 
     /// <summary>

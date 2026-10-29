@@ -55,6 +55,10 @@
     <Compile Include="..\..\src\MediaStation.App\Platform\Window\IWindowApi.cs" Link="App\IWindowApi.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Window\WindowTreePicker.cs" Link="App\WindowTreePicker.cs" />
     <Compile Include="..\..\src\MediaStation.App\Platform\Window\WindowCommandExecutor.cs" Link="App\WindowCommandExecutor.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Hosts\Browser\BrowserLaunch.cs" Link="App\BrowserLaunch.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Hosts\Browser\BrowserHost.cs" Link="App\BrowserHost.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Hosts\Browser\CdpSession.cs" Link="App\CdpSession.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Hosts\Browser\CdpTargets.cs" Link="App\CdpTargets.cs" />
     <Compile Include="..\..\src\MediaStation.App\Hosts\DevHarness\HarnessBrowser.cs" Link="App\HarnessBrowser.cs" />
     <Compile Include="..\..\src\MediaStation.App\Hosts\DevHarness\HarnessMoonlight.cs" Link="App\HarnessMoonlight.cs" />
     <Compile Include="..\..\src\MediaStation.App\Hosts\DevHarness\HarnessWait.cs" Link="App\HarnessWait.cs" />

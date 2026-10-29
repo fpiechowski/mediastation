@@ -15,5 +15,5 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["shell/src", "contracts/generated"]
+  "include": ["shell/src", "page", "contracts/generated"]
 }

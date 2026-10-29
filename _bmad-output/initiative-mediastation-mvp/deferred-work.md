@@ -483,3 +483,25 @@ status: open
 - source_plan: `_bmad-output/initiative-mediastation-mvp/tickets/epic-windows-audio/tickets/bug-uruchomienie-netflixa-przez-kafelek-wywoluje-cykliczne-zaniki-obrazu-plan.md`
   summary: Verify full display frequency/bits and visual black/static absence on a host where EnumDisplaySettings is available during whole-epic UM760 acceptance.
   evidence: Automated smoke on UM760 reports reliable monitor width/height but EnumDisplaySettings frequency/bits are unavailable; visual stability remains a manual whole-epic check.
+
+### DW-52: BrowserHost attaches CDP to the first `type: page` target in `/json/list`, not specifically the `about:blank` page it launched, so an extra Edge page target listed first (WebUI, restored tab) would
+origin: spec-deferred 10fcb18751ca
+location: src/MediaStation.App/Hosts/Browser/CdpTargets.cs (PageWebSocketUrl)
+source_spec: `tickets/epic-browserhost/tickets/story-tracer-browserhost-edge-kiosk-cdp-i-hello-plan.md`
+reason: maybe-false. Three smoke runs on UM760 (Edge 156, fresh kiosk profile) picked the right target. Settle by dumping `/json/list` right after a kiosk start across several runs (also with a profile that had other tabs) and checking whether any other `page` target precedes the launched one; if so, prefer the target whose url is `about:blank`.
+status: open
+
+### DW-53: Stop kills the browser tree without waiting for the root to exit, so a restart (StopApp → CommandCompleted → StartApp) can launch a new Edge on the same profile and CDP port while the old one still
+origin: spec-deferred 14ed2dbb8caf
+location: src/MediaStation.App/Hosts/Browser/BrowserHost.cs (StopSessionAsync)
+source_spec: `tickets/epic-browserhost/tickets/story-tracer-browserhost-edge-kiosk-cdp-i-hello-plan.md`
+reason: maybe-false. `StopSessionAsync` waits up to 3 s for a graceful close, then `Process.Kill(entireProcessTree)` without awaiting exit, and `StopCoreAsync` posts `ProcessExited` + `CommandCompleted` at once. Settle with a restart run on UM760 where the graceful close does not finish (J4, story 6.7): look for `launcherExited` (handoff) or a CDP connect to the old instance; if seen, await the root's exit (bounded) after `KillTree`.
+status: open
+
+### DW-54: AD-7 says a page envelope with another major `v` is logged and marks the tile with an error state; BrowserHost only logs `pageMessageRejected`.
+origin: spec-deferred 22a4615c8f9f
+location: src/MediaStation.App/Hosts/Browser/BrowserHost.cs (OnBindingCalled)
+source_spec: `tickets/epic-browserhost/tickets/story-tracer-browserhost-edge-kiosk-cdp-i-hello-plan.md`
+severity: low
+reason: `OnBindingCalled` logs and returns; no Event reaches the Orchestrator. Envelope versioning belongs to story 6.6 (envelope v1 with `id`, version tests), which should add the tile error path.
+status: open

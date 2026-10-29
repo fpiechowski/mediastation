@@ -276,6 +276,14 @@ public static class ConfigValidation
             switch (entry)
             {
                 case WebApp web:
+                    // `service` jest segmentem ścieżki `page/drivers/<service>` (AD-6), więc obowiązuje kebab-case jak `id`.
+                    if (!KebabCase.IsMatch(web.Service))
+                    {
+                        errors.Add(
+                            JsonErrorPath.Property(entryPath, "service"),
+                            $"service {Quote(web.Service)} nie jest w kebab-case (np. „netflix”, „prime-video”)");
+                    }
+
                     var portPath = JsonErrorPath.Property(entryPath, "cdpPort");
                     if (web.CdpPort is < CdpPortMin or > CdpPortMax)
                     {
