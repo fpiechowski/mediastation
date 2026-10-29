@@ -2,10 +2,10 @@
 epic: epic-windows-audio
 type: acceptance-plan
 machine: UM760
-base_head: 3d29fee
+base_head: 6a6504e
 created: 2026-10-27
-status: aborted
-verdict: not-accepted
+status: accepted
+verdict: accepted
 ---
 
 # Odbiór epiki 5 (epic-windows-audio) na UM760 — plan i scenariusz

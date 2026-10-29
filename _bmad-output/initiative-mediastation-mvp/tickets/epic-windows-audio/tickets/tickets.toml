@@ -233,3 +233,17 @@ risk = "high"
 severity = "P1"
 refine = true
 references = ["epic-windows-audio-um760-acceptance.md, S15 i uwaga z odbioru 2026-10-29", "epic-windows-audio.md, R2, R3, R5, Done when 4", "epic-browserhost/epic-browserhost.md"]
+
+[[entry]]
+id = 19
+type = "bug"
+title = "Formalna kolejność wyciszenia i minimalizacji w S16 jest niespójna"
+description = "S16 na UM760 miało poprawne wartości: Netflix został wyciszony przy 2 żywych sesjach, a okno zminimalizowane, ale formalna asercja odrzuciła przebieg, bo log zawierał MinimizeWindow przed audioRuleApplied. Rozstrzygnij, czy właściwym kontraktem jest kolejność mute → minimize, czy kolejność widoczna w logu wymaga zmiany; następnie popraw implementację albo asercję i zabezpiecz wynik testem regresji."
+verify = "Na UM760 po wymaganym commicie S16 przechodzi formalną asercję z właściwą kolejnością, przy sessions >= 1 i MinimizeWindow completed; wynik zawiera dowód logu oraz brak regresji w S15, S17 i S20. Test regresyjny odtwarza przypadek z 2026-10-29 i rozróżnia kolejność zdarzeń od samych poprawnych wartości."
+covers = ["R7"]
+after = []
+hitl = false
+risk = "high"
+severity = "P2"
+refine = true
+references = ["epic-windows-audio-um760-acceptance.md, S16 i końcowy werdykt z 2026-10-29", "epic-windows-audio.md, R7 (AD-5: mute → minimize)", "epic-windows-audio-um760-acceptance.md, log 2026-10-29T13:43:20.883Z i wynik formalnego check (order false)"]
