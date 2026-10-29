@@ -12,9 +12,8 @@ _bmad/render/
 in-memoria.db
 .mcp.json
 
-# Agent tooling: skills live in .agents/skills (tracked); .claude/.codex hold per-machine junctions and absolute-path hooks
+# Agent tooling: skills live in .agents/skills (tracked); .claude holds per-machine junctions and absolute-path hooks
 .claude/
-.codex/
 __pycache__/
 .bmad-loop/runs/
 .bmad-loop/archive/

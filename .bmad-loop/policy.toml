@@ -97,7 +97,7 @@ thorough_review = "always"     # never | high-risk | always — always: decyzja 
 
 [adapter]
 name = "claude"              # claude | codex | gemini | copilot | antigravity | opencode-http (alias: opencode) | <custom .bmad-loop/profiles/*.toml>
-model = "sonnet"             # empty = CLI default model (opencode-http wants "provider/model")
+model = "claude-opus-5-5"    # empty = CLI default model (opencode-http wants "provider/model")
 effort = ""                  # reasoning effort, free-form (e.g. "high", "max"); empty = provider default.
                              # Sent by opencode-http as the per-prompt `variant`; the tmux CLIs ignore it
 cleanup_session_on_finish = true  # kill the run's tmux session when it finishes (false keeps it for inspection)
@@ -114,20 +114,18 @@ cleanup_session_on_finish = true  # kill the run's tmux session when it finishes
 # a stage that switches client falls back to that profile's defaults instead
 # (model, effort and extra_args are client-specific). Stage tables must come
 # after the [adapter] keys above.
-# [adapter.dev]
-# model = "opus"
-# [adapter.review]
-# name = "codex"
-# model = "gpt-5-codex"
-# stop_without_result_nudges = 5     # e.g. a multi-turn review needs more nudges than dev
-# [adapter.triage]
-# model = "opus"
-# [adapter.retro]                    # gates.retrospective = "auto" sessions
-# model = "opus"
-# With an opencode-http base, effort tunes reasoning per stage (opencode-http
-# only — a tmux CLI ignores it and `bmad-loop validate` warns):
-# [adapter.review]
-# effort = "max"                     # e.g. a deeper review pass than dev
+# Routing (Claude only, Max plan): the claude profile ignores `effort`, so effort
+# goes through extra_args, which replace the bypass flags and must repeat them.
+[adapter.dev]                        # whole bmad-build-auto session: clarify, plan, oneshot implement, review triage
+model = "claude-opus-5-5"
+extra_args = ["--permission-mode", "bypassPermissions", "--effort", "high"]
+[adapter.review]                     # follow-up review session
+model = "claude-opus-5-5"
+extra_args = ["--permission-mode", "bypassPermissions", "--effort", "xhigh"]
+[adapter.triage]                     # deferred-work sweep triage: classification, spares the Opus limit
+model = "claude-sonnet-5-5"
+[adapter.retro]                      # gates.retrospective = "auto" sessions
+model = "claude-opus-5-5"
 
 [sweep]
 # Deferred-work sweep: triage + execute open deferred-work.md entries.
