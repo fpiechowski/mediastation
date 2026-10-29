@@ -3,7 +3,7 @@ title: 'Preflight odbioru wymaga zalogowanego i grającego netflix.com'
 type: 'feature'
 ticket: 17
 created: '2026-10-28'
-status: 'built'
+status: done
 baseline_revision: '8d5ed0e'
 route: 'oneshot'
 route_source: 'auto'

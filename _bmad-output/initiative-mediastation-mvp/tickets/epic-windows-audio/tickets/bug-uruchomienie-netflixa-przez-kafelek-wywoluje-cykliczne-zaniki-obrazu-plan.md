@@ -3,7 +3,7 @@ title: 'Stabilne uruchamianie Netflixa bez zaniku obrazu'
 type: 'bugfix'
 ticket: '18'
 created: '2026-10-29'
-status: 'built'
+status: done
 baseline_revision: '617688a'
 route: 'full'
 route_source: 'auto'

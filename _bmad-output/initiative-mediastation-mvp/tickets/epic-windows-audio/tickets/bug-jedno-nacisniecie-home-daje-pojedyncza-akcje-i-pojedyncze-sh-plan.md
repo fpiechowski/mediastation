@@ -3,7 +3,7 @@ title: 'Jedno naciśnięcie Home daje pojedynczą akcję i pojedyncze ShowShell'
 type: 'bugfix'
 ticket: '15'
 created: '2026-10-28'
-status: in-progress
+status: done
 baseline_revision: 'a52796d9504befcc0497f611af606bc963653993'
 route: 'oneshot'
 route_source: 'auto'

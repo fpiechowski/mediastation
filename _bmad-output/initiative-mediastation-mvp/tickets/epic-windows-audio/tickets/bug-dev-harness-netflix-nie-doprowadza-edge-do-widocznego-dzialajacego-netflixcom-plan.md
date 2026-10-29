@@ -3,7 +3,7 @@ title: 'Dev harness Netflix nie doprowadza Edge do widocznego, działającego ne
 type: 'bugfix'
 ticket: 16
 created: '2026-10-28'
-status: 'built'
+status: done
 baseline_revision: '3fb79877f7a5d09645c3ed99ce7752522695fb37'
 route: 'full'
 route_source: 'auto'
