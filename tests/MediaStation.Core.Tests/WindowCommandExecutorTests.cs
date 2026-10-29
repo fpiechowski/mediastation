@@ -21,6 +21,8 @@ public class WindowCommandExecutorTests
 
         public bool ForegroundAttached { get; set; }
 
+        public bool RaiseResult { get; set; } = true;
+
         public List<string> Calls { get; } = [];
 
         public List<WindowShow> Shows { get; } = [];
@@ -44,6 +46,14 @@ public class WindowCommandExecutorTests
 
         public bool IsVisible(long hwnd) => !Iconic.Contains(hwnd);
 
+        public bool ChromiumKiosk { get; set; } = true;
+
+        public bool IsChromiumKiosk(long hwnd)
+        {
+            Calls.Add("isChromium");
+            return ChromiumKiosk;
+        }
+
         public bool ShowAsync(long hwnd, WindowShow show)
         {
             Calls.Add($"show:{show}");
@@ -66,7 +76,7 @@ public class WindowCommandExecutorTests
         public bool RaiseAsync(long hwnd)
         {
             Calls.Add("raise");
-            return true;
+            return RaiseResult;
         }
 
         public bool SetForeground(long hwnd)
@@ -173,7 +183,7 @@ public class WindowCommandExecutorTests
 
         rig.Executor.Execute(new ActivateWindow(3, 100));
 
-        Assert.Equal(["show:Restore", "foreground"], rig.Api.Calls);
+        Assert.Equal(["show:Restore", "foreground", "isChromium", "raise"], rig.Api.Calls);
         Assert.Equal(new CommandCompleted(3), Assert.Single(rig.Posted));
     }
 
@@ -186,7 +196,7 @@ public class WindowCommandExecutorTests
 
         rig.Executor.Execute(new ActivateWindow(4, 100));
 
-        Assert.Equal(["foreground", "alt", "foreground", "attach"], rig.Api.Calls);
+        Assert.Equal(["foreground", "alt", "foreground", "attach", "isChromium", "raise"], rig.Api.Calls);
         Assert.Equal(new CommandCompleted(4), Assert.Single(rig.Posted));
     }
 
@@ -200,6 +210,7 @@ public class WindowCommandExecutorTests
         rig.Executor.Execute(new ActivateWindow(5, 100));
 
         Assert.DoesNotContain("attach", rig.Api.Calls);
+        Assert.Equal("raise", rig.Api.Calls[^1]);
         Assert.Equal(new CommandCompleted(5), Assert.Single(rig.Posted));
     }
 
@@ -212,6 +223,8 @@ public class WindowCommandExecutorTests
         rig.Executor.Execute(new ActivateWindow(6, 100));
 
         Assert.Equal(new CommandFailed(6, ErrorCode.ForegroundDenied), Assert.Single(rig.Posted));
+        Assert.DoesNotContain("isChromium", rig.Api.Calls);
+        Assert.DoesNotContain("raise", rig.Api.Calls);
         Assert.Equal("ForegroundDenied", Assert.Single(rig.Log.Entries).Data!["result"]);
     }
 
@@ -330,6 +343,29 @@ public class WindowCommandExecutorTests
         Assert.Equal("WindowNotFound", entry.Data["result"]);
     }
 
+    [Fact]
+    public void Activate_non_chromium_window_does_not_raise()
+    {
+        var rig = new Rig();
+        rig.Api.ChromiumKiosk = false;
+
+        rig.Executor.Execute(new ActivateWindow(15, 100));
+
+        Assert.Equal(["foreground", "isChromium"], rig.Api.Calls);
+        Assert.Equal(new CommandCompleted(15), Assert.Single(rig.Posted));
+    }
+
+    [Fact]
+    public void Raise_is_refused_when_chromium_raise_fails()
+    {
+        var rig = new Rig();
+        rig.Api.RaiseResult = false;
+
+        rig.Executor.Execute(new ActivateWindow(16, 100));
+
+        Assert.Equal(new CommandFailed(16, ErrorCode.Unexpected), Assert.Single(rig.Posted));
+    }
+
     private sealed class ThrowingApi : IWindowApi
     {
         public bool IsWindow(long hwnd) => throw new InvalidOperationException("boom");
@@ -337,6 +373,8 @@ public class WindowCommandExecutorTests
         public bool IsIconic(long hwnd) => false;
 
         public bool IsVisible(long hwnd) => false;
+
+        public bool IsChromiumKiosk(long hwnd) => false;
 
         public bool ShowAsync(long hwnd, WindowShow show) => false;
 

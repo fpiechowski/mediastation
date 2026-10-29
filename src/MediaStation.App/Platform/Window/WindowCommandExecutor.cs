@@ -149,7 +149,17 @@ internal sealed class WindowCommandExecutor
             }
         }
 
-        return TakeForeground(hwnd);
+        var foregroundError = TakeForeground(hwnd);
+        if (foregroundError is not null)
+        {
+            return foregroundError;
+        }
+
+        // Chromium kiosk musi zostać wyniesiony nad taskbar dopiero po udanym foreground.
+        // Inne okna nie są globalnie TOPMOST ani podnoszone przez tę ścieżkę.
+        return _api.IsChromiumKiosk(hwnd) && !_api.RaiseAsync(hwnd)
+            ? ErrorCode.Unexpected
+            : null;
     }
 
     private (long? Hwnd, ErrorCode? Error) ShowShellWindow()

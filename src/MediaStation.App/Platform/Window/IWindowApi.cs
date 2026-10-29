@@ -30,6 +30,9 @@ internal interface IWindowApi
 
     bool IsVisible(long hwnd);
 
+    /// <summary>Rozpoznaje główne okno Chromium/Edge, które może być utrzymywane nad paskiem zadań.</summary>
+    bool IsChromiumKiosk(long hwnd);
+
     /// <summary>Zleca zmianę stanu okna (<c>ShowWindowAsync</c>); <c>false</c>, gdy system nie przyjął polecenia.</summary>
     bool ShowAsync(long hwnd, WindowShow show);
 

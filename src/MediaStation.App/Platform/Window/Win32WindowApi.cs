@@ -22,6 +22,14 @@ internal sealed class Win32WindowApi : IWindowApi
 
     public bool IsVisible(long hwnd) => PInvoke.IsWindowVisible(ToHandle(hwnd));
 
+    public unsafe bool IsChromiumKiosk(long hwnd)
+    {
+        Span<char> name = stackalloc char[64];
+        var length = PInvoke.GetClassName(ToHandle(hwnd), name);
+        return length > 0
+            && new string(name[..length]).StartsWith("Chrome_WidgetWin_", StringComparison.Ordinal);
+    }
+
     public bool ShowAsync(long hwnd, WindowShow show)
     {
         // Minimalizacja to zawsze SW_SHOWMINNOACTIVE: SW_HIDE zdejmuje okno przeglądarki z paska i z widoczności (AD-5).

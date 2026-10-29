@@ -18,7 +18,7 @@
 #>
 param(
     [string]$AppId = 'netflix',
-    [ValidateRange(1, 20)][int]$Cycles = 2,
+    [ValidateRange(3, 20)][int]$Cycles = 3,
     [string]$MediaStation = '',
     [string]$LogsDir = (Join-Path $env:LOCALAPPDATA 'MediaStation\logs'),
     [string]$DiagnosticUrl = 'https://www.netflix.com/'
@@ -35,10 +35,21 @@ if (-not ('WebStart.Native' -as [type])) {
     Add-Type -Namespace WebStart -Name Native -MemberDefinition @'
 [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
 [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+[DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
+[DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+[DllImport("user32.dll")] public static extern IntPtr FindWindow(string cls, string title);
+[DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
+[DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);
+[DllImport("user32.dll")] public static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
+[DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool EnumDisplaySettings(string device, int mode, ref DEVMODE devMode);
+[StructLayout(LayoutKind.Sequential)] public struct RECT { public int left, top, right, bottom; }
+[StructLayout(LayoutKind.Sequential)] public struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint flags; }
+[StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct DEVMODE { [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string dmDeviceName; public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra; public int dmFields, dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput; public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate; [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string dmFormName; public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency; }
 '@
 }
 
@@ -46,6 +57,9 @@ $native = [WebStart.Native]
 $problems = New-Object System.Collections.Generic.List[string]
 $allowedWarnings = @('appIconMissing', 'devHarnessEnabled')
 $profileDir = Join-Path $env:LOCALAPPDATA ('MediaStation\profiles\' + $AppId)
+$evidenceDir = Join-Path $LogsDir ('web-start-evidence-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
+[void](New-Item -ItemType Directory -Path $evidenceDir -Force)
+$evidenceJsonl = Join-Path $evidenceDir 'measurements.jsonl'
 $appsPath = Join-Path (Join-Path $env:LOCALAPPDATA 'MediaStation\config') 'apps.json'
 $backupPath = $appsPath + '.restore-bak'
 
@@ -103,6 +117,54 @@ function Get-WindowCommands {
     return @(Get-RunEntries -ProcessId $ProcessId -Msg 'windowCommand' | Where-Object { $_.data.type -eq $Type })
 }
 
+function Get-DisplayMode {
+    $mode = New-Object WebStart.Native+DEVMODE
+    $mode.dmSize = [Runtime.InteropServices.Marshal]::SizeOf($mode)
+    $available = $native::EnumDisplaySettings($null, -1, [ref]$mode)
+    $width = if ($mode.dmPelsWidth) { $mode.dmPelsWidth } else { $native::GetSystemMetrics(0) }
+    $height = if ($mode.dmPelsHeight) { $mode.dmPelsHeight } else { $native::GetSystemMetrics(1) }
+    return [ordered]@{ width = $width; height = $height; frequency = $mode.dmDisplayFrequency; bits = $mode.dmBitsPerPel; available = [bool]$available }
+}
+
+function Get-Geometry {
+    param([IntPtr]$Window)
+    $rect = New-Object WebStart.Native+RECT
+    if (-not $native::IsWindow($Window) -or -not $native::GetWindowRect($Window, [ref]$rect)) { throw "GetWindowRect failed for $Window" }
+    $monitor = $native::MonitorFromWindow($Window, 2)
+    if ($monitor -eq [IntPtr]::Zero) { throw "MonitorFromWindow failed for $Window" }
+    $info = New-Object WebStart.Native+MONITORINFO
+    $info.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($info)
+    if (-not $native::GetMonitorInfo($monitor, [ref]$info)) { throw 'GetMonitorInfo failed.' }
+    $taskbar = $native::FindWindow('Shell_TrayWnd', $null)
+    $taskRect = New-Object WebStart.Native+RECT
+    if ($taskbar -eq [IntPtr]::Zero -or -not $native::GetWindowRect($taskbar, [ref]$taskRect)) { throw 'Taskbar geometry unavailable.' }
+    # A restored kiosk that covers the full monitor covers the taskbar's rectangle too;
+    # this remains meaningful even when Explorer inserts unrelated windows in Z-order.
+    $aboveTaskbar = ($rect.left -le $taskRect.left -and $rect.top -le $taskRect.top -and
+        $rect.right -ge $taskRect.right -and $rect.bottom -ge $taskRect.bottom)
+    return [ordered]@{ hwnd = $Window.ToInt64(); left = $rect.left; top = $rect.top; right = $rect.right; bottom = $rect.bottom; monitorLeft = $info.rcMonitor.left; monitorTop = $info.rcMonitor.top; monitorRight = $info.rcMonitor.right; monitorBottom = $info.rcMonitor.bottom; taskbarLeft = $taskRect.left; taskbarTop = $taskRect.top; taskbarRight = $taskRect.right; taskbarBottom = $taskRect.bottom; aboveTaskbar = $aboveTaskbar; displayMode = Get-DisplayMode }
+}
+
+function Save-Evidence {
+    param([string]$Pass, [string]$Stage, [IntPtr]$Window, [int]$Cycle)
+    $geometry = Get-Geometry -Window $Window
+    $png = Join-Path $evidenceDir (('{0}-cycle{1}-{2}.png' -f $Pass, $Cycle, $Stage))
+    try {
+        Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+        $left = $native::GetSystemMetrics(76); $top = $native::GetSystemMetrics(77)
+        $width = $native::GetSystemMetrics(78); $height = $native::GetSystemMetrics(79)
+        if ($width -le 0 -or $height -le 0) { throw 'Virtual screen dimensions unavailable.' }
+        $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        $graphics.CopyFromScreen($left, $top, 0, 0, [System.Drawing.Size]::new($width, $height))
+        $bitmap.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
+        $graphics.Dispose(); $bitmap.Dispose()
+    } catch { $problems.Add("$Pass cycle $Cycle ${Stage}: screenshot failed: $($_.Exception.Message)"); $png = $null }
+    $record = [ordered]@{ utc = [DateTimeOffset]::UtcNow.ToString('o'); pass = $Pass; stage = $Stage; cycle = $Cycle; screenshot = $png; geometry = $geometry }
+    Add-Content -LiteralPath $evidenceJsonl -Value ($record | ConvertTo-Json -Compress -Depth 8)
+    return $geometry
+}
+
 function Get-ProfileRoots {
     # Main (non --type=) browser processes carrying the profile argument.
     return @(Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" |
@@ -155,6 +217,7 @@ function Invoke-Pass {
 
         $attached = @(Get-RunEntries -ProcessId $app.Id -Msg 'appWindowAttached')[0]
         $window = [IntPtr]([int64]$attached.data.hwnd)
+        $initial = Save-Evidence -Pass $Pass -Stage 'first-entry' -Window $window -Cycle 0
         Note ("$Pass`: appWindowAttached hwnd=0x{0:X} rootPid={1} adopted={2}" -f $window.ToInt64(), $attached.data.rootPid, $attached.data.adopted)
         if ($Pass -eq 'leftover') {
             if ($attached.data.adopted -ne $true) { $problems.Add("$Pass`: attach was not an adoption") }
@@ -173,8 +236,11 @@ function Invoke-Pass {
             Start-Sleep -Seconds 2
             $iconic = $native::IsIconic($window); $visible = $native::IsWindowVisible($window)
             Note ("$Pass cycle ${cycle}: Home logged=$homeDone IsIconic=$iconic IsWindowVisible=$visible")
+            $homeGeometry = Save-Evidence -Pass $Pass -Stage 'home' -Window $window -Cycle $cycle
             if (-not $homeDone) { $problems.Add("$Pass cycle ${cycle}: Home gave no MinimizeWindow") }
             if (-not ($iconic -and $visible)) { $problems.Add("$Pass cycle ${cycle}: window not minimized and visible") }
+            if ($homeGeometry.monitorLeft -ne $initial.monitorLeft -or $homeGeometry.monitorTop -ne $initial.monitorTop -or $homeGeometry.monitorRight -ne $initial.monitorRight -or $homeGeometry.monitorBottom -ne $initial.monitorBottom) { $problems.Add("$Pass cycle ${cycle}: monitor geometry changed during Home") }
+            if ($homeGeometry.displayMode.width -ne $initial.displayMode.width -or $homeGeometry.displayMode.height -ne $initial.displayMode.height -or ($initial.displayMode.available -and $homeGeometry.displayMode.frequency -ne $initial.displayMode.frequency)) { $problems.Add("$Pass cycle ${cycle}: display mode changed during Home") }
 
             Set-Front -Handle $shell
             Start-Sleep -Milliseconds 800
@@ -183,8 +249,13 @@ function Invoke-Pass {
             Start-Sleep -Seconds 2
             $iconic = $native::IsIconic($window); $onTop = ($native::GetForegroundWindow() -eq $window)
             Note ("$Pass cycle ${cycle}: OK logged=$okDone IsIconic=$iconic onTop=$onTop")
+            $okGeometry = Save-Evidence -Pass $Pass -Stage 'reentry' -Window $window -Cycle $cycle
             if (-not $okDone) { $problems.Add("$Pass cycle ${cycle}: OK gave no ActivateWindow") }
             if ($iconic -or -not $onTop) { $problems.Add("$Pass cycle ${cycle}: window not restored on top") }
+            if ($okGeometry.monitorLeft -ne $initial.monitorLeft -or $okGeometry.monitorTop -ne $initial.monitorTop -or $okGeometry.monitorRight -ne $initial.monitorRight -or $okGeometry.monitorBottom -ne $initial.monitorBottom) { $problems.Add("$Pass cycle ${cycle}: monitor geometry changed") }
+            if ($okGeometry.left -ne $initial.left -or $okGeometry.top -ne $initial.top -or $okGeometry.right -ne $initial.right -or $okGeometry.bottom -ne $initial.bottom) { $problems.Add("$Pass cycle ${cycle}: browser geometry changed") }
+            if ($okGeometry.displayMode.width -ne $initial.displayMode.width -or $okGeometry.displayMode.height -ne $initial.displayMode.height -or ($initial.displayMode.available -and $okGeometry.displayMode.frequency -ne $initial.displayMode.frequency)) { $problems.Add("$Pass cycle ${cycle}: display mode changed") }
+            if (-not $okGeometry.aboveTaskbar) { $problems.Add("$Pass cycle ${cycle}: taskbar is above browser") }
         }
 
         $roots = @(Get-ProfileRoots)
