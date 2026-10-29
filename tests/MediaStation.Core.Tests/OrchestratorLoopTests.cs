@@ -202,6 +202,124 @@ public class OrchestratorLoopTests
         Assert.Single(published);
     }
 
+    // ── Story 6.7: appStateChanged ────────────────────────────────────────────
+
+    [Fact]
+    public void Restart_from_failed_logs_each_state_change_in_order_with_its_cause()
+    {
+        var log = new RecordingLog();
+        using var loop = CreateLoop(out var published, out var dispatched, log);
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        loop.Post(new LaunchApp("netflix"));
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        loop.Post(new PageVersionRejected("netflix", 2));
+        loop.Post(new RestartApp("netflix"));
+        WaitFor(() => dispatched.OfType<StopApp>().Any());
+        loop.Post(new CommandCompleted(dispatched.OfType<StopApp>().Single().CmdId));
+        WaitFor(() => dispatched.OfType<StartApp>().Count() == 2);
+        loop.Post(new AppWindowAttached("netflix", 0x1A2C, 4322));
+        WaitFor(() => log.Entries.Count(entry => entry.Msg == "appStateChanged") == 6);
+
+        var entries = log.Entries.Where(entry => entry.Msg == "appStateChanged").ToArray();
+        Assert.All(entries, entry =>
+        {
+            Assert.Equal(LogLevel.Info, entry.Level);
+            Assert.Equal("orchestrator", entry.Src);
+            Assert.Equal("netflix", entry.Data!["appId"]);
+        });
+        Assert.Equal(
+            [
+                (AppLifecycleState.NotRunning, AppLifecycleState.Starting, "LaunchApp"),
+                (AppLifecycleState.Starting, AppLifecycleState.Foreground, "AppWindowAttached"),
+                (AppLifecycleState.Foreground, AppLifecycleState.Failed, "PageVersionRejected"),
+                (AppLifecycleState.Failed, AppLifecycleState.Stopping, "RestartApp"),
+                (AppLifecycleState.Stopping, AppLifecycleState.Starting, "CommandCompleted"),
+                (AppLifecycleState.Starting, AppLifecycleState.Foreground, "AppWindowAttached"),
+            ],
+            entries.Select(entry => (
+                (AppLifecycleState)entry.Data!["from"]!,
+                (AppLifecycleState)entry.Data["to"]!,
+                (string)entry.Data["cause"]!)));
+
+        // Kafelek bez zmian (plex) nie daje żadnego wpisu, choć jest w każdym snapshocie.
+        Assert.DoesNotContain(log.Entries, entry => entry.Msg == "appStateChanged" && Equals(entry.Data!["appId"], "plex"));
+    }
+
+    [Fact]
+    public void State_change_is_logged_before_the_commands_of_its_step_are_dispatched()
+    {
+        var order = new ConcurrentQueue<string>();
+        var log = new OrderLog(order);
+        using var loop = new OrchestratorLoop(
+            new CoreOrchestrator(TwoApps(), new FakeTimeProvider(T0)),
+            batch =>
+            {
+                foreach (var command in batch)
+                {
+                    order.Enqueue("dispatch:" + command.GetType().Name);
+                }
+            },
+            _ => order.Enqueue("publish"),
+            _ => { },
+            log);
+        loop.Start();
+        WaitFor(() => order.Contains("publish"));
+
+        loop.Post(new LaunchApp("netflix"));
+        WaitFor(() => order.Contains("dispatch:StartApp"));
+
+        var steps = order.ToList();
+        var changed = steps.IndexOf("log:appStateChanged");
+        Assert.True(changed >= 0);
+        Assert.True(changed < steps.IndexOf("dispatch:StartApp"));
+        Assert.Single(steps, step => step == "log:appStateChanged");
+    }
+
+    [Fact]
+    public void Cold_start_and_a_snapshot_without_a_state_change_log_no_state_change()
+    {
+        var log = new RecordingLog();
+        using var loop = CreateLoop(out var published, out _, log);
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        // SystemResumed publikuje snapshot z nowym `seq`, ale stany kafelków się nie zmieniają.
+        loop.Post(new SystemResumed("PBT_APMRESUMEAUTOMATIC"));
+        WaitFor(() => published.Count >= 2);
+        loop.Post(new LaunchApp("netflix"));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "appStateChanged"));
+
+        var entry = Assert.Single(log.Entries, entry => entry.Msg == "appStateChanged");
+        Assert.Equal(AppLifecycleState.NotRunning, entry.Data!["from"]);
+        Assert.Equal(AppLifecycleState.Starting, entry.Data["to"]);
+        Assert.Equal("LaunchApp", entry.Data["cause"]);
+    }
+
+    [Fact]
+    public void Ignored_intent_and_a_step_without_a_snapshot_log_no_state_change()
+    {
+        var log = new RecordingLog();
+        using var loop = CreateLoop(out var published, out _, log);
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        loop.Post(new RestartApp("netflix"));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "intentIgnored"));
+        loop.Post(new CdpLost("netflix"));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "cdpLostHandled"));
+
+        // Znacznik końca: kolejny krok ze zmianą stanu daje dokładnie jeden wpis, więc wcześniejsze kroki nie dały żadnego.
+        loop.Post(new LaunchApp("netflix"));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "appStateChanged"));
+
+        var entry = Assert.Single(log.Entries, entry => entry.Msg == "appStateChanged");
+        Assert.Equal("LaunchApp", entry.Data!["cause"]);
+        WaitFor(() => published.Count >= 2);
+        Assert.Equal(2, published.Count);
+    }
+
     [Fact]
     public void Foreground_changed_is_logged_without_changing_state()
     {
@@ -982,6 +1100,13 @@ public class OrchestratorLoopTests
         public void Write(LogLevel level, string src, string msg, IReadOnlyDictionary<string, object?>? data = null, Exception? error = null)
         {
         }
+    }
+
+    /// <summary>Log, który dopisuje <c>log:msg</c> do wspólnej kolejki kroków (kolejność względem dispatch i publish).</summary>
+    private sealed class OrderLog(ConcurrentQueue<string> order) : ILog
+    {
+        public void Write(LogLevel level, string src, string msg, IReadOnlyDictionary<string, object?>? data = null, Exception? error = null) =>
+            order.Enqueue("log:" + msg);
     }
 
     /// <summary>Host, który przyjmuje komendy i nigdy nie odpowiada: tylko timeout może zamknąć start.</summary>

@@ -11,7 +11,9 @@ namespace MediaStation.App.Orchestrator;
 
 /// <summary>
 /// Wątek Orchestratora (AD-2): jedna kolejka i jeden konsument. Core pozostaje czystym handlerem,
-/// a App dostarcza kolejkę, wątek i publikację snapshotów (AD-14).
+/// a App dostarcza kolejkę, wątek i publikację snapshotów (AD-14). Pętla pamięta ostatni znany stan każdej aplikacji
+/// i loguje każdą jego zmianę jako <c>appStateChanged</c> z przyczyną (typem komunikatu), żeby kolejność stanów
+/// (np. J4: <c>failed → stopping → starting → foreground</c>) była widoczna w logu bez zgadywania ze skutków ubocznych.
 /// </summary>
 public sealed class OrchestratorLoop : IDisposable
 {
@@ -23,6 +25,9 @@ public sealed class OrchestratorLoop : IDisposable
     private readonly Action<Action> _publishAction;
     private readonly ILog _log;
     private readonly BlockingCollection<IOrchestratorMessage> _queue = new();
+
+    /// <summary>Ostatni znany stan aplikacji z opublikowanych snapshotów; czytany i pisany tylko na wątku pętli.</summary>
+    private readonly Dictionary<string, AppLifecycleState> _lastStates = new(StringComparer.Ordinal);
     private readonly Thread _thread;
     private bool _started;
     private volatile bool _disposed;
@@ -134,6 +139,36 @@ public sealed class OrchestratorLoop : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Jeden wpis <c>appStateChanged</c> na każdą aplikację, której stan w snapshocie kroku różni się od ostatnio znanego.
+    /// Pierwsze pojawienie się <c>appId</c> tylko zapamiętuje stan (zimny start nie daje wpisu na kafelek).
+    /// </summary>
+    private void LogStateChanges(IOrchestratorMessage message, ShellSnapshot snapshot)
+    {
+        foreach (var app in snapshot.Apps)
+        {
+            if (!_lastStates.TryGetValue(app.AppId, out var from))
+            {
+                _lastStates[app.AppId] = app.State;
+                continue;
+            }
+
+            if (from == app.State)
+            {
+                continue;
+            }
+
+            _lastStates[app.AppId] = app.State;
+            _log.Info(Src, "appStateChanged", new Dictionary<string, object?>
+            {
+                ["appId"] = app.AppId,
+                ["from"] = from,
+                ["to"] = app.State,
+                ["cause"] = message.GetType().Name,
+            });
+        }
+    }
+
     private void Run()
     {
         foreach (var message in _queue.GetConsumingEnumerable())
@@ -172,6 +207,13 @@ public sealed class OrchestratorLoop : IDisposable
                         ["v"] = rejected.Version,
                         ["state"] = StateIn(result, rejected.AppId),
                     });
+                }
+
+                // Zmiany stanów aplikacji przed dispatch: `starting` w logu wyprzedza `appLaunch` hosta.
+                // Krok bez snapshotu (fakt albo intencja zignorowane) nie zmienia stanu, więc nie daje wpisu.
+                if (result.Snapshot is { } changed)
+                {
+                    LogStateChanges(message, changed);
                 }
 
                 // Zmiana foregroundu to fakt zapisany w logu bez reakcji (AD-8): jedno zdarzenie, jeden wpis.

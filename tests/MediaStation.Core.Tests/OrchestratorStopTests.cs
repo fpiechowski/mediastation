@@ -228,6 +228,37 @@ public class OrchestratorStopTests
         Assert.Null(late.Snapshot);
     }
 
+    /// <summary>
+    /// J4 (story 6.7): BrowserHost potwierdza stop dwoma faktami, <see cref="ProcessExited"/> i potem
+    /// <see cref="CommandCompleted"/>. Restart z <c>Failed</c> startuje aplikację dokładnie raz; drugi fakt nie daje
+    /// komend ani snapshotu, a kafelek zostaje w <c>Starting</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("cdpLost")]
+    [InlineData("pageVersionRejected")]
+    public void Restart_from_failed_with_both_stop_facts_starts_the_app_once_and_stays_starting(string failure)
+    {
+        var (orchestrator, _) = Started();
+        Foreground(orchestrator, "netflix");
+        Event fact = failure == "cdpLost" ? new CdpLost("netflix") : new PageVersionRejected("netflix", 2);
+        var failed = orchestrator.Handle(fact);
+        Assert.Equal(AppLifecycleState.Failed, StateOf(Assert.IsType<ShellSnapshot>(failed.Snapshot), "netflix"));
+        var restart = orchestrator.Handle(new RestartApp("netflix"));
+        var stop = Assert.Single(restart.Commands.OfType<StopApp>());
+
+        var exited = orchestrator.Handle(new ProcessExited("netflix"));
+        var completed = orchestrator.Handle(new CommandCompleted(stop.CmdId));
+
+        Assert.Single(exited.Commands.OfType<StartApp>());
+        var starting = Assert.IsType<ShellSnapshot>(exited.Snapshot);
+        Assert.Equal(AppLifecycleState.Starting, StateOf(starting, "netflix"));
+        Assert.Empty(completed.Commands);
+        Assert.Null(completed.Snapshot);
+        var next = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new OrchestratorStarted()).Snapshot);
+        Assert.Equal(starting.Rev + 1, next.Rev);
+        Assert.Equal(AppLifecycleState.Starting, StateOf(next, "netflix"));
+    }
+
     /// <summary>Bez <c>RootPid</c> (Failed po timeoucie startu, przed attach) nie ma czego odciszać: StopApp idzie pierwszy.</summary>
     [Theory]
     [InlineData(false)]

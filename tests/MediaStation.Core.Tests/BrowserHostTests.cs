@@ -7,6 +7,8 @@ using MediaStation.Core.Config;
 using MediaStation.Core.Contracts;
 using MediaStation.Core.Logging;
 using Microsoft.Extensions.Time.Testing;
+using CoreOrchestrator = MediaStation.Core.Orchestrator.Orchestrator;
+using OrchestratorResult = MediaStation.Core.Orchestrator.OrchestratorResult;
 
 namespace MediaStation.Core.Tests;
 
@@ -17,6 +19,7 @@ namespace MediaStation.Core.Tests;
 /// celu z backoffem, termin <c>cdpReconnectTimeout</c>, <see cref="CdpLost"/> i Home na prawdziwym Orchestratorze.
 /// Story 6.5: adopcja żywego korzenia przez sondę (bez drugiego procesu), CDP po adopcji albo <see cref="CdpLost"/>,
 /// Start w trakcie sondy, odświeżenie sesji po wybudzeniu i spóźnione fakty na prawdziwym Orchestratorze.
+/// Story 6.7: J4 (restart kafelka <c>Failed</c> jednym OK) na prawdziwym Orchestratorze i prawdziwym hoście (<see cref="J4Pump"/>).
 /// </summary>
 public class BrowserHostTests
 {
@@ -2951,6 +2954,312 @@ public class BrowserHostTests
         Assert.DoesNotContain(attached.Commands, c => c is ActivateWindow);
     }
 
+    // ── Story 6.7: J4 — restart aplikacji Failed jednym OK ────────────────────
+
+    [Theory]
+    [InlineData("cdpLost")]
+    [InlineData("pageVersionRejected")]
+    public async Task J4_restart_from_failed_kills_the_old_tree_and_brings_a_new_root_to_the_foreground(string failure)
+    {
+        var transports = new ConcurrentQueue<FakeTransport>();
+        using var h = new Harness(connect: FreshTransports(transports));
+        var pump = new J4Pump(h);
+        await pump.Launch();
+        await FailLive(h, pump, transports.Last(), failure);
+        Assert.Equal(AppLifecycleState.Failed, pump.State);
+
+        var restart = pump.Handle(new RestartApp(AppId));
+
+        Assert.Null(restart.IgnoredIntent);
+        Assert.Collection(
+            restart.Commands,
+            command => Assert.Equal(4242, Assert.IsType<UnmuteProcessTree>(command).RootPid),
+            command => Assert.Equal(AppId, Assert.IsType<StopApp>(command).AppId),
+            command => Assert.IsType<ScheduleTimer>(command));
+        var stop = restart.Commands.OfType<StopApp>().Single();
+        var results = await pump.Feed(7);
+
+        // Stop hosta: ProcessExited i CommandCompleted; dokładnie jeden StartApp, potem nowy korzeń na pierwszym planie.
+        Assert.Equal([new ProcessExited(AppId), new CommandCompleted(stop.CmdId)], h.Posted.Skip(3).Take(2));
+        var start = Assert.Single(results.SelectMany(result => result.Commands).OfType<StartApp>());
+        Assert.Equal([new AppWindowAttached(AppId, 0x1235, 4243), new CommandCompleted(start.CmdId)], h.Posted.Skip(5));
+        Assert.Contains(results[2].Commands, command => command is ActivateWindow { Hwnd: 0x1235 });
+        Assert.Equal(
+            [
+                AppLifecycleState.Starting, AppLifecycleState.Foreground, AppLifecycleState.Failed,
+                AppLifecycleState.Stopping, AppLifecycleState.Starting, AppLifecycleState.Foreground,
+            ],
+            pump.States);
+        Assert.True(h.Process.HasExited);
+        Assert.Equal(1, h.Process.KillCalls);
+        Assert.Equal(2, h.Launcher.Starts.Count);
+        Assert.False(h.Launcher.Processes[1].HasExited);
+        Assert.True(h.ProfileChecks[^1].FirstExited);
+        await pump.AssertQuiet();
+    }
+
+    [Fact]
+    public async Task J4_restart_refused_by_a_held_profile_fails_again_without_a_new_launch()
+    {
+        var transports = new ConcurrentQueue<FakeTransport>();
+        using var h = new Harness(connect: FreshTransports(transports));
+        var pump = new J4Pump(h);
+        await pump.Launch();
+        await FailLive(h, pump, transports.Last(), "pageVersionRejected");
+
+        h.ProfileHeld = true;
+        pump.Handle(new RestartApp(AppId));
+        var results = await pump.Feed(6);
+
+        var start = Assert.Single(results.SelectMany(result => result.Commands).OfType<StartApp>());
+        Assert.Equal(new CommandFailed(start.CmdId, ErrorCode.ProfileInUse), h.Posted[5]);
+        Assert.Equal("profileInUse", StartFailure(h).Data!["reason"]);
+        Assert.Equal(
+            [
+                AppLifecycleState.Starting, AppLifecycleState.Foreground, AppLifecycleState.Failed,
+                AppLifecycleState.Stopping, AppLifecycleState.Starting, AppLifecycleState.Failed,
+            ],
+            pump.States);
+        Assert.Single(h.Launcher.Starts);
+        Assert.True(h.Process.HasExited);
+        await pump.AssertQuiet();
+    }
+
+    /// <summary>
+    /// Nowy proces restartu ginie. Przed oknem prawdziwy host zgłasza to jako porażkę startu (<c>launcherExited</c>,
+    /// bez <see cref="ProcessExited"/>, bo nie ma jeszcze obserwatora wyjścia); po oknie, w trakcie łączenia CDP,
+    /// jako <see cref="ProcessExited"/>. Oba fakty kończą się w <c>Failed</c> bez kolejnego uruchomienia.
+    /// </summary>
+    [Theory]
+    [InlineData("beforeWindow")]
+    [InlineData("afterWindow")]
+    public async Task J4_restarted_process_that_dies_fails_the_tile_without_another_launch(string when)
+    {
+        var transports = new ConcurrentQueue<FakeTransport>();
+        var fresh = FreshTransports(transports);
+        Harness? harness = null;
+        using var h = harness = new Harness(
+            findWindow: when == "beforeWindow"
+                ? pid =>
+                {
+                    if (pid == Window.Pid)
+                    {
+                        return Window;
+                    }
+
+                    // Nowy korzeń restartu kończy się, zanim pokaże okno.
+                    harness!.Launcher.Processes.Single(process => process.Id == pid).Exit(3);
+                    return null;
+                }
+                : null,
+            connect: when == "beforeWindow"
+                ? fresh
+                : async (port, token) =>
+                {
+                    if (transports.IsEmpty)
+                    {
+                        return await fresh(port, token);
+                    }
+
+                    // Drugie łączenie wisi, aż wyjście procesu je anuluje.
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                    return null;
+                });
+        var pump = new J4Pump(h);
+        await pump.Launch();
+        await FailLive(h, pump, transports.Last(), "pageVersionRejected");
+
+        pump.Handle(new RestartApp(AppId));
+        if (when == "beforeWindow")
+        {
+            await pump.Feed(6);
+
+            Assert.IsType<CommandFailed>(h.Posted[5]);
+            var failure = StartFailure(h);
+            Assert.Equal("launcherExited", failure.Data!["reason"]);
+            Assert.Equal(
+                [
+                    AppLifecycleState.Starting, AppLifecycleState.Foreground, AppLifecycleState.Failed,
+                    AppLifecycleState.Stopping, AppLifecycleState.Starting, AppLifecycleState.Failed,
+                ],
+                pump.States);
+        }
+        else
+        {
+            await pump.Feed(6);
+            Assert.Equal(new AppWindowAttached(AppId, 0x1235, 4243), h.Posted[5]);
+            h.Launcher.Processes[1].Exit(3);
+            var results = await pump.Feed(8);
+
+            Assert.Equal(new ProcessExited(AppId), h.Posted[6]);
+            Assert.IsType<CommandFailed>(h.Posted[7]);
+            Assert.Contains(results[0].Commands, command => command is ForgetProcessTree { RootPid: 4243 });
+            Assert.Contains(results[0].Commands, command => command is ShowShell);
+            Assert.Equal(
+                [
+                    AppLifecycleState.Starting, AppLifecycleState.Foreground, AppLifecycleState.Failed,
+                    AppLifecycleState.Stopping, AppLifecycleState.Starting, AppLifecycleState.Foreground,
+                    AppLifecycleState.Failed,
+                ],
+                pump.States);
+        }
+
+        Assert.Equal(2, h.Launcher.Starts.Count);
+        Assert.True(h.Launcher.Processes[1].HasExited);
+        await pump.AssertQuiet();
+    }
+
+    [Fact]
+    public async Task J4_restarted_app_that_fails_again_hides_behind_the_shell_with_focus_on_its_tile()
+    {
+        var transports = new ConcurrentQueue<FakeTransport>();
+        using var h = new Harness(connect: FreshTransports(transports));
+        var pump = new J4Pump(h);
+        await pump.Launch();
+        await FailLive(h, pump, transports.Last(), "pageVersionRejected");
+        pump.Handle(new RestartApp(AppId));
+        await pump.Feed(7);
+        Assert.Equal(AppLifecycleState.Foreground, pump.State);
+
+        var failed = await FailLive(h, pump, transports.Last(), "pageVersionRejected");
+
+        Assert.Equal(new PageVersionRejected(AppId, 2), h.Posted[7]);
+        Assert.Contains(failed.Commands, command => command is MuteProcessTree { RootPid: 4243 });
+        Assert.Contains(failed.Commands, command => command is MinimizeWindow { Hwnd: 0x1235 });
+        Assert.Contains(failed.Commands, command => command is ShowShell);
+        Assert.Equal(AppId, failed.Snapshot!.FocusRequest!.Target);
+        Assert.Equal(
+            [
+                AppLifecycleState.Starting, AppLifecycleState.Foreground, AppLifecycleState.Failed,
+                AppLifecycleState.Stopping, AppLifecycleState.Starting, AppLifecycleState.Foreground,
+                AppLifecycleState.Failed,
+            ],
+            pump.States);
+
+        // Proces żyje (to J4 „Nie odpowiada”): o zamknięciu zdecyduje dopiero AppMenu.
+        Assert.False(h.Launcher.Processes[1].HasExited);
+        await pump.AssertQuiet();
+    }
+
+    [Fact]
+    public async Task J4_three_failed_restarts_never_escalate_and_a_fourth_reaches_the_foreground()
+    {
+        var transports = new ConcurrentQueue<FakeTransport>();
+        using var h = new Harness(connect: FreshTransports(transports));
+        var pump = new J4Pump(h);
+        await pump.Launch();
+        await FailLive(h, pump, transports.Last(), "pageVersionRejected");
+
+        for (var i = 0; i < 3; i++)
+        {
+            var restart = pump.Handle(new RestartApp(AppId));
+            Assert.Null(restart.IgnoredIntent);
+            Assert.Equal(AppLifecycleState.Stopping, OrchestratorTestSupport.StateOf(restart.Snapshot!, AppId));
+            await pump.Feed(pump.Fed + 4);
+            Assert.Equal(AppLifecycleState.Foreground, pump.State);
+
+            var failed = await FailLive(h, pump, transports.Last(), "pageVersionRejected");
+            var tile = Assert.Single(failed.Snapshot!.Apps, app => app.AppId == AppId);
+            Assert.Equal(AppLifecycleState.Failed, tile.State);
+        }
+
+        var last = pump.Handle(new RestartApp(AppId));
+        Assert.Null(last.IgnoredIntent);
+        await pump.Feed(pump.Fed + 4);
+
+        Assert.Equal(AppLifecycleState.Foreground, pump.State);
+        Assert.Equal(5, h.Launcher.Starts.Count);
+        Assert.Equal([4242, 4243, 4244, 4245, 4246], h.Launcher.Processes.Select(process => process.Id));
+        Assert.All(h.Launcher.Processes.Take(4), process =>
+        {
+            Assert.True(process.HasExited);
+            Assert.Equal(1, process.KillCalls);
+        });
+        Assert.False(h.Launcher.Processes[4].HasExited);
+        Assert.Equal(new AppWindowAttached(AppId, 0x1234 + 4, 4246), h.Posted[^2]);
+        AppLifecycleState[] cycle = [AppLifecycleState.Stopping, AppLifecycleState.Starting, AppLifecycleState.Foreground];
+        Assert.Equal(
+            [
+                AppLifecycleState.Starting, AppLifecycleState.Foreground, AppLifecycleState.Failed,
+                .. cycle, AppLifecycleState.Failed,
+                .. cycle, AppLifecycleState.Failed,
+                .. cycle, AppLifecycleState.Failed,
+                .. cycle,
+            ],
+            pump.States);
+        await pump.AssertQuiet();
+    }
+
+    [Fact]
+    public async Task J4_close_after_a_failed_restart_kills_the_tree_and_launches_nothing()
+    {
+        var transports = new ConcurrentQueue<FakeTransport>();
+        using var h = new Harness(connect: FreshTransports(transports));
+        var pump = new J4Pump(h);
+        await pump.Launch();
+        await FailLive(h, pump, transports.Last(), "pageVersionRejected");
+        pump.Handle(new RestartApp(AppId));
+        await pump.Feed(7);
+        await FailLive(h, pump, transports.Last(), "pageVersionRejected");
+
+        var close = pump.Handle(new CloseApp(AppId));
+        var stop = Assert.Single(close.Commands.OfType<StopApp>());
+        var results = await pump.Feed(10);
+
+        Assert.Equal([new ProcessExited(AppId), new CommandCompleted(stop.CmdId)], h.Posted.Skip(8));
+        Assert.DoesNotContain(results.SelectMany(result => result.Commands), command => command is StartApp);
+        Assert.Equal(
+            [
+                AppLifecycleState.Starting, AppLifecycleState.Foreground, AppLifecycleState.Failed,
+                AppLifecycleState.Stopping, AppLifecycleState.Starting, AppLifecycleState.Foreground,
+                AppLifecycleState.Failed, AppLifecycleState.Stopping, AppLifecycleState.NotRunning,
+            ],
+            pump.States);
+        Assert.True(h.Launcher.Processes[1].HasExited);
+        Assert.Equal(1, h.Launcher.Processes[1].KillCalls);
+        Assert.Equal(2, h.Launcher.Starts.Count);
+        await pump.AssertQuiet();
+    }
+
+    /// <summary>Connector, który przy każdym łączeniu daje świeży transport (sesja restartu ma własny kanał CDP).</summary>
+    private static Func<int, CancellationToken, Task<ICdpTransport?>> FreshTransports(ConcurrentQueue<FakeTransport> transports) =>
+        (_, _) =>
+        {
+            var transport = new FakeTransport();
+            transports.Enqueue(transport);
+            return Task.FromResult<ICdpTransport?>(transport);
+        };
+
+    /// <summary>
+    /// Awaria żywej sesji (proces zostaje): zerwane CDP bez powrotu aż do terminu reconnectu (<see cref="CdpLost"/>)
+    /// albo <c>hello</c> z innym major <c>v</c> (<see cref="PageVersionRejected"/>). Zwraca wynik Orchestratora dla faktu.
+    /// </summary>
+    private static async Task<OrchestratorResult> FailLive(Harness h, J4Pump pump, FakeTransport transport, string failure)
+    {
+        var posted = pump.Fed;
+        if (failure == "cdpLost")
+        {
+            var attempts = h.ReconnectAttempts;
+            var closedAt = await Drop(h, transport);
+            var schedule = NeverBackScheduleMs;
+            for (var i = 0; i < schedule.Length; i++)
+            {
+                await StepToAttempt(h, closedAt, schedule[i], attempts + i + 1);
+            }
+
+            h.Time.Advance(closedAt.AddSeconds(30) - h.Time.GetUtcNow());
+        }
+        else
+        {
+            transport.PushBinding("__msBridge", HelloV2);
+        }
+
+        var results = await pump.Feed(posted + 1);
+        Assert.Equal(failure == "cdpLost" ? new CdpLost(AppId) : (IOrchestratorMessage)new PageVersionRejected(AppId, 2), h.Posted[posted]);
+        Assert.Equal(AppLifecycleState.Failed, pump.State);
+        return Assert.Single(results);
+    }
+
     // ── Granice AD-1 w repo ───────────────────────────────────────────────────
 
     [Fact]
@@ -3223,6 +3532,90 @@ public class BrowserHostTests
             {
                 transport?.Dispose();
             }
+        }
+    }
+
+    /// <summary>
+    /// Pompa J4 (story 6.7): prawdziwy Orchestrator i prawdziwy BrowserHost harnessu w jednej pętli testu. Wynik kroku
+    /// wysyła <see cref="StartApp"/> i <see cref="StopApp"/> do hosta (pozostałe komendy nie mają tu wykonawcy), a fakty
+    /// hosta wracają do Orchestratora w kolejności wysłania. Stan kafelka jest zbierany po każdej zmianie, tak jak
+    /// <c>appStateChanged</c> w pętli App.
+    /// </summary>
+    private sealed class J4Pump(Harness h)
+    {
+        private readonly CoreOrchestrator _orchestrator = OrchestratorTestSupport.Started().Orchestrator;
+
+        /// <summary>Kolejne różne stany kafelka z wyników kroków (bez stanu z zimnego startu).</summary>
+        public List<AppLifecycleState> States { get; } = [];
+
+        public AppLifecycleState State => States[^1];
+
+        /// <summary>Liczba faktów hosta podanych już Orchestratorowi.</summary>
+        public int Fed { get; private set; }
+
+        public OrchestratorResult Handle(IOrchestratorMessage message)
+        {
+            var result = _orchestrator.Handle(message);
+            if (result.Snapshot is { } snapshot)
+            {
+                var state = OrchestratorTestSupport.StateOf(snapshot, AppId);
+                if (States.Count == 0 || States[^1] != state)
+                {
+                    States.Add(state);
+                }
+            }
+
+            foreach (var command in result.Commands)
+            {
+                switch (command)
+                {
+                    case StartApp start:
+                        h.Host.Start(start);
+                        break;
+                    case StopApp stop:
+                        h.Host.Stop(stop);
+                        break;
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Podaje Orchestratorowi fakty hosta po kolei, aż łącznie <paramref name="total"/>; każdy czeka na swoje wysłanie,
+        /// bo dopiero podany fakt (np. <see cref="ProcessExited"/> stopu) może zlecić hostowi następną komendę.
+        /// </summary>
+        public async Task<IReadOnlyList<OrchestratorResult>> Feed(int total)
+        {
+            var results = new List<OrchestratorResult>();
+            while (Fed < total)
+            {
+                await h.WaitPosted(Fed + 1);
+                results.Add(Handle(h.Posted[Fed]));
+                Fed++;
+            }
+
+            return results;
+        }
+
+        /// <summary>LaunchApp z kafelka i dwa fakty startu (okno, potwierdzenie): kafelek w <c>Foreground</c>.</summary>
+        public async Task Launch()
+        {
+            Handle(new LaunchApp(AppId));
+            await Feed(Fed + 2);
+            Assert.Equal(AppLifecycleState.Foreground, State);
+        }
+
+        /// <summary>
+        /// Host nie wysyła już nic poza podanymi faktami (żadnego drugiego stopu, startu ani awarii). Zegar testu idzie
+        /// najpierw 60 s naprzód, za każdy termin hosta (reconnect 30 s, łączenie CDP 15 s, czekanie stopu 3 s i 5 s),
+        /// żeby spóźniony fakt na fałszywym czasie też został zauważony.
+        /// </summary>
+        public async Task AssertQuiet()
+        {
+            h.Time.Advance(TimeSpan.FromSeconds(60));
+            await Task.Delay(200, Ct);
+            Assert.Equal(Fed, h.Posted.Count);
         }
     }
 
