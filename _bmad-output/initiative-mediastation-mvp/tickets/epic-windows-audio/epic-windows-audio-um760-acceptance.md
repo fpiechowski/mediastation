@@ -4,7 +4,7 @@ type: acceptance-plan
 machine: UM760
 base_head: 3d29fee
 created: 2026-10-27
-status: executed
+status: aborted
 verdict: not-accepted
 ---
 
@@ -259,6 +259,10 @@ Pełny przebieg wszystkich scenariuszy po poprawkach rejestracji hostów i regre
 | S26 |  |  |
 | S27 |  |  |
 
+Halt note (2026-10-29, HEAD d16b60e, UM760): odbiór zatrzymany po S15 na żądanie użytkownika. Po uruchomieniu Netflixa przez kafelek MediaStation ekran UM760 wielokrotnie gasł i wracał do szumu; po natychmiastowym zamknięciu MediaStation ekran wrócił do prawidłowego działania, a objaw nie występował wcześniej. S16–S17, S20–S24 i S26–S27 nie uruchomiono. Issue przekazany do `bmad-agent-po` jako ticket do ustalenia przyczyny i naprawy.
+
+User verdict (2026-10-29, HEAD d16b60e, UM760): **not accepted** — MediaStation wywołuje powtarzalny problem z sygnałem/obrazem przy uruchomieniu Netflixa; po zamknięciu aplikacji problem ustępuje.
+
 ## 2026-10-28, HEAD 60d6215, UM760 — pełny pass z URL audio
 
 Nowy pass po zatrzymaniu na S15: poprzedni harness miał szarą about:blank stronę; świeży start używa MEDIASTATION_HARNESS_URL z materiałem YouTube.
@@ -295,3 +299,38 @@ Nowy pass po zatrzymaniu na S15: poprzedni harness miał szarą about:blank stro
 | S27 | (2026-10-28, HEAD 60d6215, UM760) n/d — Netflix precondition missing: Edge did not open a playable netflix.com window in S15; user requested this prerequisite for full audio acceptance. | Netflix precondition missing: Edge did not open a playable netflix.com window in S15; user requested this prerequisite for full audio acceptance. |
 
 User verdict (2026-10-28, HEAD 60d6215, UM760): **not accepted** — następny odbiór wymaga działającego `netflix.com` w Edge, w profilu `profiles\\netflix`, przed rozpoczęciem scenariuszy audio oraz ponownej weryfikacji S15–S27.
+
+## 2026-10-29, HEAD 55b7a1f, UM760 — ograniczony odbiór S15–S17, S20–S24, S26–S27
+
+Nowy pass wyłącznie dla rekordów niewykonanych albo niezaliczonych w poprzednim odbiorze. Warunek S15: Edge musi już działać na netflix.com z profilem profiles\\netflix i odtwarzać słyszalny materiał; MediaStation uruchamiam z MEDIASTATION_DEV_HARNESS=1 oraz netflix harnesssem.
+
+| # | Wynik | Dowód |
+|---|---|---|
+| P0 | pass (2026-10-29, HEAD 55b7a1f, UM760) | P0.1 machine MEDIASTATION / F7BSI / EliteMini Series; HEAD 55b7a1f. Working tree contains the acceptance-plan update and unrelated untracked backlog note. P0.2 dotnet publish succeeded; publish\\MediaStation.exe exists; Core tests 1/1 passed and web typecheck/build succeeded. P0.5 check-home-s10 -SelfTest passed; inject-power -SelfTest OK: 9 cases; check-netflix-preflight -SelfTest passed. P0.6 pl-PL voice not yet exercised through overlay; will be exercised before app demo. P0.7 Netflix harness preflight awaits user-confirmed live Edge session. |
+| S1 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S2 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S3 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S4 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S5 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S6 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S7 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S8 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S9 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S10 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S11 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S12 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S13 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S14 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S15 | user: fail — po uruchomieniu Netflixa przez kafelek MediaStation ekran cyklicznie gasł i wracał do szumu; problem powtórzył się kilka razy | Log 2026-10-29T12:11:41Z: appLaunch appId=netflix url=https://www.netflix.com/; appWindowAttached hwnd=131950 rootPid=9792; ActivateWindow completed; audioRuleApplied muted=false sessions=0. User observation: immediately after launching Netflix through the MediaStation tile the display repeatedly went black and returned to visual noise/static; this happened several times and did not occur before launching Netflix in MediaStation. MediaStation was stopped after the observation. |
+| S16 |  |  |
+| S17 |  |  |
+| S18 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S19 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S20 |  |  |
+| S21 |  |  |
+| S22 |  |  |
+| S23 |  |  |
+| S24 |  |  |
+| S25 | n/a — poza zakresem tego passu; wynik z poprzedniego odbioru zachowany | Nie uruchamiać ponownie zgodnie z decyzją użytkownika. |
+| S26 |  |  |
+| S27 |  |  |
