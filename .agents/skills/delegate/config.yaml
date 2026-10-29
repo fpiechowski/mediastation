@@ -17,17 +17,28 @@ default:
 
 # Routes are checked in order; the first whose phrases match the task (by meaning, in any language) wins.
 # A phrase may also be a skill name, e.g. "bmad-code-review".
-routes: []
-  # - phrases: ["code review", "przegląd kodu", "bmad-code-review"]
-  #   adapter: t3-code
-  #   model: GPT-6.1 Sol
-  #   effort: xhigh
-  # - phrases: ["szybka poprawka", "literówka", "quick fix"]
-  #   model: Sonnet 5.5
-  #   effort: low
-  # - phrases: ["eksperyment na darmowym modelu"]
-  #   adapter: opencode
-  #   model: opencode/big-pickle
+# Example with an adapter:
+#   - phrases: ["code review", "przegląd kodu", "bmad-code-review"]
+#     adapter: t3-code
+#     model: GPT-6.1 Sol
+#     effort: xhigh
+routes:
+  - phrases: ["bmad-loop", "bmad-loop-resolve", "bmad-loop-setup", "bmad-loop-sweep"]
+    model: Sonnet 5.5
+    effort: high
+  - phrases: ["bmad-agent-po", "Sofia", "product owner"]
+    model: Opus 5.5
+    effort: medium
+  - phrases: ["bmad-build", "bmad-build-auto"]
+    model: Opus 5.5
+    effort: high
+  - phrases: ["bmad-architecture", "bmad-ux", "bmad-prd", "bmad-product-brief", "bmad-brief"]
+    model: Opus 5.5
+    effort: xhigh
+  # Last on purpose: the general BMad help route must not catch the specific bmad-* skills above.
+  - phrases: ["bmad", "bmad help", "pomoc bmad", "co dalej w bmad"]
+    model: Haiku 5.5
+    effort: low
 
 # Per-adapter launch settings.
 adapters:
