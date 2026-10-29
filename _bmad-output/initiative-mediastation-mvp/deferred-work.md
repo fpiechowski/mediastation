@@ -505,3 +505,18 @@ source_spec: `tickets/epic-browserhost/tickets/story-tracer-browserhost-edge-kio
 severity: low
 reason: `OnBindingCalled` logs and returns; no Event reaches the Orchestrator. Envelope versioning belongs to story 6.6 (envelope v1 with `id`, version tests), which should add the tile error path.
 status: open
+
+### DW-55: A successful reconnect is never shown to give the page a working bridge: the document already loaded keeps its old PageRuntime, and no real-browser run proves it can call the binding re-added by the
+origin: spec-deferred 21f1d00f83ed
+location: src/MediaStation.App/Hosts/Browser/BrowserHost.cs (TryReconnectOnceAsync, InstallAsync)
+source_spec: `tickets/epic-browserhost/tickets/story-binding-po-nawigacji-i-reconnect-cdp-plan.md`
+reason: maybe-false. Unit tests cover the recovery path only on FakeTransport (the quick-recovery test pushes a `hello` the real page would not send), and the live smoke reaches only the give-up path because dropping the socket of a live target needs elevation. Settle with an elevated run on UM760 that resets the host's CDP TCP connection (SetTcpEntry DELETE_TCB) while Netflix is open: expect `cdpReconnected`, then trigger a page message from the existing document (or a main-frame navigation) and look for `pageHello` / a `Runtime.bindingCalled` on the new session.
+status: open
+
+### DW-56: A main-frame navigation during a CDP outage leaves the new document without PageRuntime: the init script died with the old session, and reconnect neither reloads nor evaluates, so the bridge stays
+origin: spec-deferred e8d39e94e10a
+location: src/MediaStation.App/Hosts/Browser/BrowserHost.cs (ReconnectAsync, TryReconnectOnceAsync)
+source_spec: `tickets/epic-browserhost/tickets/story-binding-po-nawigacji-i-reconnect-cdp-plan.md`
+severity: medium
+reason: Real, not caused by this change: before 6.3 a drop lost binding and script for good. Recovery would need `Page.reload` or `Runtime.evaluate`, both excluded by AD-1 and this story's Never list, or a `hello` watchdog after `cdpReconnected` that turns a silent page into `CdpLost`/Failed. Netflix is a single-page app, so main-frame navigations are rare and the window can be long. Settle as a product decision: either a post-reconnect hello watchdog (needs a page message on the new session, see the item above) or an AD-1 amendment allowing one reload after reconnect.
+status: open

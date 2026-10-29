@@ -3,8 +3,8 @@ title: 'Story 6.3: Binding po nawigacji i reconnect CDP'
 type: 'feature'
 ticket: '3'
 created: '2026-10-29'
-status: 'built'
-baseline_revision: '9aaa8117fa5fdcbf76044e39e779fc5b35f36fe3'
+status: done
+baseline_revision: '9252f4575caa7310385b9dfde1f8ec2cd33e63d0'
 route: 'full'
 route_source: 'auto'
 risk: 'high'
@@ -12,7 +12,7 @@ review: 'thorough'
 review_source: 'pinned'
 lenses_ran: [blind-hunter, edge-case-hunter, verification-gap, intent-alignment]
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/initiative-mediastation-mvp/tickets/epic-browserhost/tickets/story-tracer-browserhost-edge-kiosk-cdp-i-hello-plan.md'
 warnings: [oversized]
@@ -24,6 +24,13 @@ deferred:
     location: >-
       src/MediaStation.App/Hosts/Browser/BrowserHost.cs (TryReconnectOnceAsync, InstallAsync)
     severity: medium (unverified)
+  - summary: >-
+      A main-frame navigation during a CDP outage leaves the new document without PageRuntime: the init script died with the old session, and reconnect neither reloads nor evaluates, so the bridge stays dead (no `hello`) until the next main-frame navigation, while the tile stays Foreground/Background.
+    evidence: |-
+      Real, not caused by this change: before 6.3 a drop lost binding and script for good. Recovery would need `Page.reload` or `Runtime.evaluate`, both excluded by AD-1 and this story's Never list, or a `hello` watchdog after `cdpReconnected` that turns a silent page into `CdpLost`/Failed. Netflix is a single-page app, so main-frame navigations are rare and the window can be long. Settle as a product decision: either a post-reconnect hello watchdog (needs a page message on the new session, see the item above) or an AD-1 amendment allowing one reload after reconnect.
+    location: >-
+      src/MediaStation.App/Hosts/Browser/BrowserHost.cs (ReconnectAsync, TryReconnectOnceAsync)
+    severity: medium
 ---
 
 <intent-contract>
@@ -167,6 +174,42 @@ deferred:
   - `[false]` `[reject]` (intent-alignment) 30 s from settings to host is covered only by the smoke — `CompositionRoot` is WPF composition outside unit tests; the smoke asserts `timeoutSeconds: 30` from default settings and `cdpLost` at 30.01 s.
   - `[low]` `[reject]` (intent-alignment) `covers: R3` does not match EXPERIENCE R3 — ticket metadata; fixing it edits a ticket file, outside this story.
 
+### 2026-10-29 — Review pass (re-dispatched, ran on UM760)
+- verdicts: 32 findings — high 0, medium 4, low 18, false 9, maybe-false 1 (9 carried from the previous pass)
+- findings:
+  - `[low]` `[reject]` (blind-hunter) One hung reconnect attempt uses up the whole 30 s window (no per-attempt timeout) — real only when the loopback handshake or a setup reply stalls without failing, i.e. a wedged browser that a retry would not fix either; a refused/closed target fails at once; a per-attempt timeout adds a new constant and token plumbing. The plan's Always bounds attempts by the deadline only.
+  - `[low]` `[reject]` (blind-hunter) `cdpReconnectFailed` catch leaves the tile stuck without `CdpLost` — the catch is reachable only by an unexpected exception from logging/posting/`ContinueWith` (the deadline CTS is created from a validated ≤600 s value); posting `CdpLost` from the catch adds a guarded branch for a path never seen.
+  - `[low]` `[reject]` (blind-hunter) Final `CdpLost` check is not atomic with Stop — the window is between a volatile read and `_post`; the Orchestrator is already `Stopping` before the host's Stop runs and `OnCdpLost` ignores `Stopping` (`Orchestrator.Failures.cs`), so a racing `CdpLost` has no effect; a locked decision method adds surface.
+  - `[medium]` `[defer]` (blind-hunter) Navigation during the outage leaves a page without PageRuntime that is reported as healthy, and it was tracked only as a residual risk — verified; pre-existing (6.2 lost everything on a drop) and the fix needs `Page.reload`/`Runtime.evaluate` (excluded by AD-1) or a hello watchdog; added to `deferred`.
+  - `[low]` `[patch]` (blind-hunter) Stop while a reconnected transport holds its setup reply is untested — test `Stop_while_a_reconnected_transport_holds_its_setup_reply_leaves_no_live_channel` (only `ProcessExited`+`CommandCompleted`, transport disposed, no `cdpReconnected`/`cdpLost`/error).
+  - `[medium]` `[patch]` (blind-hunter) Navigation during reconnect setup refreshing the binding is untested — same entry as the verification-gap row below.
+  - `[low]` `[patch]` (blind-hunter) "Same endpoint" assertions cannot fail because every FakeTransport has the same endpoint — reconnect transports in `Drop_with_quick_recovery_…` and `Two_successive_drops_…` now carry a different target id (`OtherTarget`).
+  - `[low]` `[reject]` carried (blind-hunter) `attempts` counts sleeps when `Endpoint` is null (foreign-port test logs 17) — code unchanged; unreachable in production.
+  - `[low]` `[patch]` (blind-hunter) Faulting-seam test asserts only `ReconnectAttempts > 1` — now asserts the 17 attempt instants (shared `NeverBackScheduleMs`), exactly 3 posts and one `cdpLost`.
+  - `[false]` `[reject]` carried (blind-hunter) Connector port re-check is tautological — code unchanged; the stored endpoint is checked against `app.CdpPort` when first stored.
+  - `[low]` `[reject]` (blind-hunter) Smoke does not assert the failed tile on the screenshot — the state is asserted from `cdpLostHandled {state: failed}` and the screenshot is the plan's manual check, done by eye this pass on both runs; image assertions add code.
+  - `[low]` `[reject]` (blind-hunter) Harness leaks dequeued reconnect transports — parked receive loops end with the test process; tracking adds fixture code with no user or CI harm seen.
+  - `[low]` `[reject]` (blind-hunter) `< 1 s` wall-clock assertion in the connector rejection test may flake — the bound is what tells "rejected without connecting" from "tried 192.168.1.10 and failed"; a string check never nears 1 s; deleting it loses that coverage.
+  - `[low]` `[reject]` (blind-hunter) Smoke reads only the newest log file / aborts without `apps.json` — a run across log rotation and a machine without `apps.json` are smoke misuse; the tracer smoke has the same preconditions; fixing adds code.
+  - `[low]` `[reject]` carried (blind-hunter) Corrupted `\b` evidence paths in Implementation Notes — fix edits this build's plan; correct paths are in Auto Run Result.
+  - `[false]` `[reject]` (blind-hunter) Plan status/iteration fields contradict each other — `in-review` is the correct state during review, `review_loop_iteration` counts only bad_plan loopbacks (none), and Finalize rewrites status; fix would edit the plan.
+  - `[low]` `[reject]` (blind-hunter) `cdpLostHandled` `null` cannot separate "ignored" from "app missing", loop continues after match — a non-null snapshot without the app is unreachable (snapshots list every configured app, the host runs only configured apps); cosmetic.
+  - `[low]` `[reject]` (edge-case-hunter) A target that reconnects and drops again restarts the deadline each cycle, so `CdpLost` never fires — each cycle completes the full setup, so the page does get its bridge; the plan specifies repeatable reconnects; an outage-window cap adds state for a flapping pattern not seen on Edge.
+  - `[low]` `[reject]` (edge-case-hunter) Hung attempt uses the whole window — same entry as the blind-hunter row.
+  - `[low]` `[reject]` (edge-case-hunter) Outer catch posts no `CdpLost` — same entry as the blind-hunter row.
+  - `[false]` `[reject]` (edge-case-hunter) Old session's `CdpLost` fails a new launch after Stop/restart — Restart goes through `Stopping` (`Orchestrator.Stop.cs`), where `OnCdpLost` is ignored, and the new Start follows the stop's results, after the old loop was cancelled by the stop token; a Start without Stop on a running app does not occur.
+  - `[low]` `[patch]` (verification-gap) Backoff counted from the previous attempt's start is not pinned for a slow attempt — test `Next_backoff_counts_from_the_start_of_a_slow_attempt` (attempt 2 at 850 ms); fails when the count moves to the attempt's end (checked by the implementer).
+  - `[medium]` `[patch]` (verification-gap) Main-frame navigation during reconnect setup is not tested to refresh the binding — test `Main_frame_navigation_during_reconnect_setup_re_adds_the_binding_on_the_new_session`; fails when `TryAttach` moves after setup (checked by the implementer).
+  - `[medium]` `[defer]` (intent-alignment) A3: a document loaded during the outage gets no PageRuntime — same entry as the blind-hunter defer row.
+  - `[maybe-false]` `[defer]` carried (intent-alignment) Recovery path never runs against real Edge — already in `deferred` (medium, unverified).
+  - `[false]` `[reject]` (intent-alignment) B2: a closed target with a live browser could be recovered by picking another page target — re-selection could install the bridge into a WebUI or popup (DW-52), and Failed → "Wciśnij OK" is the designed repair (J4, 6.7); the ticket asks for reconnect, not target re-selection.
+  - `[false]` `[reject]` carried (intent-alignment) 30 s from settings to host covered only by the smoke.
+  - `[false]` `[reject]` carried (intent-alignment) Home not exercised inside a running loop (smoke: 90 ms before, 63 ms after the limit this pass).
+  - `[false]` `[reject]` carried (intent-alignment) D-pad satisfied only structurally (no action path to BrowserHost yet).
+  - `[false]` `[reject]` carried (intent-alignment) "Late replies" as envelope `id` (ticket 6.6).
+  - `[false]` `[reject]` (intent-alignment) F1/F2: "log ma `Failed`" might need a literal state-transition entry — `cdpLostHandled {state: failed}` is the Orchestrator loop's entry with the state from the resulting snapshot; the smoke asserts it.
+  - `[low]` `[reject]` carried (intent-alignment) `covers: R3` mismatch — ticket metadata.
+
 ## Design Notes
 
 - **Same target only.** The binding and init script belong to the page the host launched and navigated. Re-selecting "first page target" on reconnect could install them into a WebUI or popup (DW-52 risk). A vanished target with a live process is a real failure → `Failed`, which J4 (6.7) repairs.
@@ -254,3 +297,53 @@ Status: built (ran on **UM760**: `MEDIASTATION` / `F7BSI` / `EliteMini Series`)
 - After a reconnect, the loaded page's use of the re-added binding is unproven on real Edge (see the deferred item).
 - The epic Notes still list the `cdpReconnectTimeout` upper bound as deferred. It is now closed in code; the PO should update the epic Notes.
 - Whole-epic acceptance on UM760 (the user, via `fp-acceptance`): with Netflix running, run `tools/check-browserhost-reconnect.ps1`, or close the page target by hand through `127.0.0.1:9222/json/close/<id>` after opening a second target. Expect the tile to show "Nie odpowiada" about 30 s later, with `cdpLostHandled {state: failed}` in the log, and the remote's Home to bring back the shell both before and after that.
+
+### Re-dispatched review pass (2026-10-29, ran on UM760: `MEDIASTATION` / `F7BSI` / `EliteMini Series`)
+
+Status: built
+
+**Summary.** The orchestrator sent the `built` plan back as `ready-for-dev`. The implementation subagent found every task already done in `9252f4575caa7310385b9dfde1f8ec2cd33e63d0` and changed no code. A full four-lens review then ran on the whole diff since `9aaa8117fa5fdcbf76044e39e779fc5b35f36fe3`. This pass changes only tests; production code is unchanged.
+
+**Files changed in this pass.**
+- `tests/MediaStation.Core.Tests/BrowserHostTests.cs`: three new tests (navigation during reconnect setup re-adds the binding; backoff counted from the start of a slow attempt; Stop while a reconnected transport holds its setup reply). The endpoint tests now use reconnect transports with a different target id, and the faulting-seam test now checks the full attempt schedule and a single `CdpLost`, using the shared `NeverBackScheduleMs`. BrowserHost tests: 113.
+- This plan: triage log, a second `deferred` item, and this result.
+
+**Review findings.** 32 findings: high 0, medium 4, low 18, false 9, maybe-false 1. Nine were carried over from the previous pass.
+- **Patched (5 entries, all test-only):**
+  - medium (1): navigation during reconnect setup (blind-hunter and verification-gap);
+  - low (4): Stop during a held reconnect setup, distinct endpoints in the same-endpoint tests, the faulting-seam assertions, and backoff from a slow attempt's start.
+  - The implementer showed that the two behaviour-pinning tests fail when the code is deliberately broken (backoff counted from the attempt's end; `TryAttach` moved after setup).
+- **Deferred (1 new):** a main-frame navigation during an outage leaves the new document without PageRuntime until the next navigation (medium). Recovering needs `Page.reload`/`Runtime.evaluate` (excluded by AD-1) or a hello watchdog, which is a product decision. The earlier deferred item (recovery on real Edge, medium, unverified) stays.
+- **Rejected, with reasons (see the triage log):**
+  - Per-attempt timeout (low, raised twice): only a wedged browser stalls a loopback attempt.
+  - `CdpLost` from the outer catch (low, raised twice): the catch path is unreachable in practice.
+  - Non-atomic `CdpLost` vs Stop (low): the Orchestrator ignores `CdpLost` in `Stopping`.
+  - Stale `CdpLost` failing a new launch (false): Restart goes through `Stopping`.
+  - Flapping reconnects restarting the deadline (low): every cycle restores a working bridge.
+  - Screenshot not asserted by the smoke (low): the state is asserted from the log, and the screenshot was checked by eye.
+  - Harness leak (low), the `< 1 s` assertion (low) and smoke log rotation / missing `apps.json` (low).
+  - Plan status fields (false) and `cdpLostHandled` null ambiguity (low).
+  - Re-selecting a target on reconnect (false: DW-52 risk, and J4 repairs the tile).
+  - "Log ma Failed" as a literal transition (false).
+  - Carried rows keep their earlier verdicts.
+
+**Follow-up review recommended:** false. One medium and no high entries were patched in this pass, and all patches are tests. Patched counts: high 0, medium 1, low 4.
+
+**Verification (UM760, 2026-10-29, after the patches).**
+- `dotnet build MediaStation.slnx -c Release`: 0 warnings, 0 errors.
+- `dotnet test --solution MediaStation.slnx -c Release --no-build`: 1422 total, 1421 passed, 1 skipped (the existing `PowerNotificationsHarnessTests` skip), 0 failed.
+- `npm test` in `web/`: 123 passed.
+- `dotnet publish src/MediaStation.App -c Release -r win-x64 --self-contained`: exit 0.
+- `tools/check-browserhost-reconnect.ps1`: PASS, before the patches (`%LOCALAPPDATA%\MediaStation\logs\browserhost-reconnect-evidence-20261029-171355`) and after them (`…-172353`). After the patches:
+  - `cdpClosed {timeoutSeconds: 30}`, then `cdpLost {attempts: 17}` 30.01 s later;
+  - `cdpLostHandled {state: failed}`, with no `cdpReconnected` and the Edge root still alive;
+  - Home brought the shell to the front in 90 ms before the limit and 63 ms after it;
+  - `after-limit.png` (checked by eye) shows the Netflix tile as "Nie odpowiada / Coś się zacięło. Wciśnij OK".
+- `tools/check-browserhost-tracer.ps1` (regression): PASS (`…\browserhost-tracer-evidence-20261029-171440`, `-172433`).
+- Matrix audit: every Matrix row has a passing test. The iframe and `bindingRefreshFailed` cases are covered by the 6.2 tests `Binding_is_re_added_only_after_main_frame_navigation` and `Failed_binding_refresh_is_only_a_warning`.
+- Not applicable: the live recovery path on real Edge, because dropping a live socket needs elevation. It is covered by fakes and the loopback connector test, and remains a deferred item.
+
+**Residual risks.**
+- Both `deferred` items: recovery on real Edge is unproven, and a navigation during an outage leaves the page without PageRuntime.
+- The epic Notes still list the `cdpReconnectTimeout` upper bound as deferred, but it is done in code. The PO should update them.
+- Whole-epic acceptance on UM760 is unchanged from the previous pass's instructions above.
