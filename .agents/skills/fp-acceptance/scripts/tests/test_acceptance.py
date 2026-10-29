@@ -116,6 +116,26 @@ class AcceptanceTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertFalse(data["order"]["ok"])
 
+    def test_s16_accepts_async_completion_order_without_weakening_ordered(self) -> None:
+        self.log.write_text("\n".join([
+            entry("2026-10-24T10:00:02.100Z", "windowCommand", type="MinimizeWindow", result="completed"),
+            entry("2026-10-24T10:00:03.100Z", "audioRuleApplied", muted=True, sessions=2),
+        ]) + "\n", encoding="utf-8")
+        result, data = self.check(
+            "--expect", "msg=audioRuleApplied,data.muted=true,data.sessions,data.sessions!=0:>=1",
+            "--expect", "msg=windowCommand,data.type=MinimizeWindow,data.result=completed:1",
+        )
+        self.assertEqual(result.returncode, 0, data)
+        self.assertEqual([item["count"] for item in data["expects"]], [1, 1])
+
+        result, data = self.check(
+            "--ordered",
+            "--expect", "msg=audioRuleApplied,data.muted=true,data.sessions,data.sessions!=0:>=1",
+            "--expect", "msg=windowCommand,data.type=MinimizeWindow,data.result=completed:1",
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertFalse(data["order"]["ok"])
+
     def test_bool_values_render_lowercase(self) -> None:
         result, _ = self.check("--expect", "msg=rawInput,data.hasVk=true:1")
         self.assertEqual(result.returncode, 0)
