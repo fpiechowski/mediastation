@@ -54,6 +54,10 @@ internal sealed class ProcessBrowserLauncher : IBrowserProcessLauncher
     public IBrowserProcess? Start(string executable, IReadOnlyList<string> arguments)
     {
         var info = new ProcessStartInfo(executable) { UseShellExecute = false };
+
+        // Odziedziczone `__COMPAT_LAYER` (np. DetectorsAppHealth) każe Edge uruchomić się ponownie bez warstwy
+        // zgodności: uruchomiony korzeń kończy się od razu, a host zgłosiłby fałszywe wyjście (sonda UM760, story 6.4).
+        info.Environment.Remove("__COMPAT_LAYER");
         foreach (var argument in arguments)
         {
             info.ArgumentList.Add(argument);

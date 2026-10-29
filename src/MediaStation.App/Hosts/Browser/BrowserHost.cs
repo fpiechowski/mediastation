@@ -47,6 +47,11 @@ internal interface IBrowserProcessLauncher
 /// samym celem strony (backoff, termin <c>cdpReconnectTimeout</c>) i instaluje binding, <c>Page.enable</c> i skrypt na
 /// nowej sesji; bez sukcesu w terminie wysyła <see cref="CdpLost"/>. W trakcie zerwania sesja nie ma kanału CDP i nic
 /// nie jest buforowane ani powtarzane po powrocie.
+/// Story 6.4 (AD-13): przed każdym startem sprawdza profil (<c>lockfile</c>) i port CDP i przy zajętym odpowiada
+/// <see cref="ErrorCode.ProfileInUse"/> albo <see cref="ErrorCode.PortInUse"/> bez startu; loguje <c>FileVersion</c>
+/// binarki i <c>Last Version</c> profilu (<c>browserVersion</c>, <c>browserVersionChanged</c> przed <c>appLaunch</c>),
+/// a po podpięciu potwierdza wersję przez <c>Browser.getVersion</c>. Stop czeka do 5 s na wyjście korzenia po zabiciu
+/// drzewa, więc kontrola ponownego startu nie widzi starej przeglądarki.
 /// Sam nigdy nie pokazuje, nie wynosi i nie minimalizuje okien (AD-14, AD-15). Metody portu tylko zlecają pracę
 /// w tle i nie rzucają przez granicę portu (AD-4). Sonda i odświeżenie sesji to na razie ciche no-opy (story 6.5).
 /// </summary>
@@ -58,8 +63,12 @@ internal sealed class BrowserHost : IAppHostPort
     /// <summary>Plik PageRuntime w katalogu <c>page</c> obok exe.</summary>
     public const string RuntimeFileName = "runtime.js";
 
+    /// <summary>Plik w katalogu głównym <c>user-data-dir</c> z wersją przeglądarki z jej poprzedniego startu (AD-13).</summary>
+    public const string LastVersionFileName = "Last Version";
+
     private static readonly TimeSpan WindowTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan GracefulCloseTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan KillExitTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
 
     /// <summary>Przerwy przed kolejnymi próbami reconnectu; po wyczerpaniu listy obowiązuje ostatnia (2 s).</summary>
@@ -84,6 +93,9 @@ internal sealed class BrowserHost : IAppHostPort
     private readonly Func<int, CancellationToken, Task<ICdpTransport?>> _connect;
     private readonly Func<Uri, CancellationToken, Task<ICdpTransport?>> _reconnect;
     private readonly Func<string, string?> _readFile;
+    private readonly Func<string, string?> _readFileVersion;
+    private readonly Func<string, bool> _isProfileInUse;
+    private readonly Func<int, bool> _isPortInUse;
     private readonly TimeProvider _time;
     private readonly object _gate = new();
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
@@ -102,6 +114,9 @@ internal sealed class BrowserHost : IAppHostPort
         Func<int, CancellationToken, Task<ICdpTransport?>> connect,
         Func<Uri, CancellationToken, Task<ICdpTransport?>> reconnect,
         Func<string, string?> readFile,
+        Func<string, string?> readFileVersion,
+        Func<string, bool> isProfileInUse,
+        Func<int, bool> isPortInUse,
         TimeProvider time)
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -117,6 +132,9 @@ internal sealed class BrowserHost : IAppHostPort
         ArgumentNullException.ThrowIfNull(connect);
         ArgumentNullException.ThrowIfNull(reconnect);
         ArgumentNullException.ThrowIfNull(readFile);
+        ArgumentNullException.ThrowIfNull(readFileVersion);
+        ArgumentNullException.ThrowIfNull(isProfileInUse);
+        ArgumentNullException.ThrowIfNull(isPortInUse);
         ArgumentNullException.ThrowIfNull(time);
 
         var byId = new Dictionary<string, WebApp>(StringComparer.Ordinal);
@@ -138,6 +156,9 @@ internal sealed class BrowserHost : IAppHostPort
         _connect = connect;
         _reconnect = reconnect;
         _readFile = readFile;
+        _readFileVersion = readFileVersion;
+        _isProfileInUse = isProfileInUse;
+        _isPortInUse = isPortInUse;
         _time = time;
     }
 
@@ -228,7 +249,8 @@ internal sealed class BrowserHost : IAppHostPort
             }
 
             var initScript = BrowserLaunch.BuildInitScript(runtime, PageProtocol.BindingName, app.Service, manifest.DriverVersion);
-            var args = BrowserLaunch.BuildArguments(Path.Combine(_profilesDir, app.Id), app.CdpPort);
+            var profileDir = Path.Combine(_profilesDir, app.Id);
+            var args = BrowserLaunch.BuildArguments(profileDir, app.CdpPort);
 
             // Sesja jest zarejestrowana przed startem procesu, więc Stop z luki nie ginie; ponowny start najpierw
             // zamyka poprzednią sesję, zamiast ją osierocić.
@@ -244,6 +266,24 @@ internal sealed class BrowserHost : IAppHostPort
             {
                 await StopSessionAsync(previous).ConfigureAwait(false);
             }
+
+            // Kontrole po zamknięciu poprzedniej sesji (Stop czeka na wyjście jej korzenia), więc ponowny start nie
+            // widzi własnej starej przeglądarki. Zajęty profil wygrywa z zajętym portem; nic nie jest uruchamiane.
+            if (_isProfileInUse(profileDir))
+            {
+                Unregister(session);
+                FailStart(command, "profileInUse", errorCode: ErrorCode.ProfileInUse, extra: ("profileDir", profileDir));
+                return;
+            }
+
+            if (_isPortInUse(app.CdpPort))
+            {
+                Unregister(session);
+                FailStart(command, "portInUse", errorCode: ErrorCode.PortInUse, extra: ("cdpPort", app.CdpPort));
+                return;
+            }
+
+            session.BrowserVersion = LogBrowserVersion(app, exe, profileDir);
 
             // Termin CDP liczy się od startu procesu (AD-13), także przez czas szukania okna.
             using var cdpDeadline = new CancellationTokenSource(_cdpConnectTimeout, _time);
@@ -343,6 +383,9 @@ internal sealed class BrowserHost : IAppHostPort
         {
             await InstallAsync(cdp, initScript, token).ConfigureAwait(false);
 
+            // Tylko przy starcie (reconnect używa samego InstallAsync); upływ terminu CDP idzie ścieżką setupFailed.
+            var confirmed = await ConfirmVersionAsync(cdp, app, session, token).ConfigureAwait(false);
+
             // Odpowiedź na Page.navigate przychodzi dopiero po commicie nawigacji (sieć), więc nie liczy się do terminu
             // CDP: wolna sieć nie zamienia działającego CDP w CdpUnavailable. Czekanie przerywa tylko Stop albo wyjście.
             var navigated = await cdp.SendAsync("Page.navigate", new Dictionary<string, object?> { ["url"] = manifest.StartUrl }, session.StopToken).ConfigureAwait(false);
@@ -367,6 +410,7 @@ internal sealed class BrowserHost : IAppHostPort
                 ["cdpPort"] = app.CdpPort,
                 ["url"] = url,
                 ["driverVersion"] = manifest.DriverVersion,
+                ["browserVersion"] = BrowserVersion.Format(confirmed),
             });
         }
         catch (Exception ex) when (ex is CdpException or OperationCanceledException)
@@ -393,6 +437,86 @@ internal sealed class BrowserHost : IAppHostPort
         await cdp.SendAsync("Runtime.addBinding", new Dictionary<string, object?> { ["name"] = PageProtocol.BindingName }, token).ConfigureAwait(false);
         await cdp.SendAsync("Page.enable", null, token).ConfigureAwait(false);
         await cdp.SendAsync("Page.addScriptToEvaluateOnNewDocument", new Dictionary<string, object?> { ["source"] = initScript }, token).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// <c>Browser.getVersion</c> potwierdza wersję odczytaną przed startem (AD-13) i zwraca wersję z <c>product</c> albo
+    /// <c>null</c>. Różnica daje <c>browserVersionMismatch</c>, a odpowiedź z błędem albo nieczytelny <c>product</c> daje
+    /// <c>browserVersionUnconfirmed</c>; start i tak się kończy. Anulowanie (termin CDP, Stop) przechodzi dalej.
+    /// </summary>
+    private async Task<Version?> ConfirmVersionAsync(CdpSession cdp, WebApp app, Session session, CancellationToken token)
+    {
+        JsonElement reply;
+        try
+        {
+            reply = await cdp.SendAsync("Browser.getVersion", null, token).ConfigureAwait(false);
+        }
+        catch (CdpException ex)
+        {
+            VersionUnconfirmed(app, ex.Message);
+            return null;
+        }
+
+        var product = reply.ValueKind == JsonValueKind.Object
+            && reply.TryGetProperty("product", out var p)
+            && p.ValueKind == JsonValueKind.String
+                ? p.GetString()
+                : null;
+        var actual = BrowserVersion.FromProduct(product);
+        if (actual is null)
+        {
+            VersionUnconfirmed(app, "unparsableProduct");
+            return null;
+        }
+
+        if (BrowserVersion.Changed(session.BrowserVersion, actual))
+        {
+            _log.Warn(Src, "browserVersionMismatch", new Dictionary<string, object?>
+            {
+                ["appId"] = app.Id,
+                ["expected"] = BrowserVersion.Format(session.BrowserVersion),
+                ["actual"] = BrowserVersion.Format(actual),
+            });
+        }
+
+        return actual;
+    }
+
+    private void VersionUnconfirmed(WebApp app, string reason) =>
+        _log.Warn(Src, "browserVersionUnconfirmed", new Dictionary<string, object?>
+        {
+            ["appId"] = app.Id,
+            ["reason"] = reason,
+        });
+
+    /// <summary>
+    /// Wersja przed startem (AD-13): bieżąca to <c>FileVersion</c> binarki użytej do startu, poprzednia to
+    /// <c>Last Version</c> profilu. Oba wpisy idą przed <c>appLaunch</c>, zanim przeglądarka nadpisze plik, więc awaria
+    /// po starcie nie gubi zmiany. Nieznana wersja nie daje wpisu o zmianie. Zwraca bieżącą wersję albo <c>null</c>.
+    /// </summary>
+    private Version? LogBrowserVersion(WebApp app, string exe, string profileDir)
+    {
+        var current = BrowserVersion.Parse(_readFileVersion(exe));
+        var previous = BrowserVersion.Parse(_readFile(Path.Combine(profileDir, LastVersionFileName)));
+
+        _log.Info(Src, "browserVersion", new Dictionary<string, object?>
+        {
+            ["appId"] = app.Id,
+            ["version"] = BrowserVersion.Format(current),
+            ["previous"] = BrowserVersion.Format(previous),
+        });
+
+        if (BrowserVersion.Changed(previous, current))
+        {
+            _log.Info(Src, "browserVersionChanged", new Dictionary<string, object?>
+            {
+                ["appId"] = app.Id,
+                ["from"] = BrowserVersion.Format(previous),
+                ["to"] = BrowserVersion.Format(current),
+            });
+        }
+
+        return current;
     }
 
     /// <summary>Sesja CDP, której zdarzenia mają skutek tylko wtedy, gdy jest bieżącym kanałem sesji aplikacji.</summary>
@@ -714,7 +838,7 @@ internal sealed class BrowserHost : IAppHostPort
             return;
         }
 
-        // Proces zostaje: o Failed i zamknięciu decyduje Orchestrator (AD-4). 6.4 doda wersję przeglądarki do wpisu.
+        // Proces zostaje: o Failed i zamknięciu decyduje Orchestrator (AD-4). Wersja to FileVersion sprzed startu (AD-13).
         _log.Warn(Src, "cdpUnavailable", new Dictionary<string, object?>
         {
             ["cmdId"] = command.CmdId,
@@ -723,6 +847,7 @@ internal sealed class BrowserHost : IAppHostPort
             ["timeoutSeconds"] = _cdpConnectTimeout.TotalSeconds,
             ["reason"] = reason,
             ["detail"] = detail,
+            ["browserVersion"] = BrowserVersion.Format(session.BrowserVersion),
         });
         _post(new CommandFailed(command.CmdId, ErrorCode.CdpUnavailable));
     }
@@ -812,7 +937,10 @@ internal sealed class BrowserHost : IAppHostPort
         }
     }
 
-    /// <summary>Zamknięcie CDP, łagodne zamknięcie okna głównego (do 3 s), potem zabicie całego drzewa procesów.</summary>
+    /// <summary>
+    /// Zamknięcie CDP, łagodne zamknięcie okna głównego (do 3 s), potem zabicie całego drzewa procesów i czekanie do 5 s
+    /// na wyjście korzenia, żeby kontrola profilu i portu ponownego startu nie widziała starej przeglądarki.
+    /// </summary>
     private async Task StopSessionAsync(Session session)
     {
         session.StopRequested = true;
@@ -838,6 +966,21 @@ internal sealed class BrowserHost : IAppHostPort
         }
 
         process.KillTree();
+        using var killed = new CancellationTokenSource(KillExitTimeout, _time);
+        try
+        {
+            await process.WaitForExitAsync(killed.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Korzeń nie zakończył się w 5 s po zabiciu drzewa: stop i tak się kończy, a ślad zostaje w logu.
+            _log.Warn(Src, "processKillTimedOut", new Dictionary<string, object?>
+            {
+                ["appId"] = session.AppId,
+                ["pid"] = process.Id,
+                ["timeoutSeconds"] = KillExitTimeout.TotalSeconds,
+            });
+        }
     }
 
     private void Unregister(Session session)
@@ -851,7 +994,14 @@ internal sealed class BrowserHost : IAppHostPort
         }
     }
 
-    private void FailStart(StartApp command, string reason, string? file = null, string? detail = null, int? exitCode = null)
+    private void FailStart(
+        StartApp command,
+        string reason,
+        string? file = null,
+        string? detail = null,
+        int? exitCode = null,
+        ErrorCode errorCode = ErrorCode.Unexpected,
+        (string Key, object? Value)? extra = null)
     {
         var data = new Dictionary<string, object?>
         {
@@ -874,8 +1024,13 @@ internal sealed class BrowserHost : IAppHostPort
             data["exitCode"] = exitCode;
         }
 
+        if (extra is { } field)
+        {
+            data[field.Key] = field.Value;
+        }
+
         _log.Warn(Src, "browserStartFailed", data);
-        _post(new CommandFailed(command.CmdId, ErrorCode.Unexpected));
+        _post(new CommandFailed(command.CmdId, errorCode));
     }
 
     private void Fail(Command command, Exception ex)
@@ -899,6 +1054,9 @@ internal sealed class BrowserHost : IAppHostPort
 
         /// <summary>Adres WebSocket celu strony z pierwszego połączenia; reconnect wraca tylko do niego.</summary>
         public volatile Uri? Endpoint;
+
+        /// <summary><c>FileVersion</c> binarki sprzed startu (AD-13) albo <c>null</c>, gdy nieznana.</summary>
+        public volatile Version? BrowserVersion;
 
         /// <summary>Sesja jest zamykana (Stop, ponowny start, timeout okna albo wyjście procesu): watcher milczy.</summary>
         public bool Stopping => _stopping;

@@ -33,6 +33,16 @@ public class BrowserHostTests
 
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);
 
+    /// <summary>Wersja Edge na UM760 w chwili story 6.4: <c>FileVersion</c> binarki i <c>product</c> z CDP.</summary>
+    private const string CurrentVersion = "156.0.4314.50";
+
+    private static readonly string ProfileDir = Path.Combine(ProfilesDir, AppId);
+    private static readonly string LastVersionPath = Path.Combine(ProfileDir, "Last Version");
+
+    /// <summary>Metody CDP pierwszego setupu w kolejności (start); reconnect wysyła tylko trzy pierwsze.</summary>
+    private static readonly string[] StartSetup =
+        ["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument", "Browser.getVersion", "Page.navigate"];
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     // ── BrowserLaunch ─────────────────────────────────────────────────────────
@@ -258,14 +268,12 @@ public class BrowserHostTests
         var (exe, args) = Assert.Single(h.Launcher.Starts);
         Assert.Equal(Exe, exe);
         Assert.Equal(BrowserLaunch.BuildArguments(Path.Combine(ProfilesDir, AppId), 9222), args);
-        Assert.Equal(
-            ["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument", "Page.navigate"],
-            h.Transport.Methods());
+        Assert.Equal(StartSetup, h.Transport.Methods());
         Assert.Equal("__msBridge", h.Transport.Sent[0].GetProperty("params").GetProperty("name").GetString());
         var source = h.Transport.Sent[2].GetProperty("params").GetProperty("source").GetString()!;
         Assert.StartsWith("((config) => {}", source, StringComparison.Ordinal);
         Assert.Contains("\"binding\":\"__msBridge\",\"service\":\"netflix\",\"driverVersion\":\"0.0.0\"", source, StringComparison.Ordinal);
-        Assert.Equal(StartUrl, h.Transport.Sent[3].GetProperty("params").GetProperty("url").GetString());
+        Assert.Equal(StartUrl, h.Transport.Sent[4].GetProperty("params").GetProperty("url").GetString());
         Assert.Equal(9222, h.ConnectedPort);
 
         var launch = h.Log.Entries.Single(e => e.Msg == "appLaunch");
@@ -325,12 +333,10 @@ public class BrowserHostTests
 
         h.Transport.Push("""{"method":"Page.frameNavigated","params":{"frame":{"id":"child","parentId":"main","url":"https://x/"},"type":"Navigation"}}""");
         h.Transport.Push("""{"method":"Page.frameNavigated","params":{"frame":{"id":"main","url":"https://www.netflix.com/browse"},"type":"Navigation"}}""");
-        await Eventually(() => h.Transport.Methods().Length == 5);
+        await Eventually(() => h.Transport.Methods().Length == 6);
         await Task.Delay(100, Ct);
 
-        Assert.Equal(
-            ["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument", "Page.navigate", "Runtime.addBinding"],
-            h.Transport.Methods());
+        Assert.Equal([.. StartSetup, "Runtime.addBinding"], h.Transport.Methods());
         Assert.DoesNotContain("Runtime.enable", h.Transport.Methods());
     }
 
@@ -367,10 +373,14 @@ public class BrowserHostTests
         h.Time.Advance(TimeSpan.FromSeconds(1));
         await h.WaitPosted(2);
 
+        // Rozróżnienie AD-13: okno najpierw, potem CdpUnavailable; bez ProcessExited i bez zabicia procesu.
         Assert.Equal([new AppWindowAttached(AppId, 0x1234, 4242), new CommandFailed(7, ErrorCode.CdpUnavailable)], h.Posted);
         var warn = h.Log.Entries.Single(e => e.Msg == "cdpUnavailable");
         Assert.Equal(LogLevel.Warn, warn.Level);
         Assert.Equal(9222, warn.Data!["cdpPort"]);
+        Assert.Equal("notConnected", warn.Data["reason"]);
+        Assert.Equal(CurrentVersion, warn.Data["browserVersion"]);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "processExited" or "cdpAbandoned" or "browserStartFailed");
         Assert.Equal(0, h.Process.KillCalls);
         Assert.False(h.Process.HasExited);
     }
@@ -469,8 +479,10 @@ public class BrowserHostTests
         h.Time.Advance(TimeSpan.FromMilliseconds(100));
         await h.WaitPosted(1);
 
+        // Rozróżnienie AD-13: bez okna nie ma AppWindowAttached ani CdpUnavailable, tylko Unexpected z windowTimeout.
         Assert.Equal([new CommandFailed(7, ErrorCode.Unexpected)], h.Posted);
         Assert.Equal("windowTimeout", StartFailure(h).Data!["reason"]);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "appWindowAttached" or "cdpUnavailable" or "processExited");
         Assert.Equal(1, h.Process.KillCalls);
         Assert.Equal(TimeSpan.FromSeconds(20), h.Time.GetUtcNow() - Harness.T0);
     }
@@ -562,6 +574,7 @@ public class BrowserHostTests
         h.Process.Exit(0);
         await h.WaitPosted(3);
 
+        // Rozróżnienie AD-13: wyjście procesu w trakcie czekania na CDP to ProcessExited, a nie CdpUnavailable.
         Assert.Equal(
             [new AppWindowAttached(AppId, 0x1234, 4242), new ProcessExited(AppId), new CommandFailed(7, ErrorCode.Unexpected)],
             h.Posted);
@@ -871,6 +884,350 @@ public class BrowserHostTests
         Assert.True(h.Process.HasExited);
     }
 
+    // ── Story 6.4: wersja przeglądarki i rozróżnialne błędy startu ────────────
+
+    [Fact]
+    public async Task Changed_version_is_logged_before_app_launch_and_confirmed_by_get_version()
+    {
+        using var h = new Harness();
+        h.Files[LastVersionPath] = "155.0.4283.45";
+
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        Assert.Equal([new AppWindowAttached(AppId, 0x1234, 4242), new CommandCompleted(7)], h.Posted);
+        Assert.Equal([Exe], h.VersionReads);
+        var messages = h.Log.Messages();
+        Assert.True(Array.IndexOf(messages, "browserVersion") < Array.IndexOf(messages, "browserVersionChanged"));
+        Assert.True(Array.IndexOf(messages, "browserVersionChanged") < Array.IndexOf(messages, "appLaunch"));
+
+        var version = h.Log.Entries.Single(e => e.Msg == "browserVersion");
+        Assert.Equal(LogLevel.Info, version.Level);
+        Assert.Equal("browser", version.Src);
+        Assert.Equal(AppId, version.Data!["appId"]);
+        Assert.Equal(CurrentVersion, version.Data["version"]);
+        Assert.Equal("155.0.4283.45", version.Data["previous"]);
+
+        var changed = h.Log.Entries.Single(e => e.Msg == "browserVersionChanged");
+        Assert.Equal(LogLevel.Info, changed.Level);
+        Assert.Equal(AppId, changed.Data!["appId"]);
+        Assert.Equal("155.0.4283.45", changed.Data["from"]);
+        Assert.Equal(CurrentVersion, changed.Data["to"]);
+
+        Assert.Equal(CurrentVersion, h.Log.Entries.Single(e => e.Msg == "cdpConnected").Data!["browserVersion"]);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Level is LogLevel.Warn or LogLevel.Error);
+    }
+
+    [Theory]
+    [InlineData("156.0.4314.50", "156.0.4314.50")]
+    [InlineData("156.0.4314.050", "156.0.4314.50")]
+    [InlineData("156.0.4314", "156.0.4314.0")]
+    [InlineData("156.0.4314.0", "156.0.4314")]
+    [InlineData("156.0.4314.50\r\n", "156.0.4314.50")]
+    public async Task Same_version_logs_only_browser_version_before_app_launch(string lastVersion, string exeVersion)
+    {
+        using var h = new Harness();
+        h.Files[LastVersionPath] = lastVersion;
+        h.ExeVersion = exeVersion;
+
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        Assert.Equal(new CommandCompleted(7), h.Posted[1]);
+        var messages = h.Log.Messages();
+        Assert.True(Array.IndexOf(messages, "browserVersion") < Array.IndexOf(messages, "appLaunch"));
+        var version = h.Log.Entries.Single(e => e.Msg == "browserVersion");
+        Assert.Equal(version.Data!["previous"], version.Data["version"]);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "browserVersionChanged");
+    }
+
+    [Theory]
+    [InlineData(null, CurrentVersion, CurrentVersion, "unknown")]
+    [InlineData("", CurrentVersion, CurrentVersion, "unknown")]
+    [InlineData("  \r\n", CurrentVersion, CurrentVersion, "unknown")]
+    [InlineData("garbage", CurrentVersion, CurrentVersion, "unknown")]
+    [InlineData("155.0.4283.45", null, "unknown", "155.0.4283.45")]
+    [InlineData(null, null, "unknown", "unknown")]
+    public async Task Unknown_version_is_logged_as_unknown_without_a_change_entry_and_the_start_continues(
+        string? lastVersion, string? exeVersion, string expectedVersion, string expectedPrevious)
+    {
+        using var h = new Harness();
+        if (lastVersion is not null)
+        {
+            h.Files[LastVersionPath] = lastVersion;
+        }
+
+        h.ExeVersion = exeVersion;
+
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        Assert.Equal([new AppWindowAttached(AppId, 0x1234, 4242), new CommandCompleted(7)], h.Posted);
+        var version = h.Log.Entries.Single(e => e.Msg == "browserVersion");
+        Assert.Equal(expectedVersion, version.Data!["version"]);
+        Assert.Equal(expectedPrevious, version.Data["previous"]);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "browserVersionChanged" or "browserVersionMismatch");
+
+        // Nieznana wersja binarki nie blokuje potwierdzenia: cdpConnected niesie wersję z product.
+        Assert.Equal(CurrentVersion, h.Log.Entries.Single(e => e.Msg == "cdpConnected").Data!["browserVersion"]);
+    }
+
+    [Fact]
+    public async Task Cdp_unavailable_carries_unknown_version_when_the_exe_version_is_unreadable()
+    {
+        using var h = new Harness(connect: async (_, token) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return null;
+        });
+        h.ExeVersion = null;
+
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(1);
+        h.Time.Advance(TimeSpan.FromSeconds(15));
+        await h.WaitPosted(2);
+
+        Assert.Equal(new CommandFailed(7, ErrorCode.CdpUnavailable), h.Posted[1]);
+        Assert.Equal("unknown", h.Log.Entries.Single(e => e.Msg == "cdpUnavailable").Data!["browserVersion"]);
+    }
+
+    [Fact]
+    public async Task Version_change_is_logged_before_launch_even_when_cdp_then_never_answers()
+    {
+        using var h = new Harness(connect: async (_, token) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return null;
+        });
+        h.Files[LastVersionPath] = "155.0.4283.45";
+
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(1);
+        h.Time.Advance(TimeSpan.FromSeconds(15));
+        await h.WaitPosted(2);
+
+        Assert.Equal([new AppWindowAttached(AppId, 0x1234, 4242), new CommandFailed(7, ErrorCode.CdpUnavailable)], h.Posted);
+        var messages = h.Log.Messages();
+        Assert.True(Array.IndexOf(messages, "browserVersionChanged") < Array.IndexOf(messages, "appLaunch"));
+        var changed = h.Log.Entries.Single(e => e.Msg == "browserVersionChanged");
+        Assert.Equal("155.0.4283.45", changed.Data!["from"]);
+        Assert.Equal(CurrentVersion, changed.Data["to"]);
+        Assert.Equal(CurrentVersion, h.Log.Entries.Single(e => e.Msg == "cdpUnavailable").Data!["browserVersion"]);
+    }
+
+    [Theory]
+    [InlineData(true, false, ErrorCode.ProfileInUse)]
+    [InlineData(false, true, ErrorCode.PortInUse)]
+    [InlineData(true, true, ErrorCode.ProfileInUse)]
+    public async Task Held_profile_or_port_fails_without_launching_and_a_later_start_works(bool profileHeld, bool portHeld, ErrorCode expected)
+    {
+        using var h = new Harness();
+        h.ProfileHeld = profileHeld;
+        h.PortHeld = portHeld;
+
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(1);
+        await Task.Delay(100, Ct);
+
+        Assert.Equal([new CommandFailed(7, expected)], h.Posted);
+        Assert.Empty(h.Launcher.Starts);
+        Assert.Equal(0, h.ConnectCalls);
+        Assert.Empty(h.VersionReads);
+        var failure = StartFailure(h);
+        if (expected == ErrorCode.ProfileInUse)
+        {
+            Assert.Equal("profileInUse", failure.Data!["reason"]);
+            Assert.Equal(ProfileDir, failure.Data["profileDir"]);
+            Assert.Empty(h.PortChecks);
+        }
+        else
+        {
+            Assert.Equal("portInUse", failure.Data!["reason"]);
+            Assert.Equal(9222, failure.Data["cdpPort"]);
+            Assert.Equal([9222], h.PortChecks);
+        }
+
+        Assert.Equal(ProfileDir, Assert.Single(h.ProfileChecks).Dir);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "appLaunch" or "browserVersion");
+
+        // Sesja jest wyrejestrowana: kolejny start po zwolnieniu zasobów działa normalnie.
+        h.ProfileHeld = false;
+        h.PortHeld = false;
+        h.Host.Start(new StartApp(8, AppId));
+        await h.WaitPosted(3);
+
+        Assert.Equal([new AppWindowAttached(AppId, 0x1234, 4242), new CommandCompleted(8)], h.Posted.Skip(1));
+        Assert.Single(h.Launcher.Starts);
+        Assert.Equal(0, h.Process.CloseCalls);
+    }
+
+    [Fact]
+    public async Task Get_version_mismatch_is_a_warning_and_the_start_completes()
+    {
+        using var h = new Harness();
+        h.Transport.VersionResult = """{"product":"Edg/157.0.4400.10"}""";
+
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        Assert.Equal([new AppWindowAttached(AppId, 0x1234, 4242), new CommandCompleted(7)], h.Posted);
+        var mismatch = h.Log.Entries.Single(e => e.Msg == "browserVersionMismatch");
+        Assert.Equal(LogLevel.Warn, mismatch.Level);
+        Assert.Equal(AppId, mismatch.Data!["appId"]);
+        Assert.Equal(CurrentVersion, mismatch.Data["expected"]);
+        Assert.Equal("157.0.4400.10", mismatch.Data["actual"]);
+        Assert.Equal("157.0.4400.10", h.Log.Entries.Single(e => e.Msg == "cdpConnected").Data!["browserVersion"]);
+        Assert.Equal(StartSetup, h.Transport.Methods());
+    }
+
+    [Fact]
+    public async Task Chrome_product_is_confirmed_like_edge()
+    {
+        using var h = new Harness();
+        h.Transport.VersionResult = "{\"product\":\"Chrome/" + CurrentVersion + "\"}";
+
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        Assert.Equal(CurrentVersion, h.Log.Entries.Single(e => e.Msg == "cdpConnected").Data!["browserVersion"]);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Level is LogLevel.Warn or LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task Get_version_error_reply_is_unconfirmed_and_the_start_completes()
+    {
+        using var h = new Harness();
+        h.Transport.FailMethod = "Browser.getVersion";
+
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        Assert.Equal([new AppWindowAttached(AppId, 0x1234, 4242), new CommandCompleted(7)], h.Posted);
+        var unconfirmed = h.Log.Entries.Single(e => e.Msg == "browserVersionUnconfirmed");
+        Assert.Equal(LogLevel.Warn, unconfirmed.Level);
+        Assert.Equal(AppId, unconfirmed.Data!["appId"]);
+        Assert.Contains("nope", (string)unconfirmed.Data["reason"]!, StringComparison.Ordinal);
+        Assert.Equal("unknown", h.Log.Entries.Single(e => e.Msg == "cdpConnected").Data!["browserVersion"]);
+        Assert.Equal(StartSetup, h.Transport.Methods());
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg is "cdpUnavailable" or "browserVersionMismatch");
+    }
+
+    [Theory]
+    [InlineData("""{"product":"Edge"}""")]
+    [InlineData("""{"product":"Edg/garbage"}""")]
+    [InlineData("""{"product":null}""")]
+    [InlineData("{}")]
+    public async Task Unparsable_product_is_unconfirmed_and_the_start_completes(string result)
+    {
+        using var h = new Harness();
+        h.Transport.VersionResult = result;
+
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        Assert.Equal(new CommandCompleted(7), h.Posted[1]);
+        Assert.Equal("unparsableProduct", h.Log.Entries.Single(e => e.Msg == "browserVersionUnconfirmed").Data!["reason"]);
+        Assert.Equal("unknown", h.Log.Entries.Single(e => e.Msg == "cdpConnected").Data!["browserVersion"]);
+    }
+
+    [Fact]
+    public async Task Get_version_reply_missing_at_the_deadline_is_cdp_unavailable_with_setup_failed()
+    {
+        using var h = new Harness();
+        h.Transport.HoldMethod = "Browser.getVersion";
+
+        h.Host.Start(new StartApp(7, AppId));
+        await Eventually(() => h.Transport.Methods().Contains("Browser.getVersion"));
+        h.Time.Advance(TimeSpan.FromSeconds(15));
+        await h.WaitPosted(2);
+
+        AssertSetupFailed(h);
+        Assert.Equal(StartSetup[..4], h.Transport.Methods());
+        Assert.Equal(CurrentVersion, h.Log.Entries.Single(e => e.Msg == "cdpUnavailable").Data!["browserVersion"]);
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "browserVersionUnconfirmed");
+    }
+
+    [Fact]
+    public async Task Stop_waits_for_the_root_to_exit_after_killing_the_tree()
+    {
+        using var h = new Harness();
+        h.Process.IgnoreClose = true;
+        h.Process.IgnoreKill = true;
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        h.Host.Stop(new StopApp(8, AppId));
+        await Eventually(() => h.Process.TimedWaits == 1);
+        h.Time.Advance(TimeSpan.FromSeconds(3));
+        await Eventually(() => h.Process.TimedWaits == 2);
+        Assert.Equal(1, h.Process.KillCalls);
+        h.Time.Advance(TimeSpan.FromSeconds(2));
+        await Task.Delay(100, Ct);
+        Assert.Equal(2, h.Posted.Count);
+
+        h.Process.Exit(1);
+        await h.WaitPosted(4);
+
+        Assert.Equal([new ProcessExited(AppId), new CommandCompleted(8)], h.Posted.Skip(2));
+        Assert.DoesNotContain(h.Log.Entries, e => e.Msg == "processKillTimedOut");
+    }
+
+    [Fact]
+    public async Task Stop_gives_up_waiting_for_the_root_after_5_seconds()
+    {
+        using var h = new Harness();
+        h.Process.IgnoreClose = true;
+        h.Process.IgnoreKill = true;
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        h.Host.Stop(new StopApp(8, AppId));
+        await Eventually(() => h.Process.TimedWaits == 1);
+        h.Time.Advance(TimeSpan.FromSeconds(3));
+        await Eventually(() => h.Process.TimedWaits == 2);
+        h.Time.Advance(TimeSpan.FromMilliseconds(4_900));
+        await Task.Delay(100, Ct);
+        Assert.Equal(2, h.Posted.Count);
+
+        h.Time.Advance(TimeSpan.FromMilliseconds(100));
+        await h.WaitPosted(4);
+
+        Assert.Equal([new ProcessExited(AppId), new CommandCompleted(8)], h.Posted.Skip(2));
+        Assert.False(h.Process.HasExited);
+        var timedOut = h.Log.Entries.Single(e => e.Msg == "processKillTimedOut");
+        Assert.Equal(LogLevel.Warn, timedOut.Level);
+        Assert.Equal(4242, timedOut.Data!["pid"]);
+    }
+
+    [Fact]
+    public async Task Restart_checks_profile_and_port_only_after_the_old_root_has_exited()
+    {
+        using var h = new Harness(connect: (_, _) => Task.FromResult<ICdpTransport?>(new FakeTransport()));
+        h.Process.IgnoreClose = true;
+        h.Process.IgnoreKill = true;
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        h.Host.Start(new StartApp(8, AppId));
+        await Eventually(() => h.Process.TimedWaits == 1);
+        h.Time.Advance(TimeSpan.FromSeconds(3));
+        await Eventually(() => h.Process.TimedWaits == 2);
+        h.Time.Advance(TimeSpan.FromSeconds(1));
+        await Task.Delay(100, Ct);
+        Assert.Single(h.ProfileChecks);
+
+        // Stary korzeń kończy się dopiero po zabiciu drzewa: kontrola nowego startu idzie po jego wyjściu.
+        h.Process.Exit(1);
+        await h.WaitPosted(4);
+
+        Assert.Equal([new AppWindowAttached(AppId, 0x1235, 4243), new CommandCompleted(8)], h.Posted.Skip(2));
+        Assert.Equal(2, h.ProfileChecks.Count);
+        Assert.False(h.ProfileChecks[0].FirstExited);
+        Assert.True(h.ProfileChecks[1].FirstExited);
+        Assert.Equal([9222, 9222], h.PortChecks);
+        Assert.Equal(2, h.Launcher.Starts.Count);
+    }
+
     // ── Story 6.3: binding po nawigacji i reconnect CDP ───────────────────────
 
     [Fact]
@@ -882,12 +1239,10 @@ public class BrowserHostTests
 
         h.Transport.Push("""{"method":"Page.frameNavigated","params":{"frame":{"id":"main","url":"https://www.netflix.com/browse"}}}""");
         h.Transport.Push("""{"method":"Page.frameNavigated","params":{"frame":{"id":"main","url":"https://www.netflix.com/title/1"}}}""");
-        await Eventually(() => h.Transport.Methods().Length == 6);
+        await Eventually(() => h.Transport.Methods().Length == 7);
         await Task.Delay(100, Ct);
 
-        Assert.Equal(
-            ["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument", "Page.navigate", "Runtime.addBinding", "Runtime.addBinding"],
-            h.Transport.Methods());
+        Assert.Equal([.. StartSetup, "Runtime.addBinding", "Runtime.addBinding"], h.Transport.Methods());
     }
 
     [Fact]
@@ -899,7 +1254,7 @@ public class BrowserHostTests
 
         h.Transport.HoldMethod = "Runtime.addBinding";
         h.Transport.Push("""{"method":"Page.frameNavigated","params":{"frame":{"id":"main","url":"https://x/"}}}""");
-        await Eventually(() => h.Transport.Methods().Length == 5);
+        await Eventually(() => h.Transport.Methods().Length == 6);
         h.Transport.Close();
         await h.WaitLog("cdpClosed");
         await Task.Delay(100, Ct);
@@ -934,7 +1289,8 @@ public class BrowserHostTests
         Assert.Equal(["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument"], second.Methods());
         Assert.Equal("__msBridge", second.Sent[0].GetProperty("params").GetProperty("name").GetString());
         Assert.StartsWith("((config) => {}", second.Sent[2].GetProperty("params").GetProperty("source").GetString(), StringComparison.Ordinal);
-        Assert.Equal(["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument", "Page.navigate"], h.Transport.Methods());
+        Assert.Equal(StartSetup, h.Transport.Methods());
+        Assert.DoesNotContain("Browser.getVersion", second.Methods());
         Assert.Equal(2, h.Posted.Count);
         Assert.DoesNotContain(h.Log.Entries, e => e.Level is LogLevel.Warn or LogLevel.Error);
 
@@ -1653,6 +2009,9 @@ public class BrowserHostTests
         private readonly ConcurrentQueue<IOrchestratorMessage> _posted = new();
         private readonly ConcurrentQueue<Uri> _reconnectEndpoints = new();
         private readonly ConcurrentQueue<DateTimeOffset> _reconnectAt = new();
+        private readonly ConcurrentQueue<(string, bool)> _profileChecks = new();
+        private readonly ConcurrentQueue<int> _portChecks = new();
+        private readonly ConcurrentQueue<string> _versionReads = new();
         private int _connectCalls;
 
         public Harness(
@@ -1696,8 +2055,39 @@ public class BrowserHostTests
                     return Task.FromResult<ICdpTransport?>(Reconnects.TryDequeue(out var next) ? next : null);
                 },
                 path => Files.TryGetValue(path, out var text) ? text : null,
+                path =>
+                {
+                    _versionReads.Enqueue(path);
+                    return ExeVersion;
+                },
+                dir =>
+                {
+                    _profileChecks.Enqueue((dir, Process.HasExited));
+                    return ProfileHeld;
+                },
+                port =>
+                {
+                    _portChecks.Enqueue(port);
+                    return PortHeld;
+                },
                 Time);
         }
+
+        /// <summary><c>FileVersion</c> binarki zwracane przez seam (domyślnie zgodne z <c>product</c> transportu).</summary>
+        public volatile string? ExeVersion = CurrentVersion;
+
+        /// <summary>Profil trzymany przez inny proces (<c>lockfile</c>).</summary>
+        public volatile bool ProfileHeld;
+
+        /// <summary>Port CDP zajęty przez inny nasłuch.</summary>
+        public volatile bool PortHeld;
+
+        /// <summary>Kontrole profilu: katalog i to, czy pierwszy proces przeglądarki już się zakończył.</summary>
+        public IReadOnlyList<(string Dir, bool FirstExited)> ProfileChecks => _profileChecks.ToArray();
+
+        public IReadOnlyList<int> PortChecks => _portChecks.ToArray();
+
+        public IReadOnlyList<string> VersionReads => _versionReads.ToArray();
 
         public FakeTimeProvider Time { get; } = new(T0);
 
@@ -1800,6 +2190,9 @@ public class BrowserHostTests
         /// <summary>Okno ignoruje łagodne zamknięcie (zawieszony renderer, dialog <c>beforeunload</c>).</summary>
         public volatile bool IgnoreClose;
 
+        /// <summary>Zabicie drzewa nie kończy korzenia od razu (wyjście dopiero przez <see cref="Exit"/>).</summary>
+        public volatile bool IgnoreKill;
+
         public int Id => id;
 
         public bool HasExited => _exited.Task.IsCompleted;
@@ -1835,7 +2228,10 @@ public class BrowserHostTests
         public void KillTree()
         {
             Interlocked.Increment(ref _killCalls);
-            Exit(1);
+            if (!IgnoreKill)
+            {
+                Exit(1);
+            }
         }
 
         public void Exit(int code)
@@ -1868,6 +2264,9 @@ public class BrowserHostTests
 
         public volatile string NavigateResult = "{\"frameId\":\"F1\",\"loaderId\":\"L1\"}";
 
+        /// <summary>Wynik <c>Browser.getVersion</c> (jak z Edge 156 na UM760).</summary>
+        public volatile string VersionResult = "{\"protocolVersion\":\"1.3\",\"product\":\"Edg/" + CurrentVersion + "\",\"revision\":\"@x\",\"userAgent\":\"Mozilla/5.0\",\"jsVersion\":\"15.6\"}";
+
         public Uri Endpoint { get; init; } = new($"ws://127.0.0.1:9222/devtools/page/{TargetId}");
 
         /// <summary>
@@ -1898,7 +2297,9 @@ public class BrowserHostTests
                 ? "\"error\":{\"code\":-32000,\"message\":\"nope\"}"
                 : method == "Page.navigate"
                     ? "\"result\":" + NavigateResult
-                    : "\"result\":{}";
+                    : method == "Browser.getVersion"
+                        ? "\"result\":" + VersionResult
+                        : "\"result\":{}";
             var response = "{\"id\":" + id + "," + reply + "}";
             if (method == HoldMethod)
             {

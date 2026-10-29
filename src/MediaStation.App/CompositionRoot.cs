@@ -379,6 +379,9 @@ public static class CompositionRoot
             // Port celu jest już sprawdzony przez BrowserHost (port aplikacji); konektor ponownie pilnuje loopbacku.
             (endpoint, token) => CdpConnector.ReconnectAsync(endpoint, endpoint.Port, token),
             BrowserPlatform.ReadFile,
+            BrowserPreflight.ReadFileVersion,
+            BrowserPreflight.IsProfileInUse,
+            BrowserPreflight.IsPortInUse,
             time);
     }
 

@@ -59,6 +59,8 @@
     <Compile Include="..\..\src\MediaStation.App\Hosts\Browser\BrowserHost.cs" Link="App\BrowserHost.cs" />
     <Compile Include="..\..\src\MediaStation.App\Hosts\Browser\CdpSession.cs" Link="App\CdpSession.cs" />
     <Compile Include="..\..\src\MediaStation.App\Hosts\Browser\CdpTargets.cs" Link="App\CdpTargets.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Hosts\Browser\BrowserVersion.cs" Link="App\BrowserVersion.cs" />
+    <Compile Include="..\..\src\MediaStation.App\Hosts\Browser\BrowserPreflight.cs" Link="App\BrowserPreflight.cs" />
     <Compile Include="..\..\src\MediaStation.App\Hosts\DevHarness\HarnessBrowser.cs" Link="App\HarnessBrowser.cs" />
     <Compile Include="..\..\src\MediaStation.App\Hosts\DevHarness\HarnessMoonlight.cs" Link="App\HarnessMoonlight.cs" />
     <Compile Include="..\..\src\MediaStation.App\Hosts\DevHarness\HarnessWait.cs" Link="App\HarnessWait.cs" />
