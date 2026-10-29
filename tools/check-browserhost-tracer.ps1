@@ -19,6 +19,13 @@
     The verdict also requires no `warn`/`error` in the run except `appIconMissing`. MediaStation and the Edge tree are
     closed at the end. Exit code 0 = PASS.
 
+.PARAMETER Service
+    The `service` of the generated tile (default `netflix`); the published `page\drivers\<service>\manifest.json` must
+    exist and every `pageHello` must carry this service. The e2e suite (`check-browserhost-e2e.ps1`) passes its test-only sample driver here.
+
+.PARAMETER EvidenceDir
+    The evidence folder (default `logs\browserhost-tracer-evidence-<ts>`).
+
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-browserhost-tracer.ps1
 #>
@@ -27,7 +34,9 @@ param(
     [ValidateRange(9220, 9239)][int]$CdpPort = 9222,
     [string]$MediaStation = '',
     [string]$LogsDir = (Join-Path $env:LOCALAPPDATA 'MediaStation\logs'),
-    [ValidateRange(10, 120)][int]$HelloSeconds = 45
+    [ValidateRange(10, 120)][int]$HelloSeconds = 45,
+    [string]$Service = 'netflix',
+    [string]$EvidenceDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -60,7 +69,7 @@ $native = [BrowserTracer.Native]
 $problems = New-Object System.Collections.Generic.List[string]
 $allowedWarnings = @('appIconMissing')
 $profileDir = Join-Path $env:LOCALAPPDATA ('MediaStation\profiles\' + $AppId)
-$evidenceDir = Join-Path $LogsDir ('browserhost-tracer-evidence-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
+$evidenceDir = if ([string]::IsNullOrWhiteSpace($EvidenceDir)) { Join-Path $LogsDir ('browserhost-tracer-evidence-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')) } else { $EvidenceDir }
 $evidenceJsonl = Join-Path $evidenceDir 'measurements.jsonl'
 $appsPath = Join-Path (Join-Path $env:LOCALAPPDATA 'MediaStation\config') 'apps.json'
 $backupPath = $appsPath + '.restore-bak'
@@ -165,12 +174,12 @@ function Get-ProfileProcesses {
 }
 
 function Stop-Profile {
-    foreach ($root in @(Get-ProfileProcesses | Where-Object { $_.CommandLine -notmatch '--type=' })) { & taskkill.exe /PID $root.ProcessId /T /F 2>&1 | Out-Null }
+    foreach ($root in @(Get-ProfileProcesses | Where-Object { $_.CommandLine -notmatch '--type=' })) { & { $ErrorActionPreference = 'Continue'; & taskkill.exe /PID $root.ProcessId /T /F 2>&1 | Out-Null } }
     [void](Wait-For -Seconds 10 -Condition { (Get-ProfileProcesses).Count -eq 0 })
 }
 
 if (-not (Test-Path -LiteralPath $MediaStation)) { throw "MediaStation.exe not found: $MediaStation - publish Release first." }
-foreach ($asset in @('page\runtime.js', "page\drivers\$AppId\manifest.json")) {
+foreach ($asset in @('page\runtime.js', "page\drivers\$Service\manifest.json")) {
     if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $MediaStation) $asset))) { throw "Publish has no $asset next to MediaStation.exe." }
 }
 $runtimePath = Join-Path (Split-Path -Parent $MediaStation) 'page\runtime.js'
@@ -188,7 +197,7 @@ $bannerOk = $runtimeFirstLine -eq $runtimeBanner
 Add-Jsonl -Record ([ordered]@{ utc = [DateTimeOffset]::UtcNow.ToString('o'); stage = 'runtime'; path = $runtimePath; firstLine = $runtimeFirstLine; bannerOk = $bannerOk; sha256 = $runtimeHash; bytes = (Get-Item -LiteralPath $runtimePath).Length })
 Note ("page\runtime.js sha256={0} banner={1}" -f $runtimeHash, $bannerOk)
 if (-not $bannerOk) { $problems.Add("published page\runtime.js does not start with the banner '$runtimeBanner' (first line: '$runtimeFirstLine')") }
-$tile = [ordered]@{ type = 'web'; id = $AppId; category = 'video'; title = 'Netflix'; icon = "$AppId.png"; service = 'netflix'; browser = 'edge'; cdpPort = $CdpPort }
+$tile = [ordered]@{ type = 'web'; id = $AppId; category = 'video'; title = 'Netflix'; icon = "$AppId.png"; service = $Service; browser = 'edge'; cdpPort = $CdpPort }
 $app = $null
 try {
     Copy-Item -LiteralPath $appsPath -Destination $backupPath -Force
@@ -240,7 +249,7 @@ try {
     foreach ($hello in $hellos) {
         Note ('pageHello ' + ($hello.data | ConvertTo-Json -Compress))
         if ($hello.data.webdriver -ne $false) { $problems.Add("pageHello webdriver=$($hello.data.webdriver), expected false") }
-        if ($hello.data.service -ne 'netflix') { $problems.Add("pageHello service=$($hello.data.service)") }
+        if ($hello.data.service -ne $Service) { $problems.Add("pageHello service=$($hello.data.service)") }
     }
 
     # Foreground after start: ActivateWindow from the Orchestrator, Edge on top covering the monitor.

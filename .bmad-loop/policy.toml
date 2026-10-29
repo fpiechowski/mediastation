@@ -214,7 +214,7 @@ low_frame_rate = false
 # deferred_height = 0   # Deferred pane height, rows
 # tasks_height = 0      # Tasks table height, rows
 tasks_height = 13
-left_width = 40
+left_width = 45
 
 [operator]
 # Let a dev session park a story at `awaiting-operator`: its agent-doable work is

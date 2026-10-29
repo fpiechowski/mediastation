@@ -4,7 +4,7 @@
     renews its CDP session (RenewSession), live on this machine.
 
 .DESCRIPTION
-    Uses a throwaway web tile `browserhost-check` (service netflix, cdpPort 9237) with its own profile
+    Uses a throwaway web tile `browserhost-check` (service `-Service`, default netflix; cdpPort 9237) with its own profile
     `profiles\browserhost-check`, deleted before and after the run (never `profiles\netflix`). The real `apps.json` is
     copied and put back in `finally`. The published MediaStation runs with the harness off.
 
@@ -25,13 +25,22 @@
       6. Close MediaStation and the profile's browser tree.
     Evidence (`measurements.jsonl`, screenshots) goes to `logs\browserhost-adopt-evidence-<ts>`. Exit code 0 = PASS.
 
+.PARAMETER Service
+    The `service` of the generated tile (default `netflix`); the published `page\drivers\<service>\manifest.json` must
+    exist. The e2e suite (`check-browserhost-e2e.ps1`) passes its test-only sample driver here.
+
+.PARAMETER EvidenceDir
+    The evidence folder (default `logs\browserhost-adopt-evidence-<ts>`).
+
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-browserhost-adopt.ps1
 #>
 param(
     [string]$MediaStation = '',
     [string]$LogsDir = (Join-Path $env:LOCALAPPDATA 'MediaStation\logs'),
-    [ValidateRange(10, 120)][int]$HelloSeconds = 45
+    [ValidateRange(10, 120)][int]$HelloSeconds = 45,
+    [string]$Service = 'netflix',
+    [string]$EvidenceDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -69,7 +78,7 @@ $problems = New-Object System.Collections.Generic.List[string]
 $allowed = @('appIconMissing')
 $profilesRoot = Join-Path $env:LOCALAPPDATA 'MediaStation\profiles'
 $profileDir = Join-Path $profilesRoot $AppId
-$evidenceDir = Join-Path $LogsDir ('browserhost-adopt-evidence-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
+$evidenceDir = if ([string]::IsNullOrWhiteSpace($EvidenceDir)) { Join-Path $LogsDir ('browserhost-adopt-evidence-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')) } else { $EvidenceDir }
 $evidenceJsonl = Join-Path $evidenceDir 'measurements.jsonl'
 $configDir = Join-Path $env:LOCALAPPDATA 'MediaStation\config'
 $appsPath = Join-Path $configDir 'apps.json'
@@ -186,7 +195,7 @@ function Get-ProfileRoots {
 }
 
 function Stop-Profile {
-    foreach ($root in @(Get-ProfileProcesses | Where-Object { $_.CommandLine -notmatch '--type=' })) { & taskkill.exe /PID $root.ProcessId /T /F 2>&1 | Out-Null }
+    foreach ($root in @(Get-ProfileProcesses | Where-Object { $_.CommandLine -notmatch '--type=' })) { & { $ErrorActionPreference = 'Continue'; & taskkill.exe /PID $root.ProcessId /T /F 2>&1 | Out-Null } }
     [void](Wait-For -Seconds 10 -Condition { (Get-ProfileProcesses).Count -eq 0 })
 }
 
@@ -246,7 +255,7 @@ function Test-ShellForeground {
 }
 
 if (-not (Test-Path -LiteralPath $MediaStation)) { throw "MediaStation.exe not found: $MediaStation - publish Release first." }
-foreach ($asset in @('page\runtime.js', 'page\drivers\netflix\manifest.json')) {
+foreach ($asset in @('page\runtime.js', "page\drivers\$Service\manifest.json")) {
     if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $MediaStation) $asset))) { throw "Publish has no $asset next to MediaStation.exe." }
 }
 if (@(Get-Process -Name 'MediaStation' -ErrorAction SilentlyContinue).Count -gt 0) { throw 'MediaStation is already running; close it and retry.' }
@@ -258,7 +267,7 @@ $machine = [ordered]@{ computer = $env:COMPUTERNAME; board = (Get-CimInstance Wi
 Note ('machine ' + ($machine | ConvertTo-Json -Compress))
 Add-Jsonl -Record ([ordered]@{ utc = [DateTimeOffset]::UtcNow.ToString('o'); stage = 'machine'; machine = $machine })
 
-$tile = [ordered]@{ type = 'web'; id = $AppId; category = 'video'; title = 'BrowserHost check'; icon = 'netflix.png'; service = 'netflix'; browser = 'edge'; cdpPort = $CdpPort }
+$tile = [ordered]@{ type = 'web'; id = $AppId; category = 'video'; title = 'BrowserHost check'; icon = 'netflix.png'; service = $Service; browser = 'edge'; cdpPort = $CdpPort }
 $first = $null
 $second = $null
 try {

@@ -1,0 +1,6 @@
+{
+  "service": "browserhost-sample",
+  "matches": ["https://example.com/*"],
+  "startUrl": "https://example.com/",
+  "driverVersion": "0.0.0"
+}

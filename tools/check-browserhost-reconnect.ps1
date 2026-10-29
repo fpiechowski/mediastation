@@ -22,6 +22,13 @@
     The recovery path (socket drop with the target still there) needs an elevated TCP reset and is covered by the
     BrowserHost unit tests and the connector test on a real loopback socket.
 
+.PARAMETER Service
+    The `service` of the generated tile (default `netflix`); the published `page\drivers\<service>\manifest.json` must
+    exist. The e2e suite (`check-browserhost-e2e.ps1`) passes its test-only sample driver here.
+
+.PARAMETER EvidenceDir
+    The evidence folder (default `logs\browserhost-reconnect-evidence-<ts>`).
+
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-browserhost-reconnect.ps1
 #>
@@ -32,7 +39,9 @@ param(
     [string]$LogsDir = (Join-Path $env:LOCALAPPDATA 'MediaStation\logs'),
     [ValidateRange(10, 120)][int]$HelloSeconds = 45,
     [ValidateRange(5, 600)][int]$ReconnectTimeoutSeconds = 30,
-    [ValidateRange(1, 25)][int]$HomeBeforeLimitSeconds = 10
+    [ValidateRange(1, 25)][int]$HomeBeforeLimitSeconds = 10,
+    [string]$Service = 'netflix',
+    [string]$EvidenceDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,7 +72,7 @@ $native = [BrowserReconnect.Native]
 $problems = New-Object System.Collections.Generic.List[string]
 $allowedWarnings = @('appIconMissing', 'cdpLost')
 $profileDir = Join-Path $env:LOCALAPPDATA ('MediaStation\profiles\' + $AppId)
-$evidenceDir = Join-Path $LogsDir ('browserhost-reconnect-evidence-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
+$evidenceDir = if ([string]::IsNullOrWhiteSpace($EvidenceDir)) { Join-Path $LogsDir ('browserhost-reconnect-evidence-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')) } else { $EvidenceDir }
 $evidenceJsonl = Join-Path $evidenceDir 'measurements.jsonl'
 $appsPath = Join-Path (Join-Path $env:LOCALAPPDATA 'MediaStation\config') 'apps.json'
 $backupPath = $appsPath + '.restore-bak'
@@ -157,7 +166,7 @@ function Get-ProfileProcesses {
 }
 
 function Stop-Profile {
-    foreach ($root in @(Get-ProfileProcesses | Where-Object { $_.CommandLine -notmatch '--type=' })) { & taskkill.exe /PID $root.ProcessId /T /F 2>&1 | Out-Null }
+    foreach ($root in @(Get-ProfileProcesses | Where-Object { $_.CommandLine -notmatch '--type=' })) { & { $ErrorActionPreference = 'Continue'; & taskkill.exe /PID $root.ProcessId /T /F 2>&1 | Out-Null } }
     [void](Wait-For -Seconds 10 -Condition { (Get-ProfileProcesses).Count -eq 0 })
 }
 
@@ -194,7 +203,7 @@ function Invoke-BrowserCdp {
 }
 
 if (-not (Test-Path -LiteralPath $MediaStation)) { throw "MediaStation.exe not found: $MediaStation - publish Release first." }
-foreach ($asset in @('page\runtime.js', "page\drivers\$AppId\manifest.json")) {
+foreach ($asset in @('page\runtime.js', "page\drivers\$Service\manifest.json")) {
     if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $MediaStation) $asset))) { throw "Publish has no $asset next to MediaStation.exe." }
 }
 if (@(Get-Process -Name 'MediaStation' -ErrorAction SilentlyContinue).Count -gt 0) { throw 'MediaStation is already running; close it and retry.' }
@@ -203,7 +212,7 @@ if (@(Get-NetTCPConnection -LocalPort $CdpPort -State Listen -ErrorAction Silent
 if (Test-Path -LiteralPath $backupPath) { Move-Item -LiteralPath $backupPath -Destination $appsPath -Force }
 
 [void](New-Item -ItemType Directory -Path $evidenceDir -Force)
-$tile = [ordered]@{ type = 'web'; id = $AppId; category = 'video'; title = 'Netflix'; icon = "$AppId.png"; service = 'netflix'; browser = 'edge'; cdpPort = $CdpPort }
+$tile = [ordered]@{ type = 'web'; id = $AppId; category = 'video'; title = 'Netflix'; icon = "$AppId.png"; service = $Service; browser = 'edge'; cdpPort = $CdpPort }
 $app = $null
 try {
     Copy-Item -LiteralPath $appsPath -Destination $backupPath -Force
