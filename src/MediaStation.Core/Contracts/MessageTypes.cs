@@ -40,6 +40,7 @@ public static class MessageTypes
         typeof(AppWindowAttached),
         typeof(ProcessExited),
         typeof(CdpLost),
+        typeof(PageVersionRejected),
         typeof(TimerElapsed),
         typeof(ForegroundChanged),
     ];

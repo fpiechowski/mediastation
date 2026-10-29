@@ -85,6 +85,15 @@ public sealed record ProcessExited(string AppId) : Event;
 public sealed record CdpLost(string AppId) : Event;
 
 /// <summary>
+/// Strona aplikacji wysłała kopertę z innym major <c>v</c> niż <see cref="PageProtocol.Version"/> (AD-7, DW-54):
+/// BrowserHost raportuje fakt najwyżej raz na sesję. Orchestrator obsługuje go jak <see cref="CdpLost"/>:
+/// <c>Starting</c>, <c>Foreground</c> i <c>Background</c> przechodzą w <c>Failed</c> przy żywym procesie, a poza żywym
+/// cyklem fakt jest ignorowany. Osobny fakt, żeby log mówił, dlaczego kafelek padł.
+/// </summary>
+/// <param name="Version">Odrzucony <c>v</c> z koperty strony.</param>
+public sealed record PageVersionRejected(string AppId, int Version) : Event;
+
+/// <summary>
 /// Termin timera zaplanowanego przez Orchestrator (<see cref="ScheduleTimer"/>) minął. Timer jest jednorazowy,
 /// a <see cref="TimerId"/> nieznany albo już anulowany jest ignorowany: nie daje komend ani snapshotu.
 /// </summary>

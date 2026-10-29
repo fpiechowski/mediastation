@@ -47,6 +47,9 @@ public class BrowserHostTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    /// <summary>Plik <c>runtime.js</c> harnessu (<see cref="Harness"/>) owinięty przez <see cref="BrowserLaunch.BuildInitScript"/>.</summary>
+    private const string WrappedRuntime = "(function (__msPageConfig) {\n(config) => {}\n})(";
+
     // ── BrowserLaunch ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -71,19 +74,45 @@ public class BrowserHostTests
     }
 
     [Fact]
-    public void Init_script_calls_the_runtime_expression_with_json_config_and_drops_a_trailing_semicolon()
+    public void Init_script_wraps_the_bundle_verbatim_in_a_function_taking_the_json_config()
     {
-        var script = BrowserLaunch.BuildInitScript("// c\n(config) => { go(config); };\n", "__msBridge", "netflix", "0.0.0");
+        var script = BrowserLaunch.BuildInitScript("// banner\n(() => { go(__msPageConfig); })();\n", "__msBridge", "netflix", "0.0.0");
 
-        Assert.Equal("(// c\n(config) => { go(config); }\n)({\"binding\":\"__msBridge\",\"service\":\"netflix\",\"driverVersion\":\"0.0.0\"});", script);
+        Assert.Equal(
+            "(function (__msPageConfig) {\n// banner\n(() => { go(__msPageConfig); })();\n\n})({\"binding\":\"__msBridge\",\"service\":\"netflix\",\"driverVersion\":\"0.0.0\"});",
+            script);
+        Assert.Equal("__msPageConfig", BrowserLaunch.PageConfigParameter);
     }
 
     [Fact]
     public void Init_script_carries_null_driver_version()
     {
-        var script = BrowserLaunch.BuildInitScript("(c) => {}", "__msBridge", "netflix", null);
+        var script = BrowserLaunch.BuildInitScript("(() => {})();", "__msBridge", "netflix", null);
 
-        Assert.EndsWith("\"driverVersion\":null});", script, StringComparison.Ordinal);
+        Assert.EndsWith("\n})({\"binding\":\"__msBridge\",\"service\":\"netflix\",\"driverVersion\":null});", script, StringComparison.Ordinal);
+    }
+
+    // Plik poprawiony ręcznie (hotfix) może kończyć się średnikiem albo komentarzem: zostaje dosłownie, a nowa linia przed
+    // zamknięciem funkcji nie pozwala komentarzowi połknąć `})(...)`.
+    [Theory]
+    [InlineData("(() => {})();")]
+    [InlineData("(() => {})()\n// x")]
+    [InlineData("(() => {})(); // x")]
+    public void Init_script_keeps_a_trailing_semicolon_or_comment_verbatim(string file)
+    {
+        var script = BrowserLaunch.BuildInitScript(file, "__msBridge", "netflix", "1");
+
+        Assert.Equal("(function (__msPageConfig) {\n" + file + "\n})({\"binding\":\"__msBridge\",\"service\":\"netflix\",\"driverVersion\":\"1\"});", script);
+    }
+
+    // Zgodność z nazwą w bundlu: main.ts deklaruje parametr, którego host używa w BuildInitScript.
+    [Fact]
+    public void Page_config_parameter_matches_the_bundle_entry()
+    {
+        var main = File.ReadAllText(Path.Combine(RepoRoot(), "web", "page", "runtime", "main.ts"));
+
+        Assert.Contains($"declare const {BrowserLaunch.PageConfigParameter}: PageConfig;", main, StringComparison.Ordinal);
+        Assert.Contains($"start({BrowserLaunch.PageConfigParameter}, window);", main, StringComparison.Ordinal);
     }
 
     // ── CdpTargets ────────────────────────────────────────────────────────────
@@ -193,20 +222,62 @@ public class BrowserHostTests
     }
 
     [Theory]
-    [InlineData("""{ "v": 2, "type": "hello", "id": null, "payload": { "service": "netflix", "driverVersion": "0", "webdriver": false } }""", "version")]
-    [InlineData("""{ "type": "hello", "id": null, "payload": { "service": "netflix", "driverVersion": "0", "webdriver": false } }""", "version")]
+    [InlineData("""{ "type": "hello", "id": null, "payload": { "service": "netflix", "driverVersion": "0", "webdriver": false } }""", "envelope")]
+    [InlineData("""{ "v": "1", "type": "hello", "id": null, "payload": { "service": "netflix", "driverVersion": "0", "webdriver": false } }""", "envelope")]
+    [InlineData("""{ "v": 1.5, "type": "hello", "id": null, "payload": { "service": "netflix", "driverVersion": "0", "webdriver": false } }""", "envelope")]
+    [InlineData("""{ "v": null, "type": "hello", "id": null, "payload": null }""", "envelope")]
+    [InlineData("""{ "v": 1, "id": null, "payload": null }""", "envelope")]
+    [InlineData("""{ "v": 1, "type": "", "id": null, "payload": null }""", "envelope")]
+    [InlineData("""{ "v": 1, "type": 3, "id": null, "payload": null }""", "envelope")]
+    [InlineData("""{ "v": 1, "type": "hello", "payload": { "service": "netflix", "driverVersion": "0", "webdriver": false } }""", "envelope")]
+    [InlineData("""{ "v": 1, "type": "hello", "id": "", "payload": { "service": "netflix", "driverVersion": "0", "webdriver": false } }""", "envelope")]
+    [InlineData("""{ "v": 1, "type": "hello", "id": 7, "payload": { "service": "netflix", "driverVersion": "0", "webdriver": false } }""", "envelope")]
+    [InlineData("""{ "v": 1, "type": "hello", "id": null }""", "envelope")]
     [InlineData("""{ "v": 1, "type": "screen", "id": null, "payload": {} }""", "type")]
+    [InlineData("""{ "v": 1, "type": "screen", "id": "x" }""", "envelope")]
+    [InlineData("""{ "v": 1, "type": "hello", "id": "7", "payload": { "service": "netflix", "driverVersion": "0", "webdriver": false } }""", "id")]
+    [InlineData("""{ "v": 1, "type": "hello", "id": "7", "payload": "x" }""", "id")]
     [InlineData("""{ "v": 1, "type": "hello", "id": null, "payload": { "service": "netflix", "driverVersion": "0" } }""", "payload")]
     [InlineData("""{ "v": 1, "type": "hello", "id": null, "payload": "x" }""", "payload")]
+    [InlineData("""{ "v": 1, "type": "hello", "id": null, "payload": null }""", "payload")]
     [InlineData("junk", "unparsable")]
     [InlineData("[1]", "unparsable")]
     [InlineData("", "unparsable")]
+    [InlineData("   ", "unparsable")]
     public void Bad_page_messages_are_rejected_with_a_reason(string json, string reason)
     {
         var parsed = PageProtocol.Parse(json);
 
         Assert.Null(parsed.Hello);
         Assert.Equal(reason, parsed.Reason);
+        Assert.Null(parsed.Version);
+    }
+
+    // `version` wygrywa z każdą inną wadą koperty, bo strona innej wersji może mieć inny kształt.
+    [Theory]
+    [InlineData("""{ "v": 2, "type": "hello", "id": null, "payload": { "service": "netflix", "driverVersion": "0", "webdriver": false } }""", 2)]
+    [InlineData("""{ "v": 2 }""", 2)]
+    [InlineData("""{ "v": 0, "type": "", "id": 5 }""", 0)]
+    [InlineData("""{ "v": -3, "type": "hello", "id": null, "payload": null }""", -3)]
+    public void Other_integer_major_version_is_rejected_as_version_with_the_value(string json, int version)
+    {
+        var parsed = PageProtocol.Parse(json);
+
+        Assert.Null(parsed.Hello);
+        Assert.Equal("version", parsed.Reason);
+        Assert.Equal(version, parsed.Version);
+    }
+
+    [Fact]
+    public void Page_envelope_record_carries_every_field()
+    {
+        using var document = JsonDocument.Parse("""{ "handled": true }""");
+        var envelope = new PageEnvelope(1, "backResult", "7", document.RootElement.Clone());
+
+        Assert.Equal(1, envelope.V);
+        Assert.Equal("backResult", envelope.Type);
+        Assert.Equal("7", envelope.Id);
+        Assert.True(envelope.Payload.GetProperty("handled").GetBoolean());
     }
 
     [Fact]
@@ -273,7 +344,7 @@ public class BrowserHostTests
         Assert.Equal(StartSetup, h.Transport.Methods());
         Assert.Equal("__msBridge", h.Transport.Sent[0].GetProperty("params").GetProperty("name").GetString());
         var source = h.Transport.Sent[2].GetProperty("params").GetProperty("source").GetString()!;
-        Assert.StartsWith("((config) => {}", source, StringComparison.Ordinal);
+        Assert.StartsWith(WrappedRuntime, source, StringComparison.Ordinal);
         Assert.Contains("\"binding\":\"__msBridge\",\"service\":\"netflix\",\"driverVersion\":\"0.0.0\"", source, StringComparison.Ordinal);
         Assert.Equal(StartUrl, h.Transport.Sent[4].GetProperty("params").GetProperty("url").GetString());
         Assert.Equal(9222, h.ConnectedPort);
@@ -305,8 +376,9 @@ public class BrowserHostTests
     }
 
     [Theory]
-    [InlineData("__msBridge", """{"v":2,"type":"hello","id":null,"payload":{"service":"netflix","driverVersion":"0","webdriver":false}}""", "version")]
     [InlineData("__msBridge", """{"v":1,"type":"playback","id":null,"payload":{}}""", "type")]
+    [InlineData("__msBridge", """{"type":"hello","id":null,"payload":{"service":"netflix","driverVersion":"0","webdriver":false}}""", "envelope")]
+    [InlineData("__msBridge", """{"v":1,"type":"hello","id":"7","payload":{"service":"netflix","driverVersion":"0","webdriver":false}}""", "id")]
     [InlineData("__msBridge", "junk", "unparsable")]
     [InlineData("__other", """{"v":1,"type":"hello","id":null,"payload":{"service":"netflix","driverVersion":"0","webdriver":false}}""", "binding")]
     public async Task Bad_page_message_is_logged_as_rejected_and_the_session_continues(string binding, string payload, string reason)
@@ -324,6 +396,104 @@ public class BrowserHostTests
         Assert.Equal(AppId, rejected.Data!["appId"]);
         Assert.Equal(reason, rejected.Data["reason"]);
         Assert.Equal(2, h.Posted.Count);
+    }
+
+    private const string HelloV2 = """{"v":2,"type":"hello","id":null,"payload":{"service":"netflix","driverVersion":"0","webdriver":false}}""";
+
+    // AD-7, DW-54: każda koperta z innym major `v` to wpis w logu, a fakt dla Orchestratora idzie raz na sesję.
+    [Fact]
+    public async Task Other_major_version_twice_logs_twice_and_posts_page_version_rejected_once()
+    {
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        h.Transport.PushBinding("__msBridge", HelloV2);
+        h.Transport.PushBinding("__msBridge", """{"v":2,"type":"screen","id":null,"payload":null}""");
+        await Eventually(() => h.Log.Entries.Count(e => e.Msg == "pageMessageRejected") == 2);
+        h.Transport.PushBinding("__msBridge", """{"v":1,"type":"hello","id":null,"payload":{"service":"netflix","driverVersion":"0","webdriver":false}}""");
+        await h.WaitLog("pageHello");
+
+        var rejected = h.Log.Entries.Where(e => e.Msg == "pageMessageRejected").ToArray();
+        Assert.All(rejected, entry =>
+        {
+            Assert.Equal(LogLevel.Warn, entry.Level);
+            Assert.Equal("browser", entry.Src);
+            Assert.Equal(AppId, entry.Data!["appId"]);
+            Assert.Equal("version", entry.Data["reason"]);
+            Assert.Equal(2, entry.Data["v"]);
+        });
+        Assert.Equal(
+            [new AppWindowAttached(AppId, 0x1234, 4242), new CommandCompleted(7), new PageVersionRejected(AppId, 2)],
+            h.Posted);
+    }
+
+    [Fact]
+    public async Task Other_major_version_after_stop_posts_nothing()
+    {
+        using var h = new Harness();
+        h.Transport.DeliverAfterDispose = true;
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+        h.Host.Stop(new StopApp(8, AppId));
+        await h.WaitPosted(4);
+
+        var delivered = h.Transport.Delivered;
+        h.Transport.PushBinding("__msBridge", HelloV2);
+        await Eventually(() => h.Transport.Delivered > delivered);
+        await Task.Delay(200, Ct);
+
+        Assert.DoesNotContain(h.Posted, message => message is PageVersionRejected);
+        Assert.Equal(4, h.Posted.Count);
+        h.Transport.Close();
+    }
+
+    [Fact]
+    public async Task Other_major_version_from_a_replaced_session_posts_nothing_and_the_new_session_still_posts_once()
+    {
+        var transports = new ConcurrentQueue<FakeTransport>();
+        using var h = new Harness(connect: (_, _) =>
+        {
+            var transport = new FakeTransport { DeliverAfterDispose = true };
+            transports.Enqueue(transport);
+            return Task.FromResult<ICdpTransport?>(transport);
+        });
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+        h.Host.Start(new StartApp(8, AppId));
+        await h.WaitPosted(4);
+        var (stale, current) = (transports.First(), transports.Last());
+
+        var delivered = stale.Delivered;
+        stale.PushBinding("__msBridge", HelloV2);
+        await Eventually(() => stale.Delivered > delivered);
+        await Task.Delay(200, Ct);
+        Assert.Equal(4, h.Posted.Count);
+
+        current.PushBinding("__msBridge", HelloV2);
+        await h.WaitPosted(5);
+        Assert.Equal(new PageVersionRejected(AppId, 2), h.Posted[4]);
+        stale.Close();
+    }
+
+    [Fact]
+    public async Task Page_version_rejected_while_foreground_fails_the_tile_and_home_still_shows_the_shell()
+    {
+        var (orchestrator, _) = OrchestratorTestSupport.Started();
+        OrchestratorTestSupport.Foreground(orchestrator, AppId);
+        using var h = new Harness();
+        h.Host.Start(new StartApp(7, AppId));
+        await h.WaitPosted(2);
+
+        h.Transport.PushBinding("__msBridge", HelloV2);
+        await h.WaitPosted(3);
+        var failed = orchestrator.Handle(Assert.IsType<PageVersionRejected>(h.Posted[2]));
+
+        Assert.Equal(AppLifecycleState.Failed, OrchestratorTestSupport.StateOf(failed.Snapshot!, AppId));
+        Assert.Contains(failed.Commands, command => command is ShowShell);
+        var home = orchestrator.Handle(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        Assert.Contains(home.Commands, command => command is ShowShell);
+        Assert.Equal(AppLifecycleState.Failed, OrchestratorTestSupport.StateOf(home.Snapshot!, AppId));
     }
 
     [Fact]
@@ -1295,7 +1465,7 @@ public class BrowserHostTests
         // Dokładnie trzy wywołania setupu na nowej sesji: bez Page.navigate, bez Runtime.enable, nic z przerwy.
         Assert.Equal(["Runtime.addBinding", "Page.enable", "Page.addScriptToEvaluateOnNewDocument"], second.Methods());
         Assert.Equal("__msBridge", second.Sent[0].GetProperty("params").GetProperty("name").GetString());
-        Assert.StartsWith("((config) => {}", second.Sent[2].GetProperty("params").GetProperty("source").GetString(), StringComparison.Ordinal);
+        Assert.StartsWith(WrappedRuntime, second.Sent[2].GetProperty("params").GetProperty("source").GetString(), StringComparison.Ordinal);
         Assert.Equal(StartSetup, h.Transport.Methods());
         Assert.DoesNotContain("Browser.getVersion", second.Methods());
         Assert.Equal(2, h.Posted.Count);
@@ -1973,7 +2143,7 @@ public class BrowserHostTests
         Assert.Equal([OrphanAttached], h.Posted);
         Assert.Equal(InstallSetup, h.Transport.Methods());
         Assert.Equal("__msBridge", h.Transport.Sent[0].GetProperty("params").GetProperty("name").GetString());
-        Assert.StartsWith("((config) => {}", h.Transport.Sent[2].GetProperty("params").GetProperty("source").GetString(), StringComparison.Ordinal);
+        Assert.StartsWith(WrappedRuntime, h.Transport.Sent[2].GetProperty("params").GetProperty("source").GetString(), StringComparison.Ordinal);
         Assert.Equal(9222, h.ConnectedPort);
         Assert.Equal([Harness.OrphanPid], h.Opened);
 

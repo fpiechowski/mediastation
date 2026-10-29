@@ -10,8 +10,12 @@
          the Edge window must be foreground and cover its monitor;
       2. checks the browser: TCP port <port> listens only on 127.0.0.1 and the WMI command line has no
          `--remote-allow-origins`;
-      3. injects Home: the MediaStation shell must be foreground, the Edge window IsIconic and IsWindowVisible (no SW_HIDE).
-    Screenshots after start and after Home plus `measurements.jsonl` go to `logs\browserhost-tracer-evidence-<ts>`.
+      3. (story 6.6) injects F5 into the foreground Edge: a new `pageHello` (fresh PageRuntime of the new document)
+         must arrive within 15 s;
+      4. injects Home: the MediaStation shell must be foreground, the Edge window IsIconic and IsWindowVisible (no SW_HIDE).
+    Before the start it checks that the published `page\runtime.js` begins with the esbuild bundle banner and records
+    its SHA256. Screenshots after start and after Home plus `measurements.jsonl` go to
+    `logs\browserhost-tracer-evidence-<ts>`.
     The verdict also requires no `warn`/`error` in the run except `appIconMissing`. MediaStation and the Edge tree are
     closed at the end. Exit code 0 = PASS.
 
@@ -169,12 +173,21 @@ if (-not (Test-Path -LiteralPath $MediaStation)) { throw "MediaStation.exe not f
 foreach ($asset in @('page\runtime.js', "page\drivers\$AppId\manifest.json")) {
     if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $MediaStation) $asset))) { throw "Publish has no $asset next to MediaStation.exe." }
 }
+$runtimePath = Join-Path (Split-Path -Parent $MediaStation) 'page\runtime.js'
+$runtimeBanner = '// MediaStation PageRuntime (esbuild IIFE, AD-6)'
+$runtimeFirstLine = [System.IO.File]::ReadLines($runtimePath) | Select-Object -First 1
+$runtimeHash = (Get-FileHash -LiteralPath $runtimePath -Algorithm SHA256).Hash
 if (@(Get-Process -Name 'MediaStation' -ErrorAction SilentlyContinue).Count -gt 0) { throw 'MediaStation is already running; close it and retry.' }
 if ((Get-ProfileProcesses).Count -gt 0) { throw "A browser already holds $profileDir; close it and retry." }
 if (@(Get-NetTCPConnection -LocalPort $CdpPort -State Listen -ErrorAction SilentlyContinue).Count -gt 0) { throw "Port $CdpPort is already listening; free it and retry." }
 if (Test-Path -LiteralPath $backupPath) { Move-Item -LiteralPath $backupPath -Destination $appsPath -Force }
 
 [void](New-Item -ItemType Directory -Path $evidenceDir -Force)
+# Story 6.6: the published page\runtime.js is the esbuild IIFE bundle (banner on line 1); its hash identifies the run.
+$bannerOk = $runtimeFirstLine -eq $runtimeBanner
+Add-Jsonl -Record ([ordered]@{ utc = [DateTimeOffset]::UtcNow.ToString('o'); stage = 'runtime'; path = $runtimePath; firstLine = $runtimeFirstLine; bannerOk = $bannerOk; sha256 = $runtimeHash; bytes = (Get-Item -LiteralPath $runtimePath).Length })
+Note ("page\runtime.js sha256={0} banner={1}" -f $runtimeHash, $bannerOk)
+if (-not $bannerOk) { $problems.Add("published page\runtime.js does not start with the banner '$runtimeBanner' (first line: '$runtimeFirstLine')") }
 $tile = [ordered]@{ type = 'web'; id = $AppId; category = 'video'; title = 'Netflix'; icon = "$AppId.png"; service = 'netflix'; browser = 'edge'; cdpPort = $CdpPort }
 $app = $null
 try {
@@ -253,6 +266,26 @@ try {
     if (@($profileLines | Where-Object { $_ -match '--remote-allow-origins' }).Count -gt 0) { $problems.Add('a browser command line contains --remote-allow-origins') }
     Add-Jsonl -Record ([ordered]@{ utc = [DateTimeOffset]::UtcNow.ToString('o'); stage = 'browser'; listenAddresses = $addresses; listenOwners = $owners; rootPid = $rootPid; rootCommandLine = $rootLine })
 
+    # Story 6.6: F5 in the foreground Edge reloads the page; the new document runs a fresh PageRuntime and says hello again.
+    Start-Sleep -Seconds 3
+    $hellosBefore = @(Get-RunEntries -ProcessId $app.Id -Msg 'pageHello').Count
+    $edgeOnTop = $native::GetForegroundWindow() -eq $window
+    $reloaded = $false
+    if (-not $edgeOnTop) { $problems.Add('Edge window is not foreground before F5') }
+    else {
+        Note ("injected F5 (pageHello before: {0})" -f $hellosBefore)
+        Send-Key -Vk 0x74
+        $reloaded = Wait-For -Seconds 15 -Condition { @(Get-RunEntries -ProcessId $app.Id -Msg 'pageHello').Count -gt $hellosBefore }
+    }
+    $hellosAfter = @(Get-RunEntries -ProcessId $app.Id -Msg 'pageHello')
+    $newHellos = @($hellosAfter | Select-Object -Skip $hellosBefore)
+    foreach ($hello in $newHellos) {
+        Note ('pageHello after F5 ' + ($hello.data | ConvertTo-Json -Compress))
+        if ($hello.data.webdriver -ne $false) { $problems.Add("pageHello after F5 webdriver=$($hello.data.webdriver), expected false") }
+    }
+    if ($edgeOnTop -and -not $reloaded) { $problems.Add('no new pageHello within 15s after F5') }
+    Add-Jsonl -Record ([ordered]@{ utc = [DateTimeOffset]::UtcNow.ToString('o'); stage = 'reload'; key = 'F5'; edgeOnTop = $edgeOnTop; pageHelloBefore = $hellosBefore; pageHelloAfter = $hellosAfter.Count; newPageHello = @($newHellos | ForEach-Object { $_.data }) })
+
     # Home: shell on top, Edge minimized but visible (never SW_HIDE).
     Note 'injected Home'
     Send-Key -Vk 0x24 -Extended $true
@@ -290,4 +323,4 @@ if ($problems.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'PASS: BrowserHost starts Edge in kiosk with loopback CDP, the page says hello (webdriver=false), Home minimizes without SW_HIDE.' -ForegroundColor Green
+Write-Host 'PASS: BrowserHost starts Edge in kiosk with loopback CDP, the bundled PageRuntime says hello (webdriver=false) and again after F5, Home minimizes without SW_HIDE.' -ForegroundColor Green

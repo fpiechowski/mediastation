@@ -273,6 +273,19 @@ public class CoreMessageContractTests
     }
 
     [Fact]
+    public void Page_version_rejected_event_envelope_serializes_exactly_and_round_trips()
+    {
+        Event rejected = new PageVersionRejected("netflix", 2);
+
+        var json = ContractJson.SerializeEnvelope(rejected);
+
+        Assert.Equal("""{"v":1,"type":"pageVersionRejected","payload":{"appId":"netflix","version":2}}""", json);
+        var back = ContractJson.DeserializeEnvelope<Event>(json);
+        Assert.IsType<PageVersionRejected>(back);
+        Assert.Equal(rejected, back);
+    }
+
+    [Fact]
     public void Foreground_changed_event_envelope_serializes_exactly_and_round_trips()
     {
         Event changed = new ForegroundChanged(1234, 77);
@@ -574,7 +587,7 @@ public class CoreMessageContractTests
     {
         var names = MessageTypes.All.Select(MessageTypes.NameOf).ToArray();
 
-        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "setManagedWindows", "sendKey", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "reportForeground", "muteProcessTree", "unmuteProcessTree", "forgetProcessTree", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "timerElapsed", "foregroundChanged"], names);
+        Assert.Equal(["action", "launchApp", "closeApp", "restartApp", "setInputRouting", "setManagedWindows", "sendKey", "startApp", "stopApp", "probeExisting", "renewSession", "activateWindow", "minimizeWindow", "showShell", "reportForeground", "muteProcessTree", "unmuteProcessTree", "forgetProcessTree", "scheduleTimer", "cancelTimer", "commandCompleted", "commandFailed", "orchestratorStarted", "systemResumed", "appWindowAttached", "processExited", "cdpLost", "pageVersionRejected", "timerElapsed", "foregroundChanged"], names);
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
         Assert.DoesNotContain(Envelope.SnapshotType, names);
         Assert.DoesNotContain(Envelope.ReadyType, names);
@@ -611,6 +624,8 @@ public class CoreMessageContractTests
                 "minimize-window.schema.json",
                 "mute-process-tree.schema.json",
                 "orchestrator-started.schema.json",
+                "page-hello.schema.json",
+                "page-version-rejected.schema.json",
                 "probe-existing.schema.json",
                 "process-exited.schema.json",
                 "renew-session.schema.json",
@@ -764,6 +779,8 @@ public class CoreMessageContractTests
     [InlineData("app-window-attached.schema.json", "AppWindowAttached", "appId,hwnd,rootPid")]
     [InlineData("process-exited.schema.json", "ProcessExited", "appId")]
     [InlineData("cdp-lost.schema.json", "CdpLost", "appId")]
+    [InlineData("page-version-rejected.schema.json", "PageVersionRejected", "appId,version")]
+    [InlineData("page-hello.schema.json", "PageHello", "service,driverVersion,webdriver")]
     [InlineData("foreground-changed.schema.json", "ForegroundChanged", "hwnd,pid")]
     [InlineData("activate-window.schema.json", "ActivateWindow", "cmdId,hwnd")]
     [InlineData("minimize-window.schema.json", "MinimizeWindow", "cmdId,hwnd")]

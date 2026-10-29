@@ -110,14 +110,15 @@ public static class ContractJson
 
     /// <summary>
     /// Schematy wszystkich eksportowanych kontraktów: nazwa pliku (<c>kebab-case.schema.json</c>) → JSON Schema.
-    /// Obejmuje <see cref="ShellSnapshot"/>, każdy rekord z <see cref="MessageTypes"/> i trzy pliki configu
+    /// Obejmuje <see cref="ShellSnapshot"/>, <see cref="PageHello"/> (typ <c>hello</c> PageRuntime, AD-7), każdy rekord
+    /// z <see cref="MessageTypes"/> i trzy pliki configu
     /// (<see cref="AppsConfig"/>, <see cref="InputConfig"/>, <see cref="Settings"/>, AD-11); bazy komunikatów
     /// (<see cref="Intent"/>, <see cref="Command"/>, <see cref="Event"/>) nie mają własnego schematu.
     /// </summary>
     public static IReadOnlyDictionary<string, string> ExportSchemas()
     {
         var schemas = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach (var type in (Type[])[typeof(ShellSnapshot), .. MessageTypes.All, .. ConfigTypes])
+        foreach (var type in (Type[])[typeof(ShellSnapshot), typeof(PageHello), .. MessageTypes.All, .. ConfigTypes])
         {
             schemas.Add(SchemaFileName(type), ExportSchema(type).ToJsonString(IndentedOptions));
         }

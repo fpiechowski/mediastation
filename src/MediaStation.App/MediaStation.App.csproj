@@ -40,13 +40,15 @@
     Build web jako target MSBuild (AD-13, AD-16): budowa MediaStation.Core.Tests w tym samym przebiegu MSBuild →
     test Category=SchemaExport (eksport schematów, bez własnego exe, bo Application Control blokuje świeże niepodpisane pliki) →
     npm ci (gdy brak node_modules) → npm run contracts:generate →
-    Debug: typecheck (shell z Vite dev servera), inne konfiguracje: npm run build:shell i web/shell/dist → <exe>/shell.
+    Debug: typecheck (shell z Vite dev servera), inne konfiguracje: npm run build:shell i web/shell/dist → <exe>/shell →
+    każda konfiguracja: npm run build:page i web/page/dist/runtime.js → <exe>/page/runtime.js.
     Uwaga: nigdy osobny proces budujący (dotnet build lub dotnet test bez opcji no-build) w tym targecie: wyścig o bin/obj przy buildzie solucji.
   -->
   <PropertyGroup>
     <MediaStationRepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</MediaStationRepoRoot>
     <MediaStationWebDir>$(MediaStationRepoRoot)web\</MediaStationWebDir>
     <MediaStationShellDist>$(MediaStationWebDir)shell\dist\</MediaStationShellDist>
+    <MediaStationPageRuntime>$(MediaStationWebDir)page\dist\runtime.js</MediaStationPageRuntime>
     <MediaStationCoreTestsProject>$(MediaStationRepoRoot)tests\MediaStation.Core.Tests\MediaStation.Core.Tests.csproj</MediaStationCoreTestsProject>
     <MediaStationShellFromDevServer Condition="'$(Configuration)' == 'Debug'">true</MediaStationShellFromDevServer>
     <DefineConstants Condition="'$(MediaStationShellFromDevServer)' == 'true'">$(DefineConstants);SHELL_DEV_SERVER</DefineConstants>
@@ -55,9 +57,11 @@
   <!--
     Page bundle (AD-6, AD-13): BrowserHost czyta page\runtime.js i page\drivers\<service>\manifest.json z dysku przy
     każdym starcie, więc pliki trafiają obok exe w buildzie i w publish. Hotfix = podmiana pliku w page\.
+    runtime.js to bundle IIFE z web\page\dist (npm run build:page w BuildWeb), dodawany jako Content w targecie.
   -->
   <ItemGroup>
-    <Content Include="$(MediaStationWebDir)page\runtime\runtime.js" Link="page\runtime.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- SkipWebBuild=true (ręczne npm run build, potem publish): BuildWeb nie działa, więc bundle z dist dodajemy tutaj; bez duplikatu z targetu. -->
+    <Content Include="$(MediaStationPageRuntime)" Link="page\runtime.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="'$(SkipWebBuild)' == 'true' and Exists('$(MediaStationPageRuntime)')" />
     <Content Include="$(MediaStationWebDir)page\drivers\**\manifest.json" Link="page\drivers\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
@@ -67,7 +71,8 @@
     <!-- Zero pasujących testów albo zablokowany host testów = niezerowy kod (MTP: 8) = błąd buildu, bez fallbacku na stare typy. -->
     <Exec Command="dotnet test --project &quot;$(MediaStationCoreTestsProject)&quot; --no-build --no-restore -c $(Configuration) --filter Category=SchemaExport" />
 
-    <Exec Command="npm ci" WorkingDirectory="$(MediaStationWebDir)" Condition="!Exists('$(MediaStationWebDir)node_modules')" />
+    <!-- npm ci także przy node_modules sprzed esbuild (story 6.6): bez niego build:page nie znajdzie pakietu. -->
+    <Exec Command="npm ci" WorkingDirectory="$(MediaStationWebDir)" Condition="!Exists('$(MediaStationWebDir)node_modules') or !Exists('$(MediaStationWebDir)node_modules\esbuild\package.json')" />
 
     <Exec Command="npm run contracts:generate" WorkingDirectory="$(MediaStationWebDir)" />
 
@@ -81,6 +86,15 @@
     </ItemGroup>
 
     <Error Condition="'$(MediaStationShellFromDevServer)' != 'true' and !Exists('$(MediaStationShellDist)index.html')" Text="Build web nie wyprodukował $(MediaStationShellDist)index.html." />
+
+    <!-- PageRuntime (AD-6): bundle esbuild w każdej konfiguracji, bo BrowserHost wstrzykuje go także w Debug. -->
+    <Exec Command="npm run build:page" WorkingDirectory="$(MediaStationWebDir)" />
+
+    <ItemGroup>
+      <Content Include="$(MediaStationPageRuntime)" Link="page\runtime.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <Error Condition="!Exists('$(MediaStationPageRuntime)')" Text="Build web nie wyprodukował $(MediaStationPageRuntime)." />
   </Target>
 
 </Project>

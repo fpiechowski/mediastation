@@ -42,7 +42,7 @@ internal interface IBrowserProcessLauncher
 /// BrowserHost (AD-1, AD-4, AD-10, AD-13): uruchamia Edge/Chrome z wpisu <c>apps.json</c> z profilem
 /// <c>profiles\&lt;appId&gt;</c>, flagami AD-1 i <c>--kiosk</c>; raportuje <see cref="AppWindowAttached"/>, gdy tylko okno
 /// istnieje (attach nie czeka na CDP), potem łączy surowy klient CDP na <c>127.0.0.1:&lt;cdpPort&gt;</c>, instaluje
-/// binding i minimalny PageRuntime, nawiguje na start URL z manifestu drivera i loguje <c>hello</c> strony.
+/// binding i PageRuntime, nawiguje na start URL z manifestu drivera i loguje <c>hello</c> strony.
 /// Story 6.3: binding wraca po każdej nawigacji głównej ramki, a zerwane CDP żywej sesji host łączy ponownie z tym
 /// samym celem strony (backoff, termin <c>cdpReconnectTimeout</c>) i instaluje binding, <c>Page.enable</c> i skrypt na
 /// nowej sesji; bez sukcesu w terminie wysyła <see cref="CdpLost"/>. W trakcie zerwania sesja nie ma kanału CDP i nic
@@ -59,6 +59,10 @@ internal interface IBrowserProcessLauncher
 /// a zostaje zarejestrowana, żeby Close/Restart zabiły osierocone drzewo. Start w trakcie sondy czeka na nią i
 /// używa gotowej adoptowanej sesji zamiast startu. <see cref="RenewSession"/> po wybudzeniu zdejmuje bieżący kanał
 /// CDP i uruchamia pętlę reconnectu 6.3 do tego samego celu.
+/// Story 6.6 (AD-6, AD-7): wstrzykuje bundle IIFE PageRuntime z <c>page\runtime.js</c> owinięty w funkcję z configiem
+/// (<see cref="BrowserLaunch.BuildInitScript"/>). Kopertę strony z innym major <c>v</c> loguje jako
+/// <c>pageMessageRejected</c> z <c>reason: version</c> i raportuje <see cref="PageVersionRejected"/> najwyżej raz na
+/// sesję (tylko bieżącą i niezamykaną), a Orchestrator oznacza kafelek stanem <c>Failed</c> jak po <see cref="CdpLost"/>.
 /// Sam nigdy nie pokazuje, nie wynosi i nie minimalizuje okien (AD-14, AD-15). Metody portu tylko zlecają pracę
 /// w tle i nie rzucają przez granicę portu (AD-4).
 /// </summary>
@@ -1246,6 +1250,12 @@ internal sealed class BrowserHost : IAppHostPort
         }
 
         var parsed = PageProtocol.Parse(payload);
+        if (parsed is { Reason: "version", Version: { } version })
+        {
+            RejectPageVersion(session, version);
+            return;
+        }
+
         if (parsed.Hello is not { } hello)
         {
             RejectPageMessage(session, parsed.Reason ?? "unparsable");
@@ -1267,6 +1277,32 @@ internal sealed class BrowserHost : IAppHostPort
             ["appId"] = session.AppId,
             ["reason"] = reason,
         });
+
+    /// <summary>
+    /// Koperta z innym major <c>v</c> (AD-7, DW-54): każda daje wpis w logu, a <see cref="PageVersionRejected"/> idzie
+    /// najwyżej raz na sesję i tylko z sesji zarejestrowanej dla aplikacji, która nie jest zamykana. Stan kafelka
+    /// ustala Orchestrator (AD-4).
+    /// </summary>
+    private void RejectPageVersion(Session session, int version)
+    {
+        _log.Warn(Src, "pageMessageRejected", new Dictionary<string, object?>
+        {
+            ["appId"] = session.AppId,
+            ["reason"] = "version",
+            ["v"] = version,
+        });
+
+        bool registered;
+        lock (_gate)
+        {
+            registered = _sessions.TryGetValue(session.AppId, out var current) && ReferenceEquals(current, session);
+        }
+
+        if (registered && session.TryMarkVersionRejected())
+        {
+            _post(new PageVersionRejected(session.AppId, version));
+        }
+    }
 
     private void CdpFailed(StartApp command, WebApp app, Session session, string reason, string? detail)
     {
@@ -1495,6 +1531,9 @@ internal sealed class BrowserHost : IAppHostPort
         private volatile bool _stopping;
         private volatile string? _initScript;
 
+        /// <summary>Sesja wysłała już <see cref="PageVersionRejected"/>; pod <see cref="_gate"/>.</summary>
+        private bool _versionRejected;
+
         public string AppId { get; } = appId;
 
         /// <summary>Sesja żywej przeglądarki przejętej przez sondę po restarcie (story 6.5), nie uruchomionej przez host.</summary>
@@ -1552,6 +1591,24 @@ internal sealed class BrowserHost : IAppHostPort
 
         /// <summary>Sesja jest zamykana (Stop, ponowny start, timeout okna albo wyjście procesu): watcher milczy.</summary>
         public bool Stopping => _stopping;
+
+        /// <summary>
+        /// Zaznacza pierwsze odrzucenie wersji strony w sesji; <c>false</c>, gdy już było albo sesja jest zamykana
+        /// (atomowo z <see cref="MarkStopping"/>), więc <see cref="PageVersionRejected"/> idzie najwyżej raz.
+        /// </summary>
+        public bool TryMarkVersionRejected()
+        {
+            lock (_gate)
+            {
+                if (_stopping || _versionRejected)
+                {
+                    return false;
+                }
+
+                _versionRejected = true;
+                return true;
+            }
+        }
 
         /// <summary>Oznacza sesję jako zamykaną i zwraca bieżący kanał CDP do zamknięcia (atomowo z <see cref="TryAttach"/>).</summary>
         public CdpSession? MarkStopping()

@@ -15,5 +15,6 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["shell/src", "page", "contracts/generated"]
+  "include": ["shell/src", "page", "contracts/generated"],
+  "exclude": ["page/runtime/bundle.test.ts"]
 }

@@ -191,8 +191,16 @@ internal static class BrowserLaunch
     }
 
     /// <summary>
-    /// Skrypt <c>Page.addScriptToEvaluateOnNewDocument</c>: wywołanie wyrażenia z <c>runtime.js</c> z configiem JSON,
-    /// <c>(&lt;runtime&gt;)(&lt;config&gt;);</c>. Końcowy średnik pliku jest zdejmowany, bo w nawiasie byłby błędem składni.
+    /// Nazwa parametru funkcji, w którą host owija bundle PageRuntime; musi się zgadzać z
+    /// <c>declare const __msPageConfig</c> w <c>web/page/runtime/main.ts</c>.
+    /// </summary>
+    public const string PageConfigParameter = "__msPageConfig";
+
+    /// <summary>
+    /// Skrypt <c>Page.addScriptToEvaluateOnNewDocument</c>: bundle IIFE z <c>runtime.js</c> dosłownie, owinięty w funkcję
+    /// z configiem JSON jako parametrem, <c>(function (__msPageConfig) {\n&lt;plik&gt;\n})(&lt;config&gt;);</c> (AD-6).
+    /// Plik nie jest zmieniany: końcowy średnik albo komentarz <c>//</c> w poprawionym ręcznie pliku zostaje bezpieczny,
+    /// bo przed zamknięciem funkcji jest nowa linia. Strona nie dostaje globalnej nazwy poza bindingiem hosta.
     /// </summary>
     public static string BuildInitScript(string runtimeSource, string binding, string service, string? driverVersion)
     {
@@ -200,19 +208,13 @@ internal static class BrowserLaunch
         ArgumentException.ThrowIfNullOrWhiteSpace(binding);
         ArgumentException.ThrowIfNullOrWhiteSpace(service);
 
-        var body = runtimeSource.TrimEnd();
-        while (body.EndsWith(';'))
-        {
-            body = body[..^1].TrimEnd();
-        }
-
         var config = JsonSerializer.Serialize(new Dictionary<string, string?>
         {
             ["binding"] = binding,
             ["service"] = service,
             ["driverVersion"] = driverVersion,
         });
-        return $"({body}\n)({config});";
+        return $"(function ({PageConfigParameter}) {{\n{runtimeSource}\n}})({config});";
     }
 
     /// <summary>Usuwa z adresu query, fragment i dane logowania, zostawiając cel (do logów diagnostycznych).</summary>

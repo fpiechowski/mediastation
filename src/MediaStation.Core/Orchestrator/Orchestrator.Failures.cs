@@ -66,13 +66,14 @@ public sealed partial class Orchestrator
     }
 
     /// <summary>
-    /// Zerwane CDP to awaria tylko w żywym cyklu: <c>Starting</c>, <c>Foreground</c> i <c>Background</c> prowadzą
-    /// w <c>Failed</c> (AD-10). <c>Stopping</c> należy do korelacji stopu, a <c>NotRunning</c> i <c>Failed</c>
-    /// nie mają żywego procesu, którego awarię mógłby raportować.
+    /// Awaria przy żywym procesie (<see cref="CdpLost"/>, AD-10; <see cref="PageVersionRejected"/>, AD-7) liczy się tylko
+    /// w żywym cyklu: <c>Starting</c>, <c>Foreground</c> i <c>Background</c> prowadzą w <c>Failed</c>. <c>Stopping</c>
+    /// należy do korelacji stopu, a <c>NotRunning</c> i <c>Failed</c> nie mają żywego procesu, którego awarię fakt
+    /// mógłby raportować.
     /// </summary>
-    private OrchestratorResult OnCdpLost(CdpLost lost)
+    private OrchestratorResult OnLiveFailure(string appId)
     {
-        if (!_appsById.TryGetValue(lost.AppId, out var app))
+        if (!_appsById.TryGetValue(appId, out var app))
         {
             return OrchestratorResult.None;
         }

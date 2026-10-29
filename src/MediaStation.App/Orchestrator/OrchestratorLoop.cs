@@ -115,6 +115,25 @@ public sealed class OrchestratorLoop : IDisposable
         _ => "foreign",
     };
 
+    /// <summary>Stan aplikacji z wynikowego snapshotu kroku albo <c>null</c>, gdy krok nie dał snapshotu (fakt zignorowany).</summary>
+    private static AppLifecycleState? StateIn(OrchestratorResult result, string appId)
+    {
+        if (result.Snapshot is not { } handled)
+        {
+            return null;
+        }
+
+        foreach (var app in handled.Apps)
+        {
+            if (app.AppId == appId)
+            {
+                return app.State;
+            }
+        }
+
+        return null;
+    }
+
     private void Run()
     {
         foreach (var message in _queue.GetConsumingEnumerable())
@@ -137,22 +156,21 @@ public sealed class OrchestratorLoop : IDisposable
                 // Zerwane CDP (AD-10): stan kafelka z wynikowego snapshotu (`failed`) albo null, gdy fakt zignorowano.
                 if (message is CdpLost lost)
                 {
-                    AppLifecycleState? state = null;
-                    if (result.Snapshot is { } handled)
-                    {
-                        foreach (var app in handled.Apps)
-                        {
-                            if (app.AppId == lost.AppId)
-                            {
-                                state = app.State;
-                            }
-                        }
-                    }
-
                     _log.Info(Src, "cdpLostHandled", new Dictionary<string, object?>
                     {
                         ["appId"] = lost.AppId,
-                        ["state"] = state,
+                        ["state"] = StateIn(result, lost.AppId),
+                    });
+                }
+
+                // Koperta strony z innym major `v` (AD-7, DW-54): tak samo jak CdpLost, z odrzuconym `v`.
+                if (message is PageVersionRejected rejected)
+                {
+                    _log.Info(Src, "pageVersionRejectedHandled", new Dictionary<string, object?>
+                    {
+                        ["appId"] = rejected.AppId,
+                        ["v"] = rejected.Version,
+                        ["state"] = StateIn(result, rejected.AppId),
                     });
                 }
 

@@ -158,6 +158,51 @@ public class OrchestratorLoopTests
     }
 
     [Fact]
+    public void Page_version_rejected_of_a_live_app_logs_handled_with_v_and_the_failed_state()
+    {
+        var log = new RecordingLog();
+        using var loop = CreateLoop(out var published, out _, log);
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        loop.Post(new LaunchApp("netflix"));
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        WaitFor(() => published.Count >= 3);
+        loop.Post(new PageVersionRejected("netflix", 2));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "pageVersionRejectedHandled"));
+
+        var entry = Assert.Single(log.Entries, entry => entry.Msg == "pageVersionRejectedHandled");
+        Assert.Equal(LogLevel.Info, entry.Level);
+        Assert.Equal("orchestrator", entry.Src);
+        Assert.Equal("netflix", entry.Data!["appId"]);
+        Assert.Equal(2, entry.Data["v"]);
+        Assert.Equal(AppLifecycleState.Failed, entry.Data["state"]);
+        Assert.DoesNotContain(log.Entries, e => e.Msg == "cdpLostHandled");
+        WaitFor(() => published.Count >= 4);
+        Assert.Equal(AppLifecycleState.Failed, published.Last().Apps.Single(app => app.AppId == "netflix").State);
+    }
+
+    [Fact]
+    public void Ignored_page_version_rejected_logs_handled_with_a_null_state()
+    {
+        var log = new RecordingLog();
+        using var loop = CreateLoop(out var published, out _, log);
+        loop.Start();
+        WaitFor(() => published.Count >= 1);
+
+        loop.Post(new PageVersionRejected("netflix", 3));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "pageVersionRejectedHandled"));
+
+        var entry = Assert.Single(log.Entries, entry => entry.Msg == "pageVersionRejectedHandled");
+        Assert.Equal(LogLevel.Info, entry.Level);
+        Assert.Equal("netflix", entry.Data!["appId"]);
+        Assert.Equal(3, entry.Data["v"]);
+        Assert.True(entry.Data.ContainsKey("state"));
+        Assert.Null(entry.Data["state"]);
+        Assert.Single(published);
+    }
+
+    [Fact]
     public void Foreground_changed_is_logged_without_changing_state()
     {
         var log = new RecordingLog();

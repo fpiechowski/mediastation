@@ -9,12 +9,24 @@ namespace MediaStation.Core.Tests;
 
 public class OrchestratorFailureTests
 {
+    /// <summary>
+    /// Awaria aplikacji <c>netflix</c> po nazwie z <c>InlineData</c>. <see cref="PageVersionRejected"/> (AD-7) ma ten sam
+    /// handler co <see cref="CdpLost"/>, więc każda teoria <c>cdpLost</c> sprawdza też <c>pageVersionRejected</c>.
+    /// </summary>
+    private static Event Failure(string fact) => fact switch
+    {
+        "cdpLost" => new CdpLost("netflix"),
+        "pageVersionRejected" => new PageVersionRejected("netflix", 2),
+        _ => new ProcessExited("netflix"),
+    };
+
     [Theory]
     [InlineData("launch")]
     [InlineData("close")]
     [InlineData("restart")]
     [InlineData("processExited")]
     [InlineData("cdpLost")]
+    [InlineData("pageVersionRejected")]
     [InlineData("attached")]
     public void Messages_for_unknown_app_are_ignored(string kind)
     {
@@ -26,6 +38,7 @@ public class OrchestratorFailureTests
             "restart" => new RestartApp("nope"),
             "processExited" => new ProcessExited("nope"),
             "attached" => new AppWindowAttached("nope", 10, 20),
+            "pageVersionRejected" => new PageVersionRejected("nope", 2),
             _ => new CdpLost("nope"),
         };
 
@@ -40,15 +53,17 @@ public class OrchestratorFailureTests
     [Theory]
     [InlineData("starting", "processExited")]
     [InlineData("starting", "cdpLost")]
+    [InlineData("starting", "pageVersionRejected")]
     [InlineData("background", "processExited")]
     [InlineData("background", "cdpLost")]
+    [InlineData("background", "pageVersionRejected")]
     public void Failure_in_starting_or_background_enters_failed_and_only_starting_cancels_timeout(string state, string fact)
     {
         var (orchestrator, _) = Started();
         var last = state == "starting"
             ? Assert.IsType<ShellSnapshot>(orchestrator.Handle(new LaunchApp("netflix")).Snapshot)
             : Background(orchestrator, "netflix");
-        Event failure = fact == "cdpLost" ? new CdpLost("netflix") : new ProcessExited("netflix");
+        Event failure = Failure(fact);
 
         var result = orchestrator.Handle(failure);
 
@@ -78,15 +93,16 @@ public class OrchestratorFailureTests
     [Theory]
     [InlineData("processExited")]
     [InlineData("cdpLost")]
+    [InlineData("pageVersionRejected")]
     public void Failure_in_foreground_shows_shell_routes_shell_and_focuses_the_tile(string fact)
     {
         var (orchestrator, _) = Started();
         var foreground = Foreground(orchestrator, "netflix");
-        Event failure = fact == "cdpLost" ? new CdpLost("netflix") : new ProcessExited("netflix");
+        Event failure = Failure(fact);
 
         var result = orchestrator.Handle(failure);
 
-        if (fact == "cdpLost")
+        if (fact != "processExited")
         {
             // Proces żyje: reguła zostaje, okno jest wyciszone i zminimalizowane przed shellem (AD-5).
             Assert.Collection(
@@ -148,17 +164,19 @@ public class OrchestratorFailureTests
     }
 
     /// <summary>
-    /// <c>CdpLost</c> w <c>Stopping</c> należy do korelacji stopu: zamykana aplikacja kończy się <c>NotRunning</c>,
-    /// a nie <c>Failed</c>.
+    /// <c>CdpLost</c> i <c>PageVersionRejected</c> w <c>Stopping</c> należą do korelacji stopu: zamykana aplikacja kończy
+    /// się <c>NotRunning</c>, a nie <c>Failed</c>.
     /// </summary>
-    [Fact]
-    public void Cdp_lost_in_stopping_is_ignored_and_close_finishes_not_running()
+    [Theory]
+    [InlineData("cdpLost")]
+    [InlineData("pageVersionRejected")]
+    public void Cdp_lost_in_stopping_is_ignored_and_close_finishes_not_running(string fact)
     {
         var (orchestrator, _) = Started();
         Background(orchestrator, "netflix");
         var stopping = Assert.IsType<ShellSnapshot>(orchestrator.Handle(new CloseApp("netflix")).Snapshot);
 
-        var ignored = orchestrator.Handle(new CdpLost("netflix"));
+        var ignored = orchestrator.Handle(Failure(fact));
 
         Assert.Empty(ignored.Commands);
         Assert.Null(ignored.Snapshot);
@@ -179,8 +197,10 @@ public class OrchestratorFailureTests
     [Theory]
     [InlineData("notRunning", "processExited")]
     [InlineData("notRunning", "cdpLost")]
+    [InlineData("notRunning", "pageVersionRejected")]
     [InlineData("failed", "processExited")]
     [InlineData("failed", "cdpLost")]
+    [InlineData("failed", "pageVersionRejected")]
     public void Facts_outside_live_cycle_are_ignored_without_snapshot(string state, string fact)
     {
         var (orchestrator, _) = Started();
@@ -193,7 +213,7 @@ public class OrchestratorFailureTests
             orchestrator.Handle(new ProcessExited("netflix"));
         }
 
-        Event failure = fact == "cdpLost" ? new CdpLost("netflix") : new ProcessExited("netflix");
+        Event failure = Failure(fact);
         var result = orchestrator.Handle(failure);
 
         Assert.Empty(result.Commands);
@@ -212,6 +232,7 @@ public class OrchestratorFailureTests
     [Theory]
     [InlineData("processExited")]
     [InlineData("cdpLost")]
+    [InlineData("pageVersionRejected")]
     public void Facts_in_stopping_without_stop_correlation_are_ignored(string fact)
     {
         var (orchestrator, _) = Started();
@@ -221,7 +242,7 @@ public class OrchestratorFailureTests
             .GetField("_pendingStops", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(orchestrator);
         ((System.Collections.IDictionary)pendingStops!).Clear();
-        Event failure = fact == "cdpLost" ? new CdpLost("netflix") : new ProcessExited("netflix");
+        Event failure = Failure(fact);
 
         var result = orchestrator.Handle(failure);
 
@@ -288,6 +309,7 @@ public class OrchestratorFailureTests
     [InlineData("launch")]
     [InlineData("processExited")]
     [InlineData("cdpLost")]
+    [InlineData("pageVersionRejected")]
     [InlineData("attached")]
     public void Failed_ignores_inputs_without_commands_or_snapshot(string message)
     {
@@ -301,6 +323,7 @@ public class OrchestratorFailureTests
             "launch" => new LaunchApp("netflix"),
             "processExited" => new ProcessExited("netflix"),
             "cdpLost" => new CdpLost("netflix"),
+            "pageVersionRejected" => new PageVersionRejected("netflix", 2),
             _ => new AppWindowAttached("netflix", 0x77, 7),
         };
 
