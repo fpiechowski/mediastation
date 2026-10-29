@@ -219,3 +219,17 @@ after = [16]
 hitl = true
 risk = "high"
 references = ["epic-windows-audio-um760-acceptance.md, P0.4, S15–S27 i wynik użytkownika z 2026-10-28", "epic-windows-audio.md, R8, Done when 4", "epic-windows-audio/tickets/bug-start-kafelka-netflix-konczy-sie-devharnessstartfailed-zamia.md"]
+
+[[entry]]
+id = 18
+type = "bug"
+title = "Uruchomienie Netflixa przez kafelek wywołuje cykliczne zaniki obrazu"
+description = "Po poprawnym starcie Edge z profilem Netflix MediaStation ekran UM760 cyklicznie gaśnie i wraca do szumu/static. Trzeba rozdzielić wpływ Edge/WebView2, przełączania okna, routingu audio/mute, trybu kiosk/display mode i innych działań MediaStation oraz zabezpieczyć regresję bez naruszania S15."
+verify = "Na UM760 wielokrotne uruchomienie Netflixa przez kafelek nie powoduje black-screen/static; log i obserwacja obrazu wskazują sprawdzoną przyczynę, testy automatyczne pokrywają możliwe ścieżki, a S15 nadal ma appWindowAttached i audioRuleApplied muted=false."
+covers = ["R2", "R3", "R5"]
+after = [17]
+hitl = true
+risk = "high"
+severity = "P1"
+refine = true
+references = ["epic-windows-audio-um760-acceptance.md, S15 i uwaga z odbioru 2026-10-29", "epic-windows-audio.md, R2, R3, R5, Done when 4", "epic-browserhost/epic-browserhost.md"]
