@@ -11,7 +11,7 @@ namespace MediaStation.App.Platform.System;
 /// <summary>
 /// Cienki shim Win32 dla trzech źródeł sygnału wybudzenia: hook <c>WM_POWERBROADCAST</c> na top-level HWND
 /// shella (broadcast nie dociera do okien message-only), <c>RegisterPowerSettingNotification</c> dla
-/// <c>GUID_CONSOLE_DISPLAY_STATE</c> i <c>SystemEvents.PowerModeChanged</c>. Decyzję (okno echa i mapowanie
+/// <c>GUID_CONSOLE_DISPLAY_STATE</c> i <c>SystemEvents.PowerModeChanged</c>. Decyzję (echo rejestracji i mapowanie
 /// źródeł) trzyma <see cref="PowerSignalRouter"/>, księgowość <see cref="PowerSignalReporter"/>, a klasyfikację
 /// payloadu <see cref="DisplayStateNotification"/>.
 /// </summary>
@@ -25,18 +25,20 @@ internal sealed class PowerNotifications : IDisposable
 
     /// <summary>
     /// Podłącza trzy źródła do <paramref name="hwnd"/>. Echo rejestracji <c>GUID_CONSOLE_DISPLAY_STATE</c>
-    /// tłumi okno w <see cref="PowerSignalRouter"/>; shim tylko przekazuje zdarzenia systemowe.
+    /// tłumi <see cref="PowerSignalRouter"/> (także echo doręczone po powrocie stąd); shim tylko przekazuje
+    /// zdarzenia systemowe.
     /// </summary>
-    public static PowerNotifications Start(IntPtr hwnd, PowerSignalReporter reporter)
+    public static PowerNotifications Start(IntPtr hwnd, PowerSignalReporter reporter, TimeProvider time)
     {
         ArgumentNullException.ThrowIfNull(reporter);
+        ArgumentNullException.ThrowIfNull(time);
 
-        return new PowerNotifications(hwnd, reporter);
+        return new PowerNotifications(hwnd, reporter, time);
     }
 
-    private PowerNotifications(IntPtr hwnd, PowerSignalReporter reporter)
+    private PowerNotifications(IntPtr hwnd, PowerSignalReporter reporter, TimeProvider time)
     {
-        _router = new PowerSignalRouter(reporter);
+        _router = new PowerSignalRouter(reporter, time);
         _hook = OnWindowMessage;
         _router.BeginRegistration();
 

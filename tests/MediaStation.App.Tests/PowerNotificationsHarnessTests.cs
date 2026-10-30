@@ -60,14 +60,15 @@ public class PowerNotificationsHarnessTests
         }
 
         /// <summary>
-        /// Czeka, aż system doręczy echo rejestracji <c>GUID_CONSOLE_DISPLAY_STATE</c> (przychodzi z kolejki
-        /// dopiero po powrocie ze <c>Start</c>), po czym zeruje licznik wpisów i zegar bramki, żeby kolejne
-        /// asercje dotyczyły tylko wstrzykniętych komunikatów, a nie echa wygrywającego okno 5 s.
+        /// Czeka, aż system doręczy echo rejestracji <c>GUID_CONSOLE_DISPLAY_STATE</c> (router je zużywa, także
+        /// po powrocie ze <c>Start</c>), po czym przesuwa zegar za oczekiwanie na echo i okno bramki oraz zeruje
+        /// licznik wpisów, żeby kolejne asercje dotyczyły tylko wstrzykniętych komunikatów, nawet gdyby echo
+        /// nie przyszło.
         /// </summary>
         public void Settle()
         {
             MessageOnlyWindow.Pump(TimeSpan.FromMilliseconds(300));
-            Time.Advance(WakeSignalGate.Window + TimeSpan.FromSeconds(1));
+            Time.Advance(PowerSignalRouter.EchoWait + WakeSignalGate.Window);
             _logBaseline = Log.Entries.Count;
             lock (_posted)
             {
@@ -87,7 +88,7 @@ public class PowerNotificationsHarnessTests
     {
         var f = new Fixture();
         using var window = new MessageOnlyWindow();
-        using var power = PowerNotifications.Start(window.Handle, f.Reporter);
+        using var power = PowerNotifications.Start(window.Handle, f.Reporter, f.Time);
 
         var line = Assert.Single(f.Log.Entries, entry => entry.Msg == "powerSignalsRegistered");
         Assert.Equal(LogLevel.Info, line.Level);
@@ -96,13 +97,14 @@ public class PowerNotificationsHarnessTests
         Assert.Equal(true, line.Data["powerModeChanged"]);
     });
 
-    [Fact(Skip = "DW-1 finding: system dostarcza echo GUID_CONSOLE_DISPLAY_STATE z kolejki dopiero po powrocie ze Start, gdy okno echa w PowerSignalRouter jest już zamknięte, więc echo jest raportowane jako wybudzenie. Do decyzji (zmiana poza zakresem harnessu).")]
+    [Fact]
     public void Registration_echo_is_not_reported_as_a_wake() => StaThread.Run(() =>
     {
         var f = new Fixture();
         using var window = new MessageOnlyWindow();
-        using var power = PowerNotifications.Start(window.Handle, f.Reporter);
+        using var power = StartAndAwaitLateEcho(window, f);
 
+        // Druga notyfikacja też ma tu zostać złapana, więc pompujemy dalej już po echu.
         MessageOnlyWindow.Pump(TimeSpan.FromMilliseconds(500));
 
         Assert.Empty(f.Sources("powerSignal"));
@@ -110,17 +112,17 @@ public class PowerNotificationsHarnessTests
     });
 
     [Fact]
-    public void Registration_echo_is_delivered_through_the_hook_after_start() => StaThread.Run(() =>
+    public void Real_display_wake_right_after_the_echo_wins() => StaThread.Run(() =>
     {
         var f = new Fixture();
         using var window = new MessageOnlyWindow();
-        using var power = PowerNotifications.Start(window.Handle, f.Reporter);
+        using var power = StartAndAwaitLateEcho(window, f);
 
-        MessageOnlyWindow.Pump(TimeSpan.FromMilliseconds(500));
+        // Bez przesuwania zegara: po zużytym echu wybudzenie nie może czekać na limit.
+        SendSetting(window, ConsoleDisplayState, dataLength: 4, data0: 1);
 
-        // Charakterystyka stanu faktycznego (patrz Skip powyżej): echo przechodzi przez prawdziwy hook,
-        // kopię POWERBROADCAST_SETTING i router, a okno echa już nie obowiązuje.
         Assert.Equal([WakeSignalGate.DisplayStateSource], f.Sources("systemResumed"));
+        Assert.Equal(new SystemResumed(WakeSignalGate.DisplayStateSource), Assert.Single(f.Posted));
     });
 
     [Fact]
@@ -128,7 +130,7 @@ public class PowerNotificationsHarnessTests
     {
         var f = new Fixture();
         using var window = new MessageOnlyWindow();
-        using var power = PowerNotifications.Start(window.Handle, f.Reporter);
+        using var power = PowerNotifications.Start(window.Handle, f.Reporter, f.Time);
 
         var seenByLaterHook = false;
         window.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
@@ -149,7 +151,7 @@ public class PowerNotificationsHarnessTests
     {
         var f = new Fixture();
         using var window = new MessageOnlyWindow();
-        using var power = PowerNotifications.Start(window.Handle, f.Reporter);
+        using var power = PowerNotifications.Start(window.Handle, f.Reporter, f.Time);
         f.Settle();
 
         SendSetting(window, ConsoleDisplayState, dataLength: 4, data0: 1);
@@ -165,7 +167,7 @@ public class PowerNotificationsHarnessTests
     {
         var f = new Fixture();
         using var window = new MessageOnlyWindow();
-        using var power = PowerNotifications.Start(window.Handle, f.Reporter);
+        using var power = PowerNotifications.Start(window.Handle, f.Reporter, f.Time);
         f.Settle();
 
         SendSetting(window, ConsoleDisplayState, dataLength: 4, data0);
@@ -182,7 +184,7 @@ public class PowerNotificationsHarnessTests
     {
         var f = new Fixture();
         using var window = new MessageOnlyWindow();
-        using var power = PowerNotifications.Start(window.Handle, f.Reporter);
+        using var power = PowerNotifications.Start(window.Handle, f.Reporter, f.Time);
         f.Settle();
 
         // Bufor ma tylko nagłówek (20 B) i nic ponad: kopia deklarowanych danych oznaczałaby nadczyt.
@@ -196,7 +198,7 @@ public class PowerNotificationsHarnessTests
     {
         var f = new Fixture();
         using var window = new MessageOnlyWindow();
-        using var power = PowerNotifications.Start(window.Handle, f.Reporter);
+        using var power = PowerNotifications.Start(window.Handle, f.Reporter, f.Time);
         f.Settle();
 
         SendSetting(window, Guid.NewGuid(), dataLength: 4, data0: 1);
@@ -210,7 +212,7 @@ public class PowerNotificationsHarnessTests
     {
         var f = new Fixture();
         using var window = new MessageOnlyWindow();
-        using var power = PowerNotifications.Start(window.Handle, f.Reporter);
+        using var power = PowerNotifications.Start(window.Handle, f.Reporter, f.Time);
 
         RaiseSystemEventsPowerBroadcast(ResumeSuspend);
 
@@ -225,7 +227,7 @@ public class PowerNotificationsHarnessTests
     {
         var f = new Fixture();
         using var window = new MessageOnlyWindow();
-        var power = PowerNotifications.Start(window.Handle, f.Reporter);
+        var power = PowerNotifications.Start(window.Handle, f.Reporter, f.Time);
 
         power.Dispose();
         power.Dispose();
@@ -244,13 +246,66 @@ public class PowerNotificationsHarnessTests
     {
         var f = new Fixture();
 
-        Assert.Throws<ArgumentException>(() => PowerNotifications.Start(IntPtr.Zero, f.Reporter));
+        Assert.Throws<ArgumentException>(() => PowerNotifications.Start(IntPtr.Zero, f.Reporter, f.Time));
 
         var line = Assert.Single(f.Log.Entries, entry => entry.Msg == "powerSignalsRegistered");
         Assert.Equal(LogLevel.Warn, line.Level);
         Assert.Equal(false, line.Data!["windowHook"]);
         Assert.Equal(false, line.Data["displayState"]);
     });
+
+    /// <summary>
+    /// Start ścieżką późnego echa: po powrocie ze <c>Start</c> echa jeszcze nie ma (obserwator stoi przed
+    /// <c>Start</c>, więc policzyłby je także w oknie rejestracji), a potem pompuje do jego doręczenia. Bez tego
+    /// testy przechodziłyby też wtedy, gdy echo wpadło do okna albo w ogóle nie przyszło.
+    /// </summary>
+    private static PowerNotifications StartAndAwaitLateEcho(MessageOnlyWindow window, Fixture f)
+    {
+        EnsureSystemEventsInitialized();
+
+        var settingChanges = 0;
+        window.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+        {
+            if (msg == (int)PInvoke.WM_POWERBROADCAST && (uint)wParam.ToInt64() == PInvoke.PBT_POWERSETTINGCHANGE)
+            {
+                settingChanges++;
+            }
+
+            return IntPtr.Zero;
+        });
+
+        var power = PowerNotifications.Start(window.Handle, f.Reporter, f.Time);
+        try
+        {
+            Assert.Equal(0, settingChanges);
+
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (settingChanges < 1 && DateTime.UtcNow < deadline)
+            {
+                MessageOnlyWindow.Pump(TimeSpan.FromMilliseconds(20));
+            }
+
+            Assert.True(settingChanges >= 1, "system nie doręczył echa rejestracji");
+            return power;
+        }
+        catch
+        {
+            power.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Inicjuje <c>SystemEvents</c> przed <c>Start</c>. Pierwsza subskrypcja czeka na wątek <c>SystemEvents</c>,
+    /// a czekanie na wątku STA pompuje komunikaty, więc echo trafiałoby wtedy do okna rejestracji. Po inicjalizacji
+    /// nic nie pompuje i echo przychodzi po powrocie ze <c>Start</c>, niezależnie od kolejności testów.
+    /// </summary>
+    private static void EnsureSystemEventsInitialized()
+    {
+        PowerModeChangedEventHandler noop = static (_, _) => { };
+        SystemEvents.PowerModeChanged += noop;
+        SystemEvents.PowerModeChanged -= noop;
+    }
 
     /// <summary>
     /// Wysyła <c>PBT_POWERSETTINGCHANGE</c> z <c>POWERBROADCAST_SETTING</c> w pamięci niezarządzanej:

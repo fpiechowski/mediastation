@@ -481,7 +481,9 @@ location: src/MediaStation.App/Platform/System/PowerSignalRouter.cs
 source_spec: `plan-dw-power-notifications-harness.md`
 severity: medium
 reason: Observed by the new harness; Registration_echo_is_delivered_through_the_hook_after_start pins the behavior and Registration_echo_is_not_reported_as_a_wake (Skipped) holds the desired one. Pre-existing router/shim timing, not caused by the harness.
-status: open
+status: done 2026-10-30
+resolution: resolved by sweep bundle dw-dw-power-echo-not-wake
+resolution-undo: dc1bba20f1b6013099ec0fbcb25d91368a5f97d9d1ca4b7a0e7571e0f132665e 2026-10-30 7374617475733a206f70656e
 
 ### DW-51: Przyczyna podwójnego Home z S10 nie jest potwierdzona; okno scalania w InputPolicy jest ochroną, nie dowiedzioną naprawą.
 origin: spec-deferred 3886f76d6600
@@ -572,4 +574,11 @@ origin: spec-deferred 706c62fba7f2
 location: src/MediaStation.App/Platform/Window/WinEventForegroundHook.cs
 source_spec: `plan-dw-dw-orchestrator-window-result-loss.md`
 reason: Seen in three smoke runs. In the final one (pid 22872) GetForegroundWindow returned the shell after the raise, and foregroundGate at 15:17:18 reported the shell as managed, yet the log has no foregroundChanged for it: the only entries are the helper form at 15:17:15 and a foreign window at 15:17:25 after the form closed. Cause not investigated; the hook code was not changed. Settled by a repeatable run comparing GetForegroundWindow with the hook's entries for each raise, including a real Alt+Tab, since only SetForegroundWindow from a script was seen. Recovery in DW-49 depends on observations, so a missed event delays it.
+status: open
+
+### DW-62: Display-state signals seen 2.7 to 9.8 s after the app started were reported as winning systemResumed, and their cause is unknown, so they may be false wakes that this fix does not stop.
+origin: spec-deferred 3341b9a704f6
+location: src/MediaStation.App/Platform/System/PowerSignalRouter.cs
+source_spec: `plan-dw-dw-power-echo-not-wake.md`
+reason: Across 511 logged starts on UM760, 4 had such a signal: 2026-10-26 13:29:28 (+9.76 s), 19:36:21 (+2.70 s), 20:18:36 (+7.26 s) and 2026-10-27 09:45:06 (+3.30 s). Each produced a systemResumed and a new snapshot. The log does not record the display state or any preceding off, so a real display-on cannot be told apart from a repeated on. When the echo lands inside the registration window, as in the 3 measured starts, such a signal still reports. Settled by logging Data[0] for each display-state notification over a few starts, including starts where the screen flickers, and checking whether an off precedes each on.
 status: open

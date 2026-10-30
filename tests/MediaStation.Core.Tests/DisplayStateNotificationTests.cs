@@ -35,7 +35,7 @@ public class DisplayStateNotificationTests
     {
         var payload = Payload(ConsoleDisplayStateBytes, DataLengthDword, data0: 1);
 
-        Assert.True(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, duringStartup: false));
+        Assert.True(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, isRegistrationEcho: false));
     }
 
     [Theory]
@@ -45,7 +45,7 @@ public class DisplayStateNotificationTests
     {
         var payload = Payload(ConsoleDisplayStateBytes, DataLengthDword, data0);
 
-        Assert.False(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, duringStartup: false));
+        Assert.False(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, isRegistrationEcho: false));
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class DisplayStateNotificationTests
     {
         var payload = Payload(OtherSettingBytes, DataLengthDword, data0: 1);
 
-        Assert.False(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, duringStartup: false));
+        Assert.False(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, isRegistrationEcho: false));
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class DisplayStateNotificationTests
     {
         var payload = Payload(ConsoleDisplayStateBytes, DataLengthZero, data0: 1);
 
-        Assert.False(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, duringStartup: false));
+        Assert.False(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, isRegistrationEcho: false));
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class DisplayStateNotificationTests
     {
         var payload = Payload(ConsoleDisplayStateBytes, DataLengthOne, data0: 1);
 
-        Assert.False(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, duringStartup: false));
+        Assert.False(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, isRegistrationEcho: false));
     }
 
     [Fact]
@@ -77,9 +77,9 @@ public class DisplayStateNotificationTests
     {
         var full = Payload(ConsoleDisplayStateBytes, DataLengthDword, data0: 1);
 
-        Assert.False(DisplayStateNotification.IsWake(full.AsSpan(0, 20), ConsoleDisplayState, duringStartup: false));
-        Assert.False(DisplayStateNotification.IsWake(full.AsSpan(0, 23), ConsoleDisplayState, duringStartup: false));
-        Assert.False(DisplayStateNotification.IsWake(ReadOnlySpan<byte>.Empty, ConsoleDisplayState, duringStartup: false));
+        Assert.False(DisplayStateNotification.IsWake(full.AsSpan(0, 20), ConsoleDisplayState, isRegistrationEcho: false));
+        Assert.False(DisplayStateNotification.IsWake(full.AsSpan(0, 23), ConsoleDisplayState, isRegistrationEcho: false));
+        Assert.False(DisplayStateNotification.IsWake(ReadOnlySpan<byte>.Empty, ConsoleDisplayState, isRegistrationEcho: false));
     }
 
     [Fact]
@@ -87,7 +87,43 @@ public class DisplayStateNotificationTests
     {
         var payload = Payload(ConsoleDisplayStateBytes, DataLengthDword, data0: 1);
 
-        Assert.False(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, duringStartup: true));
+        Assert.False(DisplayStateNotification.IsWake(payload, ConsoleDisplayState, isRegistrationEcho: true));
+    }
+
+    [Theory]
+    [InlineData(1)] // on
+    [InlineData(0)] // off
+    [InlineData(2)] // dimmed
+    public void Well_formed_notification_is_a_display_state_in_any_state(byte data0)
+    {
+        var payload = Payload(ConsoleDisplayStateBytes, DataLengthDword, data0);
+
+        Assert.True(DisplayStateNotification.IsDisplayState(payload, ConsoleDisplayState));
+    }
+
+    [Fact]
+    public void Other_power_setting_guid_is_not_a_display_state()
+    {
+        var payload = Payload(OtherSettingBytes, DataLengthDword, data0: 1);
+
+        Assert.False(DisplayStateNotification.IsDisplayState(payload, ConsoleDisplayState));
+    }
+
+    [Fact]
+    public void Wrong_data_length_is_not_a_display_state()
+    {
+        Assert.False(DisplayStateNotification.IsDisplayState(Payload(ConsoleDisplayStateBytes, DataLengthZero, data0: 1), ConsoleDisplayState));
+        Assert.False(DisplayStateNotification.IsDisplayState(Payload(ConsoleDisplayStateBytes, DataLengthOne, data0: 1), ConsoleDisplayState));
+    }
+
+    [Fact]
+    public void Short_buffer_is_not_a_display_state()
+    {
+        var full = Payload(ConsoleDisplayStateBytes, DataLengthDword, data0: 1);
+
+        Assert.False(DisplayStateNotification.IsDisplayState(full.AsSpan(0, 20), ConsoleDisplayState));
+        Assert.False(DisplayStateNotification.IsDisplayState(full.AsSpan(0, 23), ConsoleDisplayState));
+        Assert.False(DisplayStateNotification.IsDisplayState(ReadOnlySpan<byte>.Empty, ConsoleDisplayState));
     }
 
     private static byte[] Payload(byte[] setting, byte[] dataLength, byte data0)

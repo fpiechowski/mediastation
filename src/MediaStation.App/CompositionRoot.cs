@@ -314,7 +314,7 @@ public static class CompositionRoot
             // sygnał wybudzenia trafia już do żywej kolejki. Hook idzie na top-level HWND shella, bo
             // broadcast nie dociera do okien message-only.
             reporter = new PowerSignalReporter(log, new WakeSignalGate(time), loop.Post);
-            notifications = PowerNotifications.Start(new WindowInteropHelper(window).Handle, reporter);
+            notifications = PowerNotifications.Start(new WindowInteropHelper(window).Handle, reporter, time);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

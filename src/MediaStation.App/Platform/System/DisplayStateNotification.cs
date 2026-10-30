@@ -28,14 +28,13 @@ internal static class DisplayStateNotification
     private const int GuidLength = 16;
 
     /// <summary>
-    /// Czy notyfikacja jest wybudzeniem: właściwy GUID (<paramref name="setting"/>), <c>DataLength</c>
-    /// równe <see cref="DisplayStateDataLength"/>, bufor pokrywający zadeklarowane dane i <c>Data[0]</c>
-    /// równe <see cref="DisplayStateOn"/>. <paramref name="duringStartup"/> odrzuca echo rejestracji, bo
-    /// system wysyła bieżący stan wyświetlacza zaraz po <c>RegisterPowerSettingNotification</c>.
+    /// Czy notyfikacja jest poprawną notyfikacją display-state, w dowolnym stanie (on, off, dimmed): właściwy
+    /// GUID (<paramref name="setting"/>), <c>DataLength</c> równe <see cref="DisplayStateDataLength"/> i bufor
+    /// pokrywający zadeklarowane dane.
     /// </summary>
-    public static bool IsWake(ReadOnlySpan<byte> payload, Guid setting, bool duringStartup)
+    public static bool IsDisplayState(ReadOnlySpan<byte> payload, Guid setting)
     {
-        if (duringStartup || payload.Length < MinimumPayloadLength)
+        if (payload.Length < MinimumPayloadLength)
         {
             return false;
         }
@@ -47,7 +46,16 @@ internal static class DisplayStateNotification
 
         var dataLength = BinaryPrimitives.ReadUInt32LittleEndian(payload[DataLengthOffset..]);
         return dataLength == DisplayStateDataLength
-            && payload.Length >= DataOffset + (int)dataLength
-            && payload[DataOffset] == DisplayStateOn;
+            && payload.Length >= DataOffset + (int)dataLength;
     }
+
+    /// <summary>
+    /// Czy notyfikacja jest wybudzeniem: poprawna według <see cref="IsDisplayState"/> i <c>Data[0]</c>
+    /// równe <see cref="DisplayStateOn"/>. <paramref name="isRegistrationEcho"/> odrzuca echo rejestracji, bo
+    /// system wysyła bieżący stan wyświetlacza zaraz po <c>RegisterPowerSettingNotification</c>.
+    /// </summary>
+    public static bool IsWake(ReadOnlySpan<byte> payload, Guid setting, bool isRegistrationEcho) =>
+        !isRegistrationEcho
+        && IsDisplayState(payload, setting)
+        && payload[DataOffset] == DisplayStateOn;
 }
