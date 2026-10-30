@@ -229,7 +229,7 @@ location: src/MediaStation.App/Platform/Input/InputHub.cs; src/MediaStation.Core
 source_spec: `tickets/epic-input/epic-input-retrospective.md`, A11
 severity: low
 reason: Klasy są spójne, ale każda story dokładała 150-520 linii. Przed rozszerzeniem przez epic-osk lub epic-browserhost wydzielić z `InputHub` polling XInput i pointer/clip, a z `InputPolicy` mapowanie pada; wspólny helper pompy w tle przy trzeciej pompie.
-owner: epic-osk / epic-browserhost (pierwsza z nich)
+owner: epic-osk (decyzja PO 2026-10-30, epic-browserhost zamknięty bez tego podziału)
 status: open
 ticket: `_bmad-output/backlog/spike-epic-osk-deferred-risks.md`
 
@@ -341,7 +341,7 @@ location: src/MediaStation.App/Hosts/MissingHostPort.cs:45,59
 source_spec: `tickets/epic-home-screen/epic-home-screen-um760-acceptance.md`, S5
 severity: low
 reason: Brak hosta jest stanem przewidzianym (decyzja tracer bulleta), a `unexpected` znaczy awarię, więc plany odbioru muszą dopuszczać `commandFailed` i tracą czułość na prawdziwe błędy. Rozwiązanie: dedykowany `ErrorCode` (np. `HostMissing`) w AD-4 albo zniknięcie `MissingHostPort` dla typów z prawdziwym hostem; rozstrzyga epic-browserhost przy pierwszym prawdziwym hoście.
-owner: epic-browserhost (pierwszy prawdziwy host)
+owner: epic-moonlight-native (`MissingHostPort` zostaje dla `native` i dla `moonlight` bez harnessu; decyzja PO 2026-10-30, epic-browserhost zamknięty bez zmiany tego adaptera)
 status: open
 
 ### DW-37: Sessions muted by a MediaStation instance that crashed or was killed stay muted after restart, because the engine ledger is empty and Unmute only restores what it muted.
@@ -376,6 +376,8 @@ origin: spec-deferred 645cbb60e6a4
 location: architecture-mediastation.md AD-1
 source_spec: `tickets/epic-browserhost/tickets/spike-tryb-okna-przegladarki-i-zrodo-wersji-poza-cdp-plan.md`
 reason: Pomiar miał jeden monitor 1920x1080. Nakładka nad pełnoekranowym Edge jest pierwszą story epiki OSK (Deferred w spine), a zachowanie okna po wygaszeniu ekranu należy do WindowManager.
+owner: TV: odbiór epic-netflix-dpad na UM760 (Done when 5 i tak wymaga TV), drugi monitor: tamże, jeśli będzie dostępny; OSK: epic-osk. Decyzja PO 2026-10-30
+note: 2026-10-30 Odbiór epic-browserhost na UM760, monitor DELL P2415Q po DisplayPort: przy 3840x2160 → 1920x1080 → powrót oraz po wyłączeniu i włączeniu monitora okno zakrywało cały ekran, a Home wracał (S22–S30). Wynik nie przesądza o TV na HDMI; drugiego monitora nie było (S31 n/a).
 status: open
 
 ### DW-41: Home pressed while the shell is already the mode (app window raised by Alt+Tab or script) is logged as an action but sends no window commands, so the app stays on top.
@@ -519,7 +521,8 @@ source_spec: `tickets/epic-browserhost/tickets/story-binding-po-nawigacji-i-reco
 reason: maybe-false. Unit tests cover the recovery path only on FakeTransport (the quick-recovery test pushes a `hello` the real page would not send), and the live smoke reaches only the give-up path because dropping the socket of a live target needs elevation. Settle with an elevated run on UM760 that resets the host's CDP TCP connection (SetTcpEntry DELETE_TCB) while Netflix is open: expect `cdpReconnected`, then trigger a page message from the existing document (or a main-frame navigation) and look for `pageHello` / a `Runtime.bindingCalled` on the new session.
 owner: odbiór całej epiki epic-browserhost na UM760 (`fp-acceptance`), decyzja PO 2026-10-30
 note: 2026-10-30 PO nie zamyka wpisu mimo werdyktu „resolved” w sweepie 6.8. Dowód 6.8 (adopt smoke: `renewSession` → `cdpReconnected` → F5 → `pageHello`) wymienia kanał dobrowolnie, a warunek wpisu to podniesiony reset gniazda żywego targetu (`SetTcpEntry DELETE_TCB`) przy otwartym Netflixie. Takiego przebiegu nie ma ani w planach, ani w `tools/` (retro epiki, F6). Zamknąć po tym sprawdzeniu w odbiorze.
-status: open
+status: done 2026-10-30
+resolution: odbiór epiki na UM760 (`epic-browserhost-um760-acceptance.md`, S7 rerun 2, S8, S10; narzędzie `tools/check-browserhost-cdp-reset.ps1`): podniesiony `SetTcpEntry DELETE_TCB` przy grającym Netflixie daje `cdpClosed` i `cdpReconnected {trigger: cdpClosed}`, ten sam `timeOrigin` wyklucza przeładowanie, `pageHello` `dw55-probe` przychodzi z załadowanego dokumentu na nowej sesji, a po F5 `pageHello` od prawdziwego PageRuntime. Bez `cdpLost` i `appLaunch`. Zamknięte przez PO.
 
 ### DW-56: A main-frame navigation during a CDP outage leaves the new document without PageRuntime: the init script died with the old session, and reconnect neither reloads nor evaluates, so the bridge stays
 origin: spec-deferred e8d39e94e10a
@@ -546,4 +549,5 @@ location: src/MediaStation.App/Hosts/DevHarness/DevHarnessHostPort.cs
 source_spec: `tickets/epic-browserhost/tickets/story-refactor-sweep-plan.md`
 severity: low
 reason: Pre-existing, not caused by this change. StopApp handling in DevHarnessHostPort.cs (~L141) posts ProcessExited unconditionally, and its watcher (~L432) posts its own. The dev harness is opt-in (MEDIASTATION_DEV_HARNESS=1), and the accepted epic-5 checks use it, so 6.8 left it unchanged. Fix by mirroring the BrowserHost rule: one exit report per process, with Stop posting only CommandCompleted after a watcher report.
+note: 2026-10-30 Odbiór epic-browserhost przeszedł bez harnessu (`devHarnessEnabled:0`), więc gałąź `web` harnessu nie jest już potrzebna do odbioru Netflixa; `moonlight` nadal z niej korzysta do czasu epic-moonlight-native. Przed naprawą tego wpisu rozważyć wycofanie gałęzi `web` zamiast jej poprawiania.
 status: open
