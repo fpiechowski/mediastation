@@ -314,7 +314,8 @@ source_spec: `tickets/epic-home-screen/epic-home-screen.md`, R2, R3, R4, Done wh
 severity: medium
 reason: Bez hostów jedynym stanem osiągalnym na UM760 był `Failed`; reszta jest pokryta tylko testami na snapshotach testowych (decyzja tracer bulleta epiki 4). Pierwsze prawdziwe okno aplikacji daje dev harness epic-windows-audio (story 5.1). Odbiór tej epiki na UM760 dokłada scenariusze: kafelek w `Starting` i `Foreground` po OK, w `Background` z kropką na zakładce po Home, fokus na ostatnim kafelku po powrocie, AppMenu z długiego OK na `Background`, a w logu `RestartApp` odróżniony od `CloseApp` (po restarcie nowy start aplikacji).
 owner: epic-windows-audio (odbiór całej epiki przez `fp-acceptance`), decyzja PO przy zamknięciu epiki 4, 2026-10-26
-status: open
+status: done 2026-10-30
+resolution: already resolved: epic 5 UM760 acceptance (epic-windows-audio-um760-acceptance.md, verdict accepted, epic closed in 99fdfbd) covered tile states, background dot, focus return and AppMenu Restart vs Close (S2-S18, S11-S14 passed without reservations).
 
 ### DW-34: `tools/inject-power.ps1` liczy wszystkie `snapshotPublished` procesu, więc na aplikacji używanej przed skryptem kończy się fałszywym FAIL.
 origin: odbiór epiki 4 na UM760, 2026-10-26, S18 (pierwszy przebieg)
@@ -410,7 +411,8 @@ severity: high
 reason: Za pierwszym OK strumień startuje; po Home (okno zminimalizowane) i ponownym OK wraca UI Moonlighta z zamrożonym komunikatem, także po ręcznym restarcie Moonlighta. Użytkownik uznał to za fail i nie zaakceptował epiki. Nie zdiagnozowano w odbiorze (nieznane, czy winny jest kod epiki, czy zachowanie Moonlight-qt po minimalizacji).
 owner: bmad-build (bug epiki 5), potem ponowny odbiór S6 i S18–S21
 ticket: `tickets/epic-windows-audio/tickets/tickets.toml` entry 8 (bug 5.8), 2026-10-27
-status: open
+status: done 2026-10-30
+resolution: already resolved: story 5.8 (25d3487) made the dev harness pick the SDL_app stream window (HarnessLaunch.cs:14-17, HarnessMoonlight.cs:20); epic-windows-audio-um760-acceptance.md records the S6 rerun as passed and the epic accepted and closed (99fdfbd).
 
 ### DW-44: Po Alt+Tab ekran główny jest na wierzchu, ale tryb wejścia zostaje „aplikacja”, więc pilot i klawiatura go nie sterują do czasu Home.
 origin: odbiór epiki 5 na UM760, 2026-10-27, przerwa przed S18
