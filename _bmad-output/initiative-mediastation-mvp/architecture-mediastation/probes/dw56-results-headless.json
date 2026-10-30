@@ -1,0 +1,68 @@
+{
+  "headed": false,
+  "edgeArgs": [
+    "--remote-debugging-port=9431",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--autoplay-policy=no-user-gesture-required",
+    "--headless=new",
+    "about:blank"
+  ],
+  "scenarios": {
+    "healthyNoNavigation": {
+      "helloOnFirstSession": true,
+      "navigateReplyLoaderId": "F93DC946975F48EC41E373086D4299F2",
+      "frameNavigatedLoaderId": "F93DC946975F48EC41E373086D4299F2",
+      "treeLoaderIdBefore": "F93DC946975F48EC41E373086D4299F2",
+      "treeLoaderIdAfter": "F93DC946975F48EC41E373086D4299F2",
+      "loaderChanged": false,
+      "urlAfter": "/a?pingAfter=2500",
+      "oldDocumentReachesNewSession": true,
+      "helloOnNewSession": false
+    },
+    "spaPushStateDuringOutage": {
+      "helloOnFirstSession": true,
+      "navigateReplyLoaderId": "48258C0FD2489DE18B869E0A5CABB161",
+      "frameNavigatedLoaderId": "48258C0FD2489DE18B869E0A5CABB161",
+      "treeLoaderIdBefore": "48258C0FD2489DE18B869E0A5CABB161",
+      "treeLoaderIdAfter": "48258C0FD2489DE18B869E0A5CABB161",
+      "loaderChanged": false,
+      "urlAfter": "/spa-route"
+    },
+    "mainFrameNavigationDuringOutage": {
+      "helloOnFirstSession": true,
+      "navigateReplyLoaderId": "4A4F270921A2469435AC288C73A0A892",
+      "frameNavigatedLoaderId": "4A4F270921A2469435AC288C73A0A892",
+      "treeLoaderIdBefore": "4A4F270921A2469435AC288C73A0A892",
+      "treeLoaderIdAfter": "A1084B7948B9C0E0D17923E08405A440",
+      "loaderChanged": true,
+      "urlAfter": "/b",
+      "helloWithoutReload": false,
+      "helloAfterReload": true,
+      "webdriverAfterReload": false,
+      "pathAfterReload": "/b",
+      "loaderIdAfterReload": "9B9A79E2702F77077BC8A639316BC6A4",
+      "cdpMethodsOnNewSession": [
+        "Runtime.addBinding",
+        "Page.enable",
+        "Page.addScriptToEvaluateOnNewDocument",
+        "Page.getFrameTree",
+        "Page.reload",
+        "Runtime.addBinding",
+        "Page.getFrameTree"
+      ]
+    },
+    "reloadWithServerDown": {
+      "helloOnFirstSession": true,
+      "navigateReplyLoaderId": "E9EB992A2A3D9E6110E9A3BD092A9936",
+      "frameNavigatedLoaderId": "E9EB992A2A3D9E6110E9A3BD092A9936",
+      "treeLoaderIdBefore": "E9EB992A2A3D9E6110E9A3BD092A9936",
+      "treeLoaderIdAfter": "E9EB992A2A3D9E6110E9A3BD092A9936",
+      "loaderChanged": false,
+      "urlAfter": "/a?",
+      "helloOnErrorPage": true,
+      "urlAfterFailedReload": "chrome-error://chromewebdata/"
+    }
+  },
+  "product": "Edg/156.0.4314.50"
+}
