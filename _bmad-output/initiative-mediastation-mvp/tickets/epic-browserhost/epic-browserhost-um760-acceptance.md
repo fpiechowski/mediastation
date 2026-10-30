@@ -296,18 +296,18 @@ Sesja: 2026-10-30, HEAD b041c5d, build 1.0.0+b041c5d, UM760 (MEDIASTATION, F7BSI
 | S29 | measured (2026-10-30, HEAD 5420f81) DELL P2415Q: hwnd 2688936 window 0,0,3840,2160 monitor 0,0,3840,2160 foreground True iconic False | exit 0<br>F3: hwnd 2688936 window 0,0,3840,2160 monitor 0,0,3840,2160 foreground True iconic False |
 | S30 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:49:35.418Z until 2026-10-30T13:49:45.065Z; `msg=action,data.kind=home:1` want 1, got 1; `msg=windowCommand,data.type=ShowShell,data.result=completed:1` want 1, got 1; `msg=foregroundChanged,data.owner=shell:>=1` want >=1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:49:42.575Z","level":"info","src":"input","msg":"action","data":{"kind":"home","phase":"press","source":"remote"}}` |
 | S31 | n/a (2026-10-30, HEAD 5420f81): brak drugiego monitora | Użytkownik: nie ma drugiego monitora; system widzi jeden ekran, DELL P2415Q. |
-| S32 | | |
-| S33 | | |
-| S34 | | |
-| S35 | | |
-| S36 | | |
-| S37 | | |
-| S38 | | |
-| S39 | | |
-| S40 | | |
-| S41 | | |
-| S42 | | |
-| S43 | | |
+| S32 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:51:08.938Z until 2026-10-30T13:51:19.283Z; `msg=foregroundChanged,data.owner=app,data.appId=netflix:>=1` want >=1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:51:16.698Z","level":"info","src":"orchestrator","msg":"foregroundChanged","data":{"hwnd":2688936,"pid":16736,"owner":"app","appId":"netflix"}}` |
+| S33 | pass (2026-10-30, HEAD 5420f81) | exit 0<br>F2 exit 0; cdpClosed timeoutSeconds=30, wait exit 0 |
+| S34 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:51:23.066Z until 2026-10-30T13:51:33.630Z; `msg=action,data.kind=home:1` want 1, got 1; `msg=windowCommand,data.type=ShowShell,data.result=completed:1` want 1, got 1; `msg=foregroundChanged,data.owner=shell:>=1` want >=1, got 1; `msg=cdpLost:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:51:31.108Z","level":"info","src":"input","msg":"action","data":{"kind":"home","phase":"press","source":"remote"}}` |
+| S35 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:51:23.066Z until 2026-10-30T13:51:56.040Z; `msg=cdpClosed,data.appId=netflix:1` want 1, got 1; `msg=cdpLost,data.appId=netflix,data.timeoutSeconds=30,data.trigger=cdpClosed:1` want 1, got 1; `msg=cdpLostHandled,data.appId=netflix,data.state=failed:1` want 1, got 1; `msg=appStateChanged,data.appId=netflix,data.to=failed:1` want 1, got 1; `msg=cdpReconnected:0` want 0, got 0; `msg=processExited:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing; msg=cdpLost, 1); order ok<br>`{"ts":"2026-10-30T13:51:23.724Z","level":"info","src":"browser","msg":"cdpClosed","data":{"appId":"netflix","timeoutSeconds":30}}` |
+| S36 | user: ok (2026-10-30, HEAD 5420f81): kafelek przeszedł z „w tle” na stan awarii, pilot steruje ekranem głównym | Użytkownik: Kafelek Netflix do pewnego momentu pokazywał w tle, a potem coś się zacięło wciśnij ok. Pilot steruje ekranem głównym. |
+| S37 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:53:22.771Z until 2026-10-30T13:53:32.877Z; `msg=action,data.kind=ok,data.phase=press:1` want 1, got 1; `msg=appStateChanged,data.appId=netflix:0` want 0, got 0; `msg=appLaunch:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:53:30.509Z","level":"info","src":"input","msg":"action","data":{"kind":"ok","phase":"press","source":"keyboard"}}` |
+| S38 | user: ok (2026-10-30, HEAD 5420f81) | Pytanie: menu z Uruchom ponownie i Zamknij, jeden fokus na Uruchom ponownie; użytkownik: tak. |
+| S39 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:53:22.771Z until 2026-10-30T13:53:50.678Z; `msg=action,data.kind=ok,data.phase=press:2` want 2, got 2; `msg=appStateChanged,data.appId=netflix,data.from=failed,data.to=stopping,data.cause=RestartApp:1` want 1, got 1; `msg=appStateChanged,data.appId=netflix,data.from=stopping,data.to=starting:1` want 1, got 1; `msg=appLaunch,data.appId=netflix:1` want 1, got 1; `msg=appStateChanged,data.appId=netflix,data.from=starting,data.to=foreground:1` want 1, got 1; `msg=pageHello,data.appId=netflix,data.webdriver=false:>=1` want >=1, got 1; `msg=intentIgnored:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing, 0); order ok<br>`{"ts":"2026-10-30T13:53:30.509Z","level":"info","src":"input","msg":"action","data":{"kind":"ok","phase":"press","source":"keyboard"}}` |
+| S40 | user: ok (2026-10-30, HEAD 5420f81): Netflix na całym ekranie, ekran nie gasł | Pytania: czy Netflix działa na całym ekranie (tak) i czy ekran gasł lub pokazywał szum (nie). |
+| S41 | pass (2026-10-30, HEAD 5420f81) po 5 s na wierzchu: MediaStation | window since 2026-10-30T13:55:11.517Z until 2026-10-30T13:55:44.135Z; `msg=cdpLost,data.appId=netflix:1` want 1, got 1; `msg=appStateChanged,data.appId=netflix,data.from=foreground,data.to=failed:1` want 1, got 1; `msg=appLaunch:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing; msg=cdpLost, 1)<br>`{"ts":"2026-10-30T13:55:41.988Z","level":"warn","src":"browser","msg":"cdpLost","data":{"appId":"netflix","timeoutSeconds":30,"attempts":17,"trigger":"cdpClosed"}}` |
+| S42 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:55:50.026Z until 2026-10-30T13:56:03.441Z; `msg=appStateChanged,data.appId=netflix,data.from=failed,data.to=stopping,data.cause=CloseApp:1` want 1, got 1; `msg=appStateChanged,data.appId=netflix,data.from=stopping,data.to=notRunning:1` want 1, got 1; `msg=appLaunch:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing, 0); order ok<br>`{"ts":"2026-10-30T13:56:00.609Z","level":"info","src":"orchestrator","msg":"appStateChanged","data":{"appId":"netflix","from":"failed","to":"stopping","cause":"CloseApp"}}` |
+| S43 | pass (2026-10-30, HEAD 5420f81) | exit 0<br>F1 -NoProcesses: processes of profile netflix: 0 |
 | S44 | | |
 | S45 | | |
 | S46 | | |
