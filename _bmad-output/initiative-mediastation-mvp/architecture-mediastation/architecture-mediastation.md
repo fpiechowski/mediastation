@@ -7,7 +7,7 @@ paradigm: 'hexagonal (ports & adapters) z jednowątkowym actor core (Orchestrato
 scope: 'MediaStation MVP: pełnoekranowy shell TV na Windows 11 (UM760), sterowanie Netflixem w Edge przez CDP, wejście z pilota/klawiatury/gamepada, audio focus, Moonlight, aplikacje natywne, „Do oceny”'
 status: final
 created: '2026-10-16'
-updated: '2026-10-27'
+updated: '2026-10-30'
 binds: [brief-mediastation, forge-filmweb-rating-prompt, ux-mediastation]
 sources:
   - ../brief-mediastation/brief-mediastation.md
@@ -80,7 +80,8 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 - **Prevents:** powrót do Playwrighta, spatial navigation albo flag, które zmieniają DRM, jakość lub ślad automatyzacji
 - **Rule:**
   - BrowserHost uruchamia `msedge.exe`/`chrome.exe` z flagami `--user-data-dir=<profiles\<appId>> --remote-debugging-port=<cdpPort> --no-first-run --no-default-browser-check --autoplay-policy=no-user-gesture-required`, plus jedną flagą trybu okna: **`--kiosk`** (spike 6.1, UM760, Edge 156.0.4314.42). Okno zajmuje cały monitor bez ramki, paska tytułu, zakładek i paska adresu (także po najechaniu na górną krawędź). `f` włącza pełny ekran HTML, `Escape` go wyłącza i nie wychodzi z kiosku. `ShowWindow(SW_MINIMIZE)` i `SW_RESTORE` wystarczają (bez `SW_HIDE`): odtwarzanie biegnie w zminimalizowanym oknie, a po przywróceniu okno znów pokrywa monitor. Okno na wierzch nadal wynosi WindowManager (`SetForegroundWindow` z odblokowaniem, S10), bo okno zasłonięte przez inną aplikację zgłasza `visibilityState=hidden`, a Netflix wtedy nie startuje odtwarzania. Kiosk zamyka się przez `CloseMainWindow` bez błędów. Odrzucone: `--app` (okno 945×1012 z paskiem tytułu, `f` i `Escape` przełączają między małym oknem a pełnym ekranem, nie do trybu pełnoekranowego) i `--start-fullscreen` (najechanie na górną krawędź odsłania zakładki i pasek adresu, po poprzednim zamknięciu, także przez `CloseMainWindow`, pojawia się dymek „Przywróć strony”). DRM i jakość: w pomiarze (jedno konto, jeden tytuł, jeden monitor, bez HDR) Netflix grał 1920×1080 w każdym z trzech trybów. System kluczy zmienił się z PlayReady (HEVC) na Widevine `SW_SECURE_DECODE` (H.264) w trakcie spike'a, także w tym samym trybie `--app`, więc nie da się go przypisać fladze, a przyczyna zmiany nie jest ustalona (szczegóły w planie spike'a 6.1). Smoke (AD-13) loguje system kluczy przy każdym przebiegu.
-  - Steruje surowym CDP po WebSocket: `Page.addScriptToEvaluateOnNewDocument`, `Runtime.addBinding` ponawiany po każdej nawigacji głównej ramki, `Input.dispatchKeyEvent`, `Input.insertText`, `Browser.getVersion`.
+  - Steruje surowym CDP po WebSocket. Lista metod jest zamknięta, a nowa metoda wymaga poprawki tego AD: `Page.enable`, `Page.navigate`, `Page.addScriptToEvaluateOnNewDocument`, `Runtime.addBinding` ponawiany po każdej nawigacji głównej ramki, `Input.dispatchKeyEvent`, `Input.insertText`, `Browser.getVersion`, a po reconnecie także `Page.getFrameTree` i warunkowy `Page.reload` (AD-10).
+  - **`Page.reload` tylko po dowodzie [decyzja 2026-10-30, DW-56]:** najwyżej raz na reconnect i tylko wtedy, gdy `Page.getFrameTree` pokaże inny dokument głównej ramki (AD-10). Nigdy bezwarunkowo po reconnecie ani przy adopcji, bo przerwałby zdrową stronę i odtwarzanie. Obie metody działają bez `Runtime.enable`, a `navigator.webdriver` zostaje `false` po reloadzie (sonda, ran on UM760, Edge 156.0.4314.50, flagi AD-1 bez `--kiosk`: `probes/dw56-frame-tree-probe.mjs`).
   - Zakazane: `Runtime.enable`, Playwright, `--enable-spatial-navigation`, flagi Playwrighta, `--remote-allow-origins`, nasłuch poza `127.0.0.1`.
   - Plan awaryjny C (rozszerzenie) uruchamiamy, gdy przeglądarka zablokuje `--remote-debugging-port` dla niestandardowych profili albo serwis zacznie reagować na CDP. Przejście zmienia tylko most (AD-6).
 
@@ -274,9 +275,9 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
 ### AD-10: Cykl życia aplikacji i odporność
 
 - **Binds:** Orchestrator, AppHosts, SystemEvents, `--supervise`
-- **Prevents:** zabijanie żywej przeglądarki po restarcie MediaStation; martwy kafelek po wybudzeniu; niespójne stany
+- **Prevents:** zabijanie żywej przeglądarki po restarcie MediaStation; martwy kafelek po wybudzeniu; niespójne stany; pilot martwy bez komunikatu przy kafelku wyglądającym normalnie
 - **Rule:**
-  - Stany per aplikacja: `NotRunning → Starting → Foreground ⇄ Background → Stopping → NotRunning`. Do `Failed` prowadzą timeout, zakończenie procesu albo utrata CDP bez możliwości reconnectu.
+  - Stany per aplikacja: `NotRunning → Starting → Foreground ⇄ Background → Stopping → NotRunning`. Do `Failed` prowadzą timeout, zakończenie procesu, utrata CDP bez możliwości reconnectu albo dokument bez mostu po reloadzie (reguła o dokumencie podmienionym niżej).
   - Wyjście z `Failed` tylko przez `AppMenu` (zamknij / uruchom ponownie). Na kafelku `Failed` AppMenu otwiera także zwykłe OK, z fokusem na „Uruchom ponownie” (AD-8).
   - Gdy w `Failed` przechodzi aplikacja na pierwszym planie, Orchestrator sam przechodzi na ekran główny (tryb `shell`) i wysyła `focusRequest` na kafelek tej aplikacji (AD-16).
   - Aplikacje startują leniwie, dopiero po wybraniu kafelka.
@@ -285,6 +286,14 @@ Strzałki to jedyne dozwolone kierunki zależności i komunikacji. Wykonawca nig
     - Adoptowana aplikacja ląduje w `Background`, a na wierzchu jest ekran główny.
   - **Wybudzenie z Modern Standby:** Orchestrator przechodzi na ekran główny, wysyła `focusRequest{default}` (AD-16) i `RenewSession` do BrowserHost (CDP + `addBinding`). Na ekranie profili driver tylko fokusuje ostatnio używany profil, a wybiera użytkownik (AD-6) [ADOPTED].
   - **Zerwane CDP przy żywym procesie:** reconnect z backoffem, bez UI. W tym czasie `action` do strony są odrzucane, a nie buforowane. Home działa. Po `cdpReconnectTimeout` (`settings.json`) aplikacja przechodzi w `Failed`.
+  - **Dokument podmieniony w trakcie przerwy CDP [decyzja 2026-10-30, DW-56, użytkownik wybrał cichy reload; do zbudowania]:** init script ginie z sesją CDP, więc dokument, który główna ramka załadowała w przerwie, nie ma PageRuntime i nie odzywa się aż do następnej nawigacji. Dotyczy każdego reconnectu: po zerwaniu i po `RenewSession`.
+    - **Wykrycie:** BrowserHost pamięta `loaderId` dokumentu głównej ramki z `Page.frameNavigated`. Po zainstalowaniu bindingu i skryptu na nowej sesji czyta `Page.getFrameTree` i porównuje `loaderId`. Kolejność jest wiążąca: dokument załadowany po rejestracji skryptu ma PageRuntime, a wcześniejszy pokaże inny `loaderId`. Błąd odczytu to nieudana próba reconnectu. Nie wolno porównywać URL-i, bo `history.pushState` SPA zmienia URL bez zmiany dokumentu.
+    - **Ten sam `loaderId`:** nic więcej się nie dzieje. Dokument sprzed przerwy ma PageRuntime, a jego binding działa na nowej sesji (sonda; dowód na Netfliksie i po resecie gniazda to DW-55).
+    - **Inny `loaderId`:** jeden `Page.reload` (AD-1), bez UI i także w `Background`. Skrypt z nowej sesji uruchamia PageRuntime w nowym dokumencie.
+    - **Po reloadzie:** BrowserHost czeka na `hello` najwyżej `cdpReconnectTimeout`. Brak `hello` albo błąd `Page.reload` daje wpis w logu i `CdpLost`, czyli `Failed` i J4. Stop, wyjście procesu i kolejne zerwanie kończą to czekanie bez `CdpLost`; o kolejnym zerwaniu rozstrzyga następny reconnect. `hello` potwierdza most, nie treść: strona błędu sieci też go wysyła (sonda), a utrata sieci jest poza MVP.
+    - **Bez watchdoga `hello` po samym reconnecie:** dokument sprzed przerwy nie wysyła drugiego `hello` (AD-7), więc taki watchdog zamieniłby każdy udany reconnect w `Failed`.
+    - **Adopcja:** tylko zapisuje `loaderId` jako odniesienie, bez porównania i bez reloadu (Deferred).
+    - **Wyjątek od AD-5:** reload na `/watch` na pierwszym planie może wznowić odtwarzanie bez OK, bo strona i tak nie reagowała na pilota. W `Background` okno jest `hidden`, a Netflix wtedy nie startuje odtwarzania (AD-1); dla reloadu tego nie zmierzono, a reguła audio i tak wycisza drzewo (AD-5).
   - **Zamknięcie przeglądarki:** `prepareClose` → `closeReady` (AD-7) → zamknięcie [ADOPTED].
   - **Moonlight:** `quit` z limitem 30 s, potem MediaStation sama zamyka klienta [ADOPTED].
   - **Restart MediaStation po awarii** robi `--supervise` (AD-2). Stan sesji nie jest trwały: po restarcie start od ekranu głównego z `focusRequest{default}`, plus adopcja.
@@ -559,6 +568,8 @@ flowchart TB
 | Undo po „Pomiń” / „Ocenione” | Rekordy nie są usuwane (AD-12), więc undo to tylko zmiana `status` |
 | Mechanizm ustalenia `lastInSeason` i `seriesId` | Wewnętrzna sprawa drivera. Kontrakt jest stały |
 | Wyciszenie odziedziczone przez aplikację uruchomioną poza MediaStation po awarii MediaStation | Zaakceptowane ryzyko (AD-5): następna instancja MediaStation poprawia je przy adopcji i aktywacji. Wraca, jeśli odbiór pokaże to w praktyce |
+| Dokument podmieniony, gdy MediaStation nie działa (adopcja, AD-10) | Po restarcie MediaStation nie ma `loaderId` odniesienia, a reload bez dowodu przerwałby zdrową stronę. Zaakceptowane ryzyko: okno to czas restartu, ratunek to AppMenu. Wraca przy transporcie host → page, który pozwoli zapytać samą stronę |
+| Transport host → page (AD-7) | AD-1 nie ma dziś metody dla tych komunikatów, a `deliver` PageRuntime nie ma transportu (plan 6.6). Rozstrzyga epic-netflix-dpad poprawką AD-1 |
 
 **Otwarte pytania z miejscem rozstrzygnięcia:**
 - **Tryb okna przeglądarki** (`--app` / `--start-fullscreen` / `--kiosk`): rozstrzygnięty spike'iem 6.1 (2026-10-27, UM760) w AD-1: `--kiosk`. Źródło wersji przeglądarki poza CDP: rozstrzygnięte w AD-13 (`FileVersion` binarki i `Last Version` w `user-data-dir`).
