@@ -25,6 +25,11 @@ public sealed partial class Orchestrator
             return OnSettled();
         }
 
+        if (_windowResultTimerId != 0 && elapsed.TimerId == _windowResultTimerId)
+        {
+            return OnWindowResultTimeout();
+        }
+
         if (_startTimers.Remove(elapsed.TimerId, out var appId))
         {
             if (!_appsById.TryGetValue(appId, out var app) || app.State != AppLifecycleState.Starting)

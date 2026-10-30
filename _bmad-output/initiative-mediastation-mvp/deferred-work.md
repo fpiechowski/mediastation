@@ -469,7 +469,9 @@ origin: spec-deferred 6d67a13a710e
 location: src/MediaStation.Core/Orchestrator/Orchestrator.Foreground.cs (IsHardBlocked)
 source_spec: `tickets/epic-windows-audio/tickets/story-pilot-steruje-tym-co-jest-na-wierzchu-takze-po-alt-tab-plan.md`
 reason: Window-command results are tracked in a pending set cleared only by CommandCompleted/CommandFailed or a transitionId change; executors always answer (AD-4), so unverified. Settled by a test or run where the executor drops a result.
-status: open
+status: done 2026-10-30
+resolution: resolved by sweep bundle dw-dw-orchestrator-window-result-loss
+resolution-undo: c128f7b06e8fd8f4517a0e514afc6be79459bf9e3cce88ea1b6c241a9e2be297 2026-10-30 7374617475733a206f70656e
 ticket: `_bmad-output/backlog/bug-window-command-result-loss-unblocks-evaluation.md`
 
 
@@ -555,4 +557,19 @@ status: open
 origin: migrated from legacy ledger ("n/a"), 2026-10-30; source plan `_bmad-output/initiative-mediastation-mvp/tickets/epic-windows-audio/tickets/bug-uruchomienie-netflixa-przez-kafelek-wywoluje-cykliczne-zaniki-obrazu-plan.md`
 location: n/a
 reason: Automated smoke on UM760 reports reliable monitor width/height but EnumDisplaySettings frequency/bits are unavailable; visual stability (no black/static flicker when launching Netflix from the tile) remains a manual whole-epic check.
+status: open
+
+### DW-60: The startup ReportCurrent from the window-manager thread can be dropped, because the port starts before the loop is assigned to postsTo.
+origin: spec-deferred 5925350a8197
+location: src/MediaStation.App/CompositionRoot.cs:269
+source_spec: `plan-dw-dw-orchestrator-window-result-loss.md`
+severity: medium
+reason: CompositionRoot.cs:267 posts through `postsTo?.Post`, :269 starts the thread, :288 assigns `postsTo`, so a report before that line is discarded. Five smoke runs had no startup foregroundChanged, which contradicts the AD-15 startup report. Read from the code; no test confirms the ordering. Pre-existing, not caused by DW-49. Without that report the first evaluation waits for the next real foreground change.
+status: open
+
+### DW-61: Raising the shell with SetForegroundWindow changes the foreground without a foregroundChanged for the shell.
+origin: spec-deferred 706c62fba7f2
+location: src/MediaStation.App/Platform/Window/WinEventForegroundHook.cs
+source_spec: `plan-dw-dw-orchestrator-window-result-loss.md`
+reason: Seen in three smoke runs. In the final one (pid 22872) GetForegroundWindow returned the shell after the raise, and foregroundGate at 15:17:18 reported the shell as managed, yet the log has no foregroundChanged for it: the only entries are the helper form at 15:17:15 and a foreign window at 15:17:25 after the form closed. Cause not investigated; the hook code was not changed. Settled by a repeatable run comparing GetForegroundWindow with the hook's entries for each raise, including a real Alt+Tab, since only SetForegroundWindow from a script was seen. Recovery in DW-49 depends on observations, so a missed event delays it.
 status: open

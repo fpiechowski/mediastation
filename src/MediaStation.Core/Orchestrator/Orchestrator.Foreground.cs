@@ -84,7 +84,7 @@ public sealed partial class Orchestrator
     /// Polityka ustalenia po każdym kroku (AD-15): komendy okienne z wyniku wchodzą do zbioru oczekujących
     /// bieżącego <c>transitionId</c>, nowe przejście albo zmiana zbioru okien unieważnia oczekującą ocenę,
     /// wynik komendy restartuje timer (porażka niezgodnej obserwacji kończy się logiem), a po ustaniu przyczyny
-    /// blokady wynik dostaje <see cref="ReportForeground"/>.
+    /// blokady wynik dostaje <see cref="ReportForeground"/>. Na końcu ustawia termin wyników komend okiennych.
     /// </summary>
     private OrchestratorResult ApplyForegroundPolicy(OrchestratorResult result, long transitionBefore, WindowResult windowResult)
     {
@@ -134,7 +134,58 @@ public sealed partial class Orchestrator
             RestartSettleTimer(commands);
         }
 
+        UpdateWindowResultDeadline(commands, restart: result.Commands.Any(command => command is WindowCommand));
+
         return result with { Commands = commands, ForegroundTransitionFailed = failedObservation ?? result.ForegroundTransitionFailed };
+    }
+
+    /// <summary>
+    /// Termin <c>windowResultTimeout</c> żyje tylko wtedy, gdy na wyniki czeka ocena (obserwacja albo prośba o raport),
+    /// więc Home i start bez obserwacji nie dają dodatkowych komend, a raport bez czekającej oceny nie ponawia się
+    /// bez końca. Nowa komenda okienna restartuje termin: jeden timer wystarcza na cały zbiór, a młode komendy nie
+    /// zostają uznane za zgubione.
+    /// </summary>
+    private void UpdateWindowResultDeadline(List<Command> commands, bool restart)
+    {
+        var waiting = _pendingWindow.Count > 0 && (_observation is not null || _reportNeeded);
+        if (_windowResultTimerId != 0 && (restart || !waiting))
+        {
+            commands.Add(new CancelTimer(NextCmdId(), _windowResultTimerId));
+            _windowResultTimerId = 0;
+        }
+
+        if (_windowResultTimerId == 0 && waiting)
+        {
+            _windowResultTimerId = ++_timerId;
+            commands.Add(new ScheduleTimer(NextCmdId(), _windowResultTimerId, WindowResultTimerOwner, _time.GetUtcNow() + _windowResultTimeout));
+        }
+    }
+
+    /// <summary>
+    /// Termin wyników minął (AD-15): wykonawca złamał AD-4, więc oczekujące komendy są uznane za zgubione, bez
+    /// ponawiania i bez cofania stanu. Po zgubionej komendzie poza <see cref="ReportForeground"/> polityka prosi o świeży
+    /// raport, bo zapisana obserwacja była zablokowana i nie może zostać oceniona. Po zgubionym raporcie zachowana
+    /// obserwacja nie była zablokowana, więc wystarczy ją ustalić, bez kolejnego raportu.
+    /// </summary>
+    private OrchestratorResult OnWindowResultTimeout()
+    {
+        _windowResultTimerId = 0;
+        var lost = _pendingWindow.Keys.Order().ToArray();
+        var hard = lost.Any(cmdId => !_reportCmds.Contains(cmdId));
+        _pendingWindow.Clear();
+        _reportCmds.Clear();
+
+        var commands = new List<Command>();
+        if (hard)
+        {
+            _reportNeeded = true;
+        }
+        else if (_observation is not null && !_reportNeeded)
+        {
+            RestartSettleTimer(commands);
+        }
+
+        return new OrchestratorResult(commands, null) { WindowResultsLost = lost };
     }
 
     /// <summary>Ustalenie: ocenia ostatnią obserwację, o ile jej timer jest bieżący i nic jej nie blokuje (AD-15).</summary>
@@ -155,7 +206,7 @@ public sealed partial class Orchestrator
 
         if (_pendingWindow.Count > 0)
         {
-            // Trwa tylko ReportForeground: jego wynik restartuje timer dla zachowanej obserwacji.
+            // Trwa tylko ReportForeground: jego wynik albo termin wyników restartuje timer dla zachowanej obserwacji.
             return OrchestratorResult.None;
         }
 
