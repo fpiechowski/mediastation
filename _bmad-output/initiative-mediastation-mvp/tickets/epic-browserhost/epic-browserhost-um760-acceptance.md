@@ -4,7 +4,8 @@ type: acceptance-plan
 machine: UM760
 base_head: 73ff58f
 created: 2026-10-30
-status: in-progress
+status: executed
+verdict: accepted
 ---
 
 # Odbiór epiki 6 (epic-browserhost) na UM760: plan i scenariusz
@@ -313,3 +314,7 @@ Sesja: 2026-10-30, HEAD b041c5d, build 1.0.0+b041c5d, UM760 (MEDIASTATION, F7BSI
 | S46 | pass (2026-10-30, HEAD 5420f81) F1 chrome-test -NoProcesses: processes of profile chrome-test: 0, exit 0 | window since 2026-10-30T13:21:01.962Z until 2026-10-30T13:57:24.203Z; `msg=stop,data.exitCode=0:>=1` want >=1, got 2; `msg=pageMessageRejected:0` want 0, got 0; `msg=browserCommandFailed:0` want 0, got 0; `msg=cdpReconnectFailed:0` want 0, got 0; `msg=bindingRefreshFailed:0` want 0, got 0; `msg=commandFailed:0` want 0, got 0; `msg=orchestratorFailed:0` want 0, got 0; `msg=inputHubError:0` want 0, got 0; `msg=webViewProcessFailed:0` want 0, got 0; `msg=windowCommandFailed:0` want 0, got 0; `msg=audioCommandFailed:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing; msg=cdpLost, 11)<br>`{"ts":"2026-10-30T13:37:23.600Z","level":"info","src":"app","msg":"stop","data":{"exitCode":0}}` |
 
 Notatka z S19 (2026-10-30, HEAD 5420f81, UM760): po wybudzeniu ekran znów kilka razy gasł i wracał z szumem, po dłuższej chwili zaczął działać (użytkownik). Na wierzch trafiło prywatne okno Edge (pid 15620, Nowa karta — Osobisty), którego użytkownik nie otwierał, a nie ekran główny; foregroundChanged owner=foreign 13:41:06Z, log bez appLaunch. Agent przywrócił ekran główny przed S20.
+
+Obserwacje po S46 (2026-10-30, UM760, użytkownik): Chrome na całym ekranie, ekran nie gasł. Netflix w zwykłym Edge bez MediaStation, ten sam profil, ok. 14:57-15:00: ekran nie gasł; jedna próba nie wyklucza ani nie potwierdza MediaStation jako przyczyny zaników z S4 i S19.
+
+User verdict (2026-10-30, build b041c5d, HEAD 470dee6, UM760): **accepted**. Otwarte poza werdyktem: zaniki obrazu (S4, notatka z S19), prywatne okno Edge na wierzchu po wybudzeniu (notatka z S19), DW-40 na TV.
