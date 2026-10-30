@@ -25,7 +25,7 @@ Co Eliza dostaje:
 
 Projekt tego potrzebuje, bo epic-netflix-dpad buduje na tej epice sterowanie Netflixem z pilota: ma już kanał do strony, który przeżywa nawigację i zerwanie, oraz bazowy PageRuntime do rozszerzenia.
 
-Świadomie zostaje na później: sterowanie samym Netflixem z pilota (epic-netflix-dpad, więc dziś strzałki nie prowadzą po filmach), plan C z rozszerzeniem przeglądarki (tylko po triggerach z AD-1), kody wyjścia `--smoke` (epic-deploy-resilience), nawigacja podczas przerwy CDP (DW-56, decyzja u Winstona) i nakładka OSK nad kioskiem (epic-osk).
+Świadomie zostaje na później: sterowanie samym Netflixem z pilota (epic-netflix-dpad, więc dziś strzałki nie prowadzą po filmach), plan C z rozszerzeniem przeglądarki (tylko po triggerach z AD-1), kody wyjścia `--smoke` (epic-deploy-resilience), nawigacja podczas przerwy CDP (DW-56: rozstrzygnięte w AD-1 i AD-10, `1baa513`, kod buduje story backlogu 22 poza tą epiką) i nakładka OSK nad kioskiem (epic-osk).
 
 Akceptacja zobowiązuje projekt do własnego uruchamiania przeglądarki i surowego CDP na loopbacku (AD-1), bez Playwrighta, bez `Runtime.enable` i bez `--remote-allow-origins`, oraz do trybu `--kiosk` i odczytu wersji spoza CDP (AD-13). Zmiana tych reguł wymaga decyzji architektonicznej.
 
@@ -49,7 +49,7 @@ S46 (czyste zamknięcie i błędy całego przebiegu) to wiersz `agent`, nie jest
 
 - Epika: `epic-browserhost.md`, Requirements 1–6, Done when 1–5, Notes (decyzje o `--kiosk`, o wersji poza CDP, o J4 w odbiorze całej epiki).
 - Retro: `epic-browserhost-retrospective.md` (`accepted-with-open-items`, to dowód maszynowy, nie odbiór), Behavior verification oraz F6. **Na żywo nie widziano:** prawdziwego Netflixa w J4 i adopcji (smoke'i 6.5, 6.7 i 6.9 używają kafelka testowego z wstrzykniętymi klawiszami), zerwanego gniazda żywego celu i prawdziwego uśpienia (6.5 używa syntetycznego `WM_POWERBROADCAST`). To jest zakres odbioru.
-- Rejestr: `deferred-work.md`. DW-55 (reset gniazda przy żywym Netflixie, właściciel: ten odbiór) → S7–S10. DW-40 (kiosk przy zmianach ekranu) → S22–S31; część o OSK należy do epic-osk. DW-56 (nawigacja podczas przerwy CDP) i DW-58 (dev harness) nie mają scenariusza: pierwszy czeka na decyzję Winstona, drugi nie dotyczy, bo odbiór działa bez harnessu.
+- Rejestr: `deferred-work.md`. DW-55 (reset gniazda przy żywym Netflixie, właściciel: ten odbiór) → S7–S10. DW-40 (kiosk przy zmianach ekranu) → S22–S31; część o OSK należy do epic-osk. DW-56 (nawigacja podczas przerwy CDP) i DW-58 (dev harness) nie mają scenariusza. DW-56 jest rozstrzygnięty (AD-1 i AD-10, `1baa513`), ale AD-10 opisuje to zachowanie jako „do zbudowania”, a kod powstaje w story backlogu 22 poza tą epiką. Odbiór nie oczekuje więc cichego reloadu ani `Page.getFrameTree`, a ich brak w logach nie jest wadą tej epiki. DW-58 nie dotyczy, bo odbiór działa bez harnessu.
 - Plany: `tickets/story-refactor-sweep-plan.md` (wiersze DW-55 i DW-40, kontrole dla użytkownika), `tickets/story-browserhost-end-to-end-suite-plan.md`.
 - Skrypty: `tools/check-browserhost-e2e.ps1` (`-SelfTest` w P0.3, pełny przebieg w S1; uruchamia `tracer`, `reconnect`, `errors`, `adopt`, `restart`) oraz **nowy** `tools/check-browserhost-cdp-reset.ps1` (powstał dla tego odbioru; `-SelfTest` bez podnoszenia przeszedł na UM760 2026-10-30, wariant `-Elevate` w P0.3).
 - Wzór: `epic-windows-audio/epic-windows-audio-um760-acceptance.md`.
