@@ -286,16 +286,16 @@ Sesja: 2026-10-30, HEAD b041c5d, build 1.0.0+b041c5d, UM760 (MEDIASTATION, F7BSI
 | S19 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:40:31.609Z until 2026-10-30T13:41:08.909Z; `msg=systemResumed:>=1` want >=1, got 1; `msg=renewSession,data.appId=netflix:>=1` want >=1, got 1; `msg=cdpReconnected,data.appId=netflix:>=1` want >=1, got 1; `msg=appLaunch:0` want 0, got 0; `msg=processExited:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:41:05.047Z","level":"info","src":"system","msg":"systemResumed","data":{"source":"GUID_CONSOLE_DISPLAY_STATE"}}` |
 | S20 | pass (2026-10-30, HEAD 5420f81) ekran główny przywrócony przez agenta po wybudzeniu | window since 2026-10-30T13:43:47.130Z until 2026-10-30T13:43:57.885Z; `msg=foregroundChanged,data.owner=app,data.appId=netflix:>=1` want >=1, got 1; `msg=appLaunch:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:43:55.344Z","level":"info","src":"orchestrator","msg":"foregroundChanged","data":{"hwnd":2688936,"pid":16736,"owner":"app","appId":"netflix"}}` |
 | S21 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:44:01.600Z until 2026-10-30T13:44:11.706Z; `msg=pageHello,data.appId=netflix,data.webdriver=false:>=1` want >=1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:44:09.372Z","level":"info","src":"browser","msg":"pageHello","data":{"appId":"netflix","service":"netflix","driverVersion":"0.0.0","webdriver":false}}` |
-| S22 | | |
-| S23 | | |
-| S24 | | |
-| S25 | | |
-| S26 | | |
-| S27 | | |
-| S28 | | |
-| S29 | | |
-| S30 | | |
-| S31 | | |
+| S22 | measured (2026-10-30, HEAD 5420f81) DELL P2415Q: hwnd 2688936 window 0,0,1920,1080 monitor 0,0,1920,1080 foreground True iconic False | exit 0<br>F4: current 3840x2160@60 \| set 1920x1080 test=False: 0; F3: hwnd 2688936 window 0,0,1920,1080 monitor 0,0,1920,1080 foreground True iconic False |
+| S23 | user: ok (2026-10-30, HEAD 5420f81): pełny ekran bez pasków i przesunięć, ekran nie gasł, bez szumu | Użytkownik: Netflix był cały czas na pełnym ekranie bez pasków i przesunięć. Ekran nie gasł i nie pokazywał szumu. |
+| S24 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:45:51.276Z until 2026-10-30T13:46:01.063Z; `msg=action,data.kind=home:1` want 1, got 1; `msg=windowCommand,data.type=ShowShell,data.result=completed:1` want 1, got 1; `msg=foregroundChanged,data.owner=shell:>=1` want >=1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:45:58.667Z","level":"info","src":"input","msg":"action","data":{"kind":"home","phase":"press","source":"remote"}}` |
+| S25 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:46:04.048Z until 2026-10-30T13:46:14.411Z; `msg=foregroundChanged,data.owner=app,data.appId=netflix:>=1` want >=1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:46:11.828Z","level":"info","src":"orchestrator","msg":"foregroundChanged","data":{"hwnd":2688936,"pid":16736,"owner":"app","appId":"netflix"}}` |
+| S26 | measured (2026-10-30, HEAD 5420f81) DELL P2415Q: hwnd 2688936 window 0,0,1920,1080 monitor 0,0,1920,1080 foreground True iconic False | exit 0<br>F3: hwnd 2688936 window 0,0,1920,1080 monitor 0,0,1920,1080 foreground True iconic False |
+| S27 | measured (2026-10-30, HEAD 5420f81) DELL P2415Q: hwnd 2688936 window 0,0,3840,2160 monitor 0,0,3840,2160 foreground True iconic False | exit 0<br>F4: restore: 0; F3: hwnd 2688936 window 0,0,3840,2160 monitor 0,0,3840,2160 foreground True iconic False |
+| S28 | user: ok na monitorze Dell (2026-10-30, HEAD 5420f81): na całym ekranie, bez gaśnięcia i szumu; TV nie sprawdzony | Użytkownik: Jest na całym ekranie, ekran nie gasł ani nie pokazywał szumu. Monitor DELL P2415Q po DisplayPort, wyłączony przyciskiem na ok. 10 s. |
+| S29 | measured (2026-10-30, HEAD 5420f81) DELL P2415Q: hwnd 2688936 window 0,0,3840,2160 monitor 0,0,3840,2160 foreground True iconic False | exit 0<br>F3: hwnd 2688936 window 0,0,3840,2160 monitor 0,0,3840,2160 foreground True iconic False |
+| S30 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:49:35.418Z until 2026-10-30T13:49:45.065Z; `msg=action,data.kind=home:1` want 1, got 1; `msg=windowCommand,data.type=ShowShell,data.result=completed:1` want 1, got 1; `msg=foregroundChanged,data.owner=shell:>=1` want >=1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:49:42.575Z","level":"info","src":"input","msg":"action","data":{"kind":"home","phase":"press","source":"remote"}}` |
+| S31 | n/a (2026-10-30, HEAD 5420f81): brak drugiego monitora | Użytkownik: nie ma drugiego monitora; system widzi jeden ekran, DELL P2415Q. |
 | S32 | | |
 | S33 | | |
 | S34 | | |
