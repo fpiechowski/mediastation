@@ -485,9 +485,6 @@ location: src/MediaStation.Core/Input/InputPolicy.cs
 source_spec: `tickets/epic-windows-audio/tickets/bug-jedno-nacisniecie-home-daje-pojedyncza-akcje-i-pojedyncze-sh-plan.md`
 reason: Dziennik z S10 (UM760, 2026-10-28, 14:05:00 i 14:05:21) pokazuje dwa osobne naciśnięcia, każde z jedną akcją i jednym ShowShell. Jeśli podwójny przebieg ma inne źródło (pad, HID, echo), błąd zostanie; rozstrzyga ponowny odbiór S10 na UM760.
 status: open
-- source_plan: `_bmad-output/initiative-mediastation-mvp/tickets/epic-windows-audio/tickets/bug-uruchomienie-netflixa-przez-kafelek-wywoluje-cykliczne-zaniki-obrazu-plan.md`
-  summary: Verify full display frequency/bits and visual black/static absence on a host where EnumDisplaySettings is available during whole-epic UM760 acceptance.
-  evidence: Automated smoke on UM760 reports reliable monitor width/height but EnumDisplaySettings frequency/bits are unavailable; visual stability remains a manual whole-epic check.
 
 ### DW-52: BrowserHost attaches CDP to the first `type: page` target in `/json/list`, not specifically the `about:blank` page it launched, so an extra Edge page target listed first (WebUI, restored tab) would
 origin: spec-deferred 10fcb18751ca
@@ -550,4 +547,10 @@ source_spec: `tickets/epic-browserhost/tickets/story-refactor-sweep-plan.md`
 severity: low
 reason: Pre-existing, not caused by this change. StopApp handling in DevHarnessHostPort.cs (~L141) posts ProcessExited unconditionally, and its watcher (~L432) posts its own. The dev harness is opt-in (MEDIASTATION_DEV_HARNESS=1), and the accepted epic-5 checks use it, so 6.8 left it unchanged. Fix by mirroring the BrowserHost rule: one exit report per process, with Stop posting only CommandCompleted after a watcher report.
 note: 2026-10-30 Odbiór epic-browserhost przeszedł bez harnessu (`devHarnessEnabled:0`), więc gałąź `web` harnessu nie jest już potrzebna do odbioru Netflixa; `moonlight` nadal z niej korzysta do czasu epic-moonlight-native. Przed naprawą tego wpisu rozważyć wycofanie gałęzi `web` zamiast jej poprawiania.
+status: open
+
+### DW-59: Verify full display frequency/bits and visual black/static absence on a host where EnumDisplaySettings is available during whole-epic UM760 acceptance.
+origin: migrated from legacy ledger ("n/a"), 2026-10-30; source plan `_bmad-output/initiative-mediastation-mvp/tickets/epic-windows-audio/tickets/bug-uruchomienie-netflixa-przez-kafelek-wywoluje-cykliczne-zaniki-obrazu-plan.md`
+location: n/a
+reason: Automated smoke on UM760 reports reliable monitor width/height but EnumDisplaySettings frequency/bits are unavailable; visual stability (no black/static flicker when launching Netflix from the tile) remains a manual whole-epic check.
 status: open
