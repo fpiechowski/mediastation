@@ -190,6 +190,8 @@ if ($SelfTest) {
 }
 
 # --- The live check. ---
+# An unexpected error says nothing about the host, so it is "could not run", not a failed check.
+trap { Write-Host "VERDICT could not run: $($_.Exception.Message)"; exit 2 }
 $cdpBase = "http://127.0.0.1:$Port"
 $evidenceDir = if ([string]::IsNullOrWhiteSpace($EvidenceDir)) { Join-Path $LogsDir ('browserhost-cdp-reset-evidence-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')) } else { $EvidenceDir }
 $evidenceJsonl = Join-Path $evidenceDir 'measurements.jsonl'
@@ -218,10 +220,11 @@ function Invoke-PageEvaluate {
     $socket.Options.Proxy = $null
     $cts = New-Object System.Threading.CancellationTokenSource 10000
     try {
-        $socket.ConnectAsync([Uri]$WebSocketUrl, $cts.Token).GetAwaiter().GetResult()
+        # GetResult on these tasks writes a VoidTaskResult to the pipeline, which would become part of the return value.
+        [void]$socket.ConnectAsync([Uri]$WebSocketUrl, $cts.Token).GetAwaiter().GetResult()
         $request = @{ id = 1; method = 'Runtime.evaluate'; params = @{ expression = $Expression; returnByValue = $true } } | ConvertTo-Json -Compress -Depth 5
         $bytes = [System.Text.Encoding]::UTF8.GetBytes($request)
-        $socket.SendAsync([ArraySegment[byte]]::new($bytes), [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $cts.Token).GetAwaiter().GetResult()
+        [void]$socket.SendAsync([ArraySegment[byte]]::new($bytes), [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $cts.Token).GetAwaiter().GetResult()
         $buffer = New-Object byte[] 65536
         $text = New-Object System.Text.StringBuilder
         do {
