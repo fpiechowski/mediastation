@@ -102,6 +102,8 @@ Propozycje (headless, nic nie zapisano; `docs/decisions/` nie istnieje, żadnego
 1. **`adr-browserhost-strips-compat-layer-from-browser-env.md`** — kontekst: odziedziczona zmienna `__COMPAT_LAYER` powodowała, że Edge relaunchował się sam i wyglądało to jak natychmiastowy exit procesu; decyzja: launcher usuwa ją ze środowiska procesu przeglądarki; dlaczego: plan 6.4 („Stop and launch”) podaje diagnozę z UM760. Plan 6.4, commit `6319f01`. Test ADR: nieoczywiste, ukryta przyczyna, brak zapisu w AD-1/AD-13 (`grep COMPAT_LAYER` w architekturze: 0).
 2. **`adr-browserhost-profile-lock-and-port-preflight.md`** — kontekst: potrzebne rozróżnienie `ProfileInUse` od `PortInUse` bez startu; decyzja: profil zajęty = istnieje blokada `lockfile` Chromium, port zajęty = istnieje listener TCP; przy obu zajętych wygrywa `ProfileInUse`; dlaczego: plan 6.4. Commit `6319f01`. Test ADR: trudne do odwrócenia (kody błędów `ErrorCode` są kontraktem), brak w architekturze (`grep lockfile`: 0).
 
+**Update 2026-10-30:** użytkownik zatwierdził oba, a Winston je napisał: `src/MediaStation.App/Hosts/Browser/adr-browserhost-strips-compat-layer-from-browser-env.md` (`93e6e89`) i `adr-browserhost-profile-lock-and-port-preflight.md` (`73ff58f`). Drugi prostuje zapis wyżej: profil zajęty to `lockfile`, którego nie da się otworzyć do zapisu; plik bez właściciela oznacza profil wolny.
+
 Wymaga zatwierdzenia przez użytkownika. Pozostałe decyzje z planów (tryb okna `--kiosk`, źródło wersji, reconnect do tego samego targetu, `PageVersionRejected` → `Failed`) są już w AD-1, AD-7, AD-10 i AD-13.
 
 ## Acceptance verdict

@@ -527,6 +527,9 @@ location: src/MediaStation.App/Hosts/Browser/BrowserHost.cs (ReconnectAsync, Try
 source_spec: `tickets/epic-browserhost/tickets/story-binding-po-nawigacji-i-reconnect-cdp-plan.md`
 severity: medium
 reason: Real, not caused by this change: before 6.3 a drop lost binding and script for good. Recovery would need `Page.reload` or `Runtime.evaluate`, both excluded by AD-1 and this story's Never list, or a `hello` watchdog after `cdpReconnected` that turns a silent page into `CdpLost`/Failed. Netflix is a single-page app, so main-frame navigations are rare and the window can be long. Settle as a product decision: either a post-reconnect hello watchdog (needs a page message on the new session, see the item above) or an AD-1 amendment allowing one reload after reconnect.
+decision: 2026-10-30 Cichy reload po dowodzie: po reconnekcie host porównuje `loaderId` głównej ramki; inny dokument dostaje jeden `Page.reload`, a brak `hello` lub błąd daje `CdpLost` (AD-1, AD-10; `1baa513`). Użytkownik wybrał, kod do zbudowania.
+owner: story backlogu 22, warunek wejścia w epic-netflix-dpad, decyzja użytkownika 2026-10-30
+ticket: `_bmad-output/backlog/story-strona-po-podmianie-dokumentu-w-przerwie-cdp-odzyskuje-most.md`
 status: open
 
 ### DW-57: A browser root that holds the app profile but has no browser window (for example Edge kept alive in background mode) is not adopted, so a later start fails with ProfileInUse, and Close or Restart
