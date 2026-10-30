@@ -40,7 +40,7 @@ public sealed record AppSnapshot(
 /// </summary>
 public sealed record FocusRequest(string Target, long Seq)
 {
-    /// <summary>Zakładka Video, pierwszy kafelek (zimny start, restart, wybudzenie).</summary>
+    /// <summary>Zakładka Video, pierwszy kafelek, a bez kafelków Video pierwszy kafelek pierwszej niepustej zakładki (zimny start, restart, wybudzenie).</summary>
     public const string DefaultTarget = "default";
 }
 

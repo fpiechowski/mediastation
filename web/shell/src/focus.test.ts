@@ -211,6 +211,46 @@ describe('zakładki i category', () => {
     const state = applyFocusRequest(initialFocusState, snapshot(list, { target: 'default', seq: 1 }));
     expect(state).toMatchObject({ activeTab: 'video', focusedAppId: 'v' });
   });
+
+  it('bez kafelków Video default stawia fokus na jedynym kafelku Game, a OK go uruchamia (DW-48)', () => {
+    const list = [tile('m', 'notRunning', 'game')];
+    const state = applyFocusRequest(initialFocusState, snapshot(list, { target: 'default', seq: 1 }));
+    expect(state).toMatchObject({ zone: 'tiles', activeTab: 'game', focusedAppId: 'm', appliedSeq: 1 });
+    expect(state.memory).toEqual({ game: 'm' });
+    expect(applyAction(state, list, action('ok')).intent).toEqual({ type: 'launchApp', appId: 'm' });
+  });
+
+  it('bez kafelków Video default wybiera pierwszą niepustą zakładkę w kolejności zakładek', () => {
+    const list = [tile('m', 'notRunning', 'game'), tile('s', 'notRunning', 'audio'), tile('t', 'notRunning', 'audio')];
+    const state = applyFocusRequest(initialFocusState, snapshot(list, { target: 'default', seq: 1 }));
+    expect(state).toMatchObject({ zone: 'tiles', activeTab: 'audio', focusedAppId: 's' });
+    expect(applyAction(state, list, action('ok')).intent).toEqual({ type: 'launchApp', appId: 's' });
+  });
+
+  it.each([
+    ['Video', [tile('v', 'notRunning', 'video'), tile('m', 'notRunning', 'game')], 'video', 'v'],
+    ['pierwszą niepustą zakładkę', [tile('s', 'notRunning', 'audio'), tile('m', 'notRunning', 'game')], 'audio', 's'],
+  ] as const)('wybudzenie z zakładki Game wraca na %s, nie zostaje na bieżącej zakładce', (_name, list, activeTab, focusedAppId) => {
+    const onGame = applyFocusRequest(initialFocusState, snapshot([...list], { target: 'm', seq: 1 }));
+    expect(onGame).toMatchObject({ activeTab: 'game', focusedAppId: 'm' });
+    const woken = applyFocusRequest(onGame, snapshot([...list], { target: 'default', seq: 2 }));
+    expect(woken).toMatchObject({ zone: 'tiles', activeTab, focusedAppId });
+  });
+
+  it('wybudzenie (nowy seq default) wraca na kafelek Game także z zakładek, a ten sam seq nic nie zmienia', () => {
+    const list = [tile('m', 'notRunning', 'game')];
+    const inTabs = press(applyFocusRequest(initialFocusState, snapshot(list, { target: 'default', seq: 1 })), list, 'up');
+    expect(inTabs).toMatchObject({ zone: 'tabs', activeTab: 'game', focusedAppId: null });
+    expect(applyFocusRequest(inTabs, snapshot(list, { target: 'default', seq: 1 }, 2))).toBe(inTabs);
+    const woken = applyFocusRequest(inTabs, snapshot(list, { target: 'default', seq: 2 }, 3));
+    expect(woken).toMatchObject({ zone: 'tiles', activeTab: 'game', focusedAppId: 'm', appliedSeq: 2 });
+  });
+
+  it('bez żadnych kafelków default zużywa seq i nie ustawia fokusu', () => {
+    const state = applyFocusRequest(initialFocusState, snapshot([], { target: 'default', seq: 1 }));
+    expect(state).toEqual({ ...initialFocusState, appliedSeq: 1 });
+    expect(applyAction(state, [], action('ok')).intent).toBeUndefined();
+  });
 });
 
 describe('focusRequest i powrót na ostatni kafelek (AD-16)', () => {

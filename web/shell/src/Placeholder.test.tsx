@@ -66,6 +66,23 @@ describe('fokus po starcie (focusRequest default)', () => {
     expect(html.match(/tile--focused/g)).toHaveLength(1);
     expect(html).toMatch(/<li class="tile tile--focused">(?:(?!<li).)*netflix/);
   });
+
+  it('z samym kafelkiem Game ekran pokazuje zakładkę Game i ten kafelek w fokusie, bez pustej Video (DW-48)', () => {
+    const apps = [app('moonlight', 'game', 'notRunning')];
+    const focus = applyFocusRequest(initialFocusState, {
+      rev: 1,
+      screen: 'placeholder',
+      configErrors: [],
+      apps,
+      focusRequest: { target: 'default', seq: 1 },
+    });
+    const html = renderToStaticMarkup(<Placeholder apps={apps} focus={focus} />);
+
+    expect(html.match(/tile--focused/g)).toHaveLength(1);
+    expect(html).toMatch(/<li class="tile tile--focused">(?:(?!<li).)*moonlight/);
+    expect(html).toMatch(/<li class="tab tab--active">Game/);
+    expect(html).not.toContain('empty-state');
+  });
 });
 
 describe('AppMenu', () => {

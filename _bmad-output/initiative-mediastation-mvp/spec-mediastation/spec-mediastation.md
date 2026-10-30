@@ -73,7 +73,7 @@ Epik może grupować kilka CAP-N (np. CAP-4 i CAP-5), a ID się przy tym nie zmi
   - **success:**
     - Zakładki i kolejność kafelków wynikają z `category` i kolejności w `apps.json`. Audio pokazuje empty state.
     - Kafelek pokazuje stan aplikacji. Kropka na zakładce sygnalizuje aplikację działającą w tle.
-    - Zimny start, restart i wybudzenie stawiają fokus na pierwszym kafelku Video. Powrót z aplikacji stawia go na ostatnim kafelku. Nowa karta „Do oceny” nie kradnie fokusu.
+    - Zimny start, restart i wybudzenie stawiają fokus na pierwszym kafelku Video, a bez kafelków Video na pierwszym kafelku pierwszej niepustej zakładki (kolejność Video, Audio, Game; DW-48). Powrót z aplikacji stawia go na ostatnim kafelku. Nowa karta „Do oceny” nie kradnie fokusu.
     - AppMenu otwiera long-press OK na kafelku `Background` albo `Failed` oraz OK na `Failed`.
     - Wygląd jest zgodny z `DESIGN.md` w 1920×1080, w title-safe 5%.
   - **AD:** AD-8, AD-11, AD-16
