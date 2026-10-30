@@ -283,9 +283,9 @@ Sesja: 2026-10-30, HEAD b041c5d, build 1.0.0+b041c5d, UM760 (MEDIASTATION, F7BSI
 | S16 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:38:58.095Z until 2026-10-30T13:39:07.891Z; `msg=action,data.kind=home:1` want 1, got 1; `msg=windowCommand,data.type=ShowShell,data.result=completed:1` want 1, got 1; `msg=foregroundChanged,data.owner=shell:>=1` want >=1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:39:05.323Z","level":"info","src":"input","msg":"action","data":{"kind":"home","phase":"press","source":"remote"}}` |
 | S17 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:39:11.996Z until 2026-10-30T13:39:15.838Z; `msg=probeExisting,data.appId=netflix,data.outcome=adopted:1` want 1, got 1; `msg=appAdopted,data.appId=netflix:1` want 1, got 1; `msg=cdpConnected,data.appId=netflix,data.adopted=true:1` want 1, got 1; `msg=appLaunch:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing, 3)<br>`{"ts":"2026-10-30T13:39:12.952Z","level":"info","src":"browser","msg":"probeExisting","data":{"appId":"netflix","outcome":"adopted","rootPid":16736}}` |
 | S18 | pass (2026-10-30, HEAD 5420f81) root 16736 po zabiciu MediaStation | exit 0<br>F1 -Root 16736: exit 0, jeden root, port 9222 tylko 127.0.0.1 |
-| S19 | | |
-| S20 | | |
-| S21 | | |
+| S19 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:40:31.609Z until 2026-10-30T13:41:08.909Z; `msg=systemResumed:>=1` want >=1, got 1; `msg=renewSession,data.appId=netflix:>=1` want >=1, got 1; `msg=cdpReconnected,data.appId=netflix:>=1` want >=1, got 1; `msg=appLaunch:0` want 0, got 0; `msg=processExited:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:41:05.047Z","level":"info","src":"system","msg":"systemResumed","data":{"source":"GUID_CONSOLE_DISPLAY_STATE"}}` |
+| S20 | pass (2026-10-30, HEAD 5420f81) ekran główny przywrócony przez agenta po wybudzeniu | window since 2026-10-30T13:43:47.130Z until 2026-10-30T13:43:57.885Z; `msg=foregroundChanged,data.owner=app,data.appId=netflix:>=1` want >=1, got 1; `msg=appLaunch:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:43:55.344Z","level":"info","src":"orchestrator","msg":"foregroundChanged","data":{"hwnd":2688936,"pid":16736,"owner":"app","appId":"netflix"}}` |
+| S21 | pass (2026-10-30, HEAD 5420f81) | window since 2026-10-30T13:44:01.600Z until 2026-10-30T13:44:11.706Z; `msg=pageHello,data.appId=netflix,data.webdriver=false:>=1` want >=1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:44:09.372Z","level":"info","src":"browser","msg":"pageHello","data":{"appId":"netflix","service":"netflix","driverVersion":"0.0.0","webdriver":false}}` |
 | S22 | | |
 | S23 | | |
 | S24 | | |
@@ -311,3 +311,5 @@ Sesja: 2026-10-30, HEAD b041c5d, build 1.0.0+b041c5d, UM760 (MEDIASTATION, F7BSI
 | S44 | | |
 | S45 | | |
 | S46 | | |
+
+Notatka z S19 (2026-10-30, HEAD 5420f81, UM760): po wybudzeniu ekran znów kilka razy gasł i wracał z szumem, po dłuższej chwili zaczął działać (użytkownik). Na wierzch trafiło prywatne okno Edge (pid 15620, Nowa karta — Osobisty), którego użytkownik nie otwierał, a nie ekran główny; foregroundChanged owner=foreign 13:41:06Z, log bez appLaunch. Agent przywrócił ekran główny przed S20.
