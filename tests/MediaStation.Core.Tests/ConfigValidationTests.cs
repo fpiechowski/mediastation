@@ -125,6 +125,7 @@ public class ConfigValidationTests
         Assert.Equal(15, config.Settings.CdpConnectTimeout);
         Assert.Equal(30, config.Settings.CdpReconnectTimeout);
         Assert.Equal(300, config.Settings.ForegroundSettleMs);
+        Assert.Equal(5, config.Settings.WindowResultTimeout);
         Assert.Equal("fpiechowski/mediastation", config.Settings.Update.Repo);
     }
 
@@ -136,7 +137,7 @@ public class ConfigValidationTests
                 Web(extra: """, "pointer": "allowed" """),
                 """{ "type": "moonlight", "id": "pc", "category": "game", "title": "PC", "icon": "i", "host": "h", "app": "a", "back": "home", "pointer": "blocked" }""",
                 """{ "type": "native", "id": "plex", "category": "video", "title": "P", "icon": "i", "exe": "p.exe", "args": ["--tv", "-f"], "back": "key:Escape" }"""),
-            settings: """{ "ratingPendingDays": 3, "startingTimeout": 60, "stoppingTimeout": 50, "cdpConnectTimeout": 20, "cdpReconnectTimeout": 45, "foregroundSettleMs": 500, "update": { "repo": "someone/fork" } }""");
+            settings: """{ "ratingPendingDays": 3, "startingTimeout": 60, "stoppingTimeout": 50, "cdpConnectTimeout": 20, "cdpReconnectTimeout": 45, "foregroundSettleMs": 500, "windowResultTimeout": 7, "update": { "repo": "someone/fork" } }""");
 
         Assert.Equal(PointerPolicy.Allowed, Assert.IsType<WebApp>(config.Apps.Apps[0]).Pointer);
         var moonlight = Assert.IsType<MoonlightApp>(config.Apps.Apps[1]);
@@ -154,6 +155,7 @@ public class ConfigValidationTests
                 CdpConnectTimeout = 20,
                 CdpReconnectTimeout = 45,
                 ForegroundSettleMs = 500,
+                WindowResultTimeout = 7,
                 Update = new UpdateSettings { Repo = "someone/fork" },
             },
             config.Settings);
@@ -1054,6 +1056,7 @@ public class ConfigValidationTests
     [InlineData("stoppingTimeout", "0")]
     [InlineData("cdpConnectTimeout", "0")]
     [InlineData("cdpReconnectTimeout", "-1")]
+    [InlineData("windowResultTimeout", "0")]
     public void Settings_numbers_must_be_positive(string field, string value)
     {
         var error = SingleError(settings: $$"""{ "{{field}}": {{value}} }""");
@@ -1087,6 +1090,7 @@ public class ConfigValidationTests
     [InlineData("startingTimeout")]
     [InlineData("stoppingTimeout")]
     [InlineData("cdpReconnectTimeout")]
+    [InlineData("windowResultTimeout")]
     public void Timeout_of_600_seconds_is_accepted(string field)
     {
         var config = Loaded(settings: $$"""{ "{{field}}": 600 }""");
@@ -1095,6 +1099,7 @@ public class ConfigValidationTests
         {
             "startingTimeout" => config.Settings.StartingTimeout,
             "stoppingTimeout" => config.Settings.StoppingTimeout,
+            "windowResultTimeout" => config.Settings.WindowResultTimeout,
             _ => config.Settings.CdpReconnectTimeout,
         });
     }
@@ -1103,6 +1108,7 @@ public class ConfigValidationTests
     [InlineData("startingTimeout")]
     [InlineData("stoppingTimeout")]
     [InlineData("cdpReconnectTimeout")]
+    [InlineData("windowResultTimeout")]
     public void Timeout_above_600_seconds_is_rejected(string field)
     {
         var error = SingleError(settings: $$"""{ "{{field}}": 601 }""");
@@ -1360,7 +1366,7 @@ public class ConfigValidationTests
         Assert.Null(schema["required"]);
         Assert.False(schema["additionalProperties"]!.GetValue<bool>());
         Assert.Equal(
-            ["ratingPendingDays", "startingTimeout", "stoppingTimeout", "cdpConnectTimeout", "cdpReconnectTimeout", "foregroundSettleMs", "update"],
+            ["ratingPendingDays", "startingTimeout", "stoppingTimeout", "cdpConnectTimeout", "cdpReconnectTimeout", "foregroundSettleMs", "windowResultTimeout", "update"],
             schema["properties"]!.AsObject().Select(p => p.Key));
         Assert.Equal("integer", schema["properties"]!["startingTimeout"]!["type"]!.GetValue<string>());
         Assert.Equal("integer", schema["properties"]!["stoppingTimeout"]!["type"]!.GetValue<string>());

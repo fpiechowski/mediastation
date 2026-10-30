@@ -2,8 +2,8 @@ namespace MediaStation.Core.Config;
 
 /// <summary>
 /// <c>config/settings.json</c>: wartości polityk (AD-11). Plik jest wymagany, ale każde pole ma wartość domyślną,
-/// więc <c>{}</c> jest poprawne. Czasy w pełnych sekundach, wszystkie liczby &gt; 0; <see cref="StartingTimeout"/>
-/// i <see cref="StoppingTimeout"/> nie przekraczają 600 s.
+/// więc <c>{}</c> jest poprawne. Czasy w pełnych sekundach, wszystkie liczby &gt; 0; <see cref="StartingTimeout"/>,
+/// <see cref="StoppingTimeout"/> i <see cref="WindowResultTimeout"/> nie przekraczają 600 s.
 /// </summary>
 public sealed record Settings
 {
@@ -24,6 +24,9 @@ public sealed record Settings
 
     /// <summary>Czas ustalenia okna na wierzchu po ostatnim <c>ForegroundChanged</c>, w milisekundach; 100–2000 (AD-15).</summary>
     public int ForegroundSettleMs { get; init; } = 300;
+
+    /// <summary>Czas czekania oceny foreground na wyniki komend okiennych, zanim zostaną uznane za zgubione, w sekundach (AD-15).</summary>
+    public int WindowResultTimeout { get; init; } = 5;
 
     public UpdateSettings Update { get; init; } = new();
 }

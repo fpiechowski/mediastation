@@ -249,6 +249,15 @@ public sealed class OrchestratorLoop : IDisposable
                     });
                 }
 
+                // Wykonawca nie odpowiedział w terminie (złamane AD-4): ślad w logu, ocenę wznawia sam Orchestrator.
+                if (result.WindowResultsLost.Count > 0)
+                {
+                    _log.Warn(Src, "windowResultLost", new Dictionary<string, object?>
+                    {
+                        ["cmdIds"] = result.WindowResultsLost,
+                    });
+                }
+
                 // Komendy są fire-and-forget (AD-14): dispatcher kieruje je do portów bez czekania na wynik.
                 // Snapshot publikujemy dopiero po wysłaniu komend, żeby wykonawca nie wyprzedził widoku.
                 _dispatch(result.Commands);

@@ -432,6 +432,120 @@ public class OrchestratorLoopTests
         Assert.Equal("netflix", failed.Data["appId"]);
     }
 
+    /// <summary>
+    /// Dispatcher jak wykonawcy w App: timery idą do prawdziwego <see cref="TimerScheduler"/>, komendy okienne dostają
+    /// wynik w kolejce, a <see cref="ReportForeground"/> odpowiada świeżym <see cref="ForegroundChanged"/> przed wynikiem.
+    /// <paramref name="drop"/> wybiera komendy, których wynik ginie (złamane AD-4).
+    /// </summary>
+    private static Action<IReadOnlyList<Command>> AnsweringDispatch(
+        TimerScheduler timers,
+        ConcurrentQueue<Command> dispatched,
+        Func<OrchestratorLoop?> loop,
+        Func<(long Hwnd, int Pid)> onTop,
+        Func<WindowCommand, bool> drop) => batch =>
+    {
+        foreach (var command in batch)
+        {
+            if (command is TimerCommand timer)
+            {
+                timers.Execute(timer);
+            }
+
+            if (command is WindowCommand window && !drop(window))
+            {
+                if (window is ReportForeground)
+                {
+                    var (hwnd, pid) = onTop();
+                    loop()!.Post(new ForegroundChanged(hwnd, pid));
+                }
+
+                loop()!.Post(new CommandCompleted(window.CmdId));
+            }
+
+            dispatched.Enqueue(command);
+        }
+    };
+
+    [Fact]
+    public void Lost_show_shell_result_logs_window_result_lost_and_the_recovery_report_switches()
+    {
+        var time = new FakeTimeProvider(T0);
+        var log = new RecordingLog();
+        var dispatched = new ConcurrentQueue<Command>();
+        OrchestratorLoop? postsTo = null;
+        using var timers = new TimerScheduler(time, message => postsTo?.Post(message));
+        using var loop = new OrchestratorLoop(
+            new CoreOrchestrator(TwoApps(), time, new FixedForegroundLookup(shell: 0x500)),
+            AnsweringDispatch(timers, dispatched, () => postsTo, () => (0x1A2B, 4321), window => window is ShowShell),
+            _ => { },
+            _ => { },
+            log);
+        postsTo = loop;
+        loop.Start();
+        loop.Post(new LaunchApp("netflix"));
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        loop.Post(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        WaitFor(() => dispatched.OfType<ShowShell>().Any());
+        var showShell = dispatched.OfType<ShowShell>().Single();
+
+        // Użytkownik wrócił Alt+Tab do Netflix: ocena czeka na wynik ShowShell, który nigdy nie przyjdzie.
+        loop.Post(new ForegroundChanged(0x1A2B, 4321));
+        WaitFor(() => dispatched.OfType<ScheduleTimer>().Any(timer => timer.Owner == "windowResult"));
+        Assert.DoesNotContain(dispatched, command => command is ReportForeground);
+
+        time.Advance(TimeSpan.FromSeconds(5));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "windowResultLost"));
+        WaitFor(() => log.Entries.Count(entry => entry.Msg == "foregroundChanged") == 2);
+
+        // Świeża obserwacja i wynik raportu planują po jednym ustaleniu; ocenia się to ostatnie.
+        WaitFor(() => dispatched.OfType<ScheduleTimer>().Count(timer => timer.Owner == "foreground") == 3);
+        time.Advance(TimeSpan.FromMilliseconds(300));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "foregroundSwitch"));
+
+        var lost = Assert.Single(log.Entries, entry => entry.Msg == "windowResultLost");
+        Assert.Equal(LogLevel.Warn, lost.Level);
+        Assert.Equal([showShell.CmdId], Assert.IsAssignableFrom<IReadOnlyList<long>>(lost.Data!["cmdIds"]));
+        Assert.Contains($"\"cmdIds\":[{showShell.CmdId}]", JsonLinesLog.Format(T0, lost.Level, lost.Src, lost.Msg, lost.Data, null));
+        Assert.Single(dispatched.OfType<ReportForeground>());
+        var switched = Assert.Single(log.Entries, entry => entry.Msg == "foregroundSwitch");
+        Assert.Equal("app", switched.Data!["owner"]);
+        Assert.Equal("netflix", switched.Data["appId"]);
+        Assert.DoesNotContain(log.Entries, entry => entry.Msg == "orchestratorFailed");
+    }
+
+    [Fact]
+    public void Normal_results_of_launch_and_home_leave_no_deadline_and_no_window_result_lost()
+    {
+        var time = new FakeTimeProvider(T0);
+        var log = new RecordingLog();
+        var dispatched = new ConcurrentQueue<Command>();
+        OrchestratorLoop? postsTo = null;
+        using var timers = new TimerScheduler(time, message => postsTo?.Post(message));
+        using var loop = new OrchestratorLoop(
+            new CoreOrchestrator(TwoApps(), time, new FixedForegroundLookup(shell: 0x500)),
+            AnsweringDispatch(timers, dispatched, () => postsTo, () => (0x500, 10), _ => false),
+            _ => { },
+            _ => { },
+            log);
+        postsTo = loop;
+        loop.Start();
+        loop.Post(new LaunchApp("netflix"));
+        loop.Post(new AppWindowAttached("netflix", 0x1A2B, 4321));
+        loop.Post(new Action(ActionKind.Home, ActionPhase.Press, ActionSource.Remote, 1));
+        WaitFor(() => dispatched.OfType<ShowShell>().Any());
+
+        time.Advance(TimeSpan.FromSeconds(10));
+
+        // Kolejka jest FIFO: wpis po znaczniku znaczy, że wszystko wcześniejsze zostało obsłużone.
+        loop.Post(new CdpLost("nieznana"));
+        WaitFor(() => log.Entries.Any(entry => entry.Msg == "cdpLostHandled"));
+
+        Assert.DoesNotContain(log.Entries, entry => entry.Msg == "windowResultLost");
+        Assert.DoesNotContain(dispatched.OfType<ScheduleTimer>(), timer => timer.Owner == "windowResult");
+        Assert.DoesNotContain(dispatched, command => command is ReportForeground);
+        Assert.DoesNotContain(log.Entries, entry => entry.Level >= LogLevel.Warn);
+    }
+
     private sealed class FixedForegroundLookup(long shell) : IForegroundLookup
     {
         public long ShellHwnd => shell;

@@ -32,6 +32,9 @@ public sealed record OrchestratorResult(IReadOnlyList<Command> Commands, ShellSn
 
     /// <summary>Obserwacja niezgodna z zamiarem po porażce komendy okiennej (<c>foregroundTransitionFailed</c> w logu) albo <c>null</c>.</summary>
     public ForegroundObservation? ForegroundTransitionFailed { get; init; }
+
+    /// <summary>Rosnące <c>cmdId</c> komend okiennych uznanych za zgubione po <c>windowResultTimeout</c> (<c>windowResultLost</c> w logu); domyślnie puste.</summary>
+    public IReadOnlyList<long> WindowResultsLost { get; init; } = Array.Empty<long>();
 }
 
 /// <summary>Przełączenie z zewnątrz (AD-5, AD-15): właściciel okna na wierzchu, <c>appId</c> (tylko dla <c>app</c>) i nowy <c>transitionId</c>.</summary>
@@ -68,12 +71,16 @@ public sealed partial class Orchestrator
     private long _managedEpoch;
     private readonly IForegroundLookup? _foreground;
     private readonly TimeSpan _foregroundSettle;
+    private readonly TimeSpan _windowResultTimeout;
     private const string ForegroundTimerOwner = "foreground";
+    private const string WindowResultTimerOwner = "windowResult";
 
-    // Ustalenie foreground (AD-15): ostatnia obserwacja, jej timer, komendy okienne bez wyniku (cmdId → transitionId).
+    // Ustalenie foreground (AD-15): ostatnia obserwacja, jej timer, komendy okienne bez wyniku (cmdId → transitionId)
+    // i termin ich wyników, żywy tylko wtedy, gdy czeka na nie ocena.
     private ForegroundObservation? _observation;
     private long _settleTimerId;
     private long _settleTransition;
+    private long _windowResultTimerId;
     private readonly Dictionary<long, long> _pendingWindow = [];
     private readonly HashSet<long> _reportCmds = [];
     private bool _reportNeeded;
@@ -88,6 +95,7 @@ public sealed partial class Orchestrator
         _time = time;
         _foreground = foreground;
         _foregroundSettle = TimeSpan.FromMilliseconds(config.Settings.ForegroundSettleMs);
+        _windowResultTimeout = TimeSpan.FromSeconds(config.Settings.WindowResultTimeout);
         _startingTimeout = TimeSpan.FromSeconds(config.Settings.StartingTimeout);
         _stoppingTimeout = TimeSpan.FromSeconds(config.Settings.StoppingTimeout);
         _apps = new List<AppState>(config.Apps.Apps.Count);
