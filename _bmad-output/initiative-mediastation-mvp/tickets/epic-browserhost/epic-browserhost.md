@@ -7,6 +7,7 @@ after: []
 assignee: ""
 risk: high
 refined: true
+status: done
 ---
 
 # BrowserHost
@@ -93,3 +94,6 @@ Przeglądarka serwisu jest w pełni zarządzana przez MediaStation, a Eliza napr
 - Decision: tracer epiki to start Edge → surowy CDP → PageRuntime `hello` → podpięcie okna → powrót Home; nowe stories rozwijają ten przepływ, a końcowy sweep zamyka dług techniczny (2026-10-29).
 - Decision: BrowserHost zapisuje wersję odczytaną przed startem i porównuje ją z `Browser.getVersion`, aby nie zgubić zmiany po awarii między startem a logiem (2026-10-29).
 - Decision: weryfikacja J4 na UM760 jest częścią odbioru całej epiki i pozostaje po stronie użytkownika; per-ticket automated evidence działa na bieżącej maszynie (2026-10-29).
+- Update: odroczenia z F6 i F18 retro epic-foundation-contracts są domknięte: koperta ma `id` (story 6.6, DW-54), `service` musi być w kebab-case, a `cdpReconnectTimeout` ma górną granicę, zaś `cdpConnectTimeout` musi być krótszy od `startingTimeout` (`ConfigValidation`) (2026-10-30).
+- Decision: użytkownik zaakceptował całą epikę na UM760, słowem „Accepted” (2026-10-30, build `b041c5d`, monitor DELL P2415Q, bez TV i drugiego monitora). Dowód i wyniki S1–S46: `epic-browserhost-um760-acceptance.md`. Epika zamknięta przez PO, wszystkie 9 ticketów `done`.
+- Decision: użytkownik zaakceptował epikę, wiedząc o dwóch usterkach z odbioru: zaniki obrazu po starcie Netflixa i wybudzeniu (backlog 23) oraz obce okno Edge na wierzchu po wybudzeniu (backlog 24). DW-40 na TV przechodzi do odbioru epic-netflix-dpad (2026-10-30).

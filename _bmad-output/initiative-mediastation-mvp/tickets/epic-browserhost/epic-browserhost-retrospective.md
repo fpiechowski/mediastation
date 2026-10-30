@@ -115,6 +115,8 @@ Wymaga zatwierdzenia przez użytkownika. Pozostałe decyzje z planów (tryb okna
 - **Brak blokujących findings.** Niezgodność baseline (P1) i utracone sesje (P2) to koszt procesu, nie wada dostarczonego kodu.
 - Werdykt maszynowy nie jest odbiorem użytkownika; zamknięcie epiki należy do Sofii po potwierdzeniu przez użytkownika.
 
+**Update 2026-10-30:** użytkownik zaakceptował epikę na UM760 (`epic-browserhost-um760-acceptance.md`), a Sofia ją zamknęła. Odbiór zamknął F6 (DW-55) i Done when 5. Doszły dwie usterki spoza tego retro: backlog 23 i 24.
+
 ## Open questions
 
 - Czy zdjęcie `hitl` z 6.7 (P3) ma pozostać, czy Sofia chce je cofnąć i traktować J4 jako ticket z człowiekiem w pętli przy następnych epikach?
