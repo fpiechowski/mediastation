@@ -63,8 +63,8 @@ title = "Netflix by D-pad"
 covers = ["CAP-8"]
 after = [
   { epic = 3, needs = "routing app + web: action/back do strony" },
-  { epic = 5, needs = "sekwencja pause → mute → minimize" },
-  { epic = 6, needs = "minimalny PageRuntime (hello, binding), build page bundle, Input.dispatchKeyEvent" },
+  { epic = 5, needs = "sekwencja mute → minimize, do której ta epika dokłada pause" },
+  { epic = 6, needs = "minimalny PageRuntime (hello, binding), build page bundle" },
 ]
 
 [[epic]]

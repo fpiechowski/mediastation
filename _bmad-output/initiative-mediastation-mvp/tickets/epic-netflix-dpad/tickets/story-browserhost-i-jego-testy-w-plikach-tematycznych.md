@@ -1,8 +1,8 @@
 ---
-id: 20
+id: 2
 type: story
 title: "BrowserHost i jego testy są podzielone na pliki tematyczne bez zmiany zachowania"
-parent: none
+parent: epic-netflix-dpad
 covers: []
 after: []
 assignee: ""
@@ -50,14 +50,16 @@ risk: medium
 ## References
 
 - source — _bmad-output/initiative-mediastation-mvp/tickets/epic-browserhost/epic-browserhost-retrospective.md, F1, A2
-- parent — _bmad-output/initiative-mediastation-mvp/tickets/epic-browserhost/epic-browserhost.md, Requirements 1–6
+- parent — _bmad-output/initiative-mediastation-mvp/tickets/epic-netflix-dpad/epic-netflix-dpad.md, warunek wejścia w Notes
+- source — _bmad-output/initiative-mediastation-mvp/tickets/epic-browserhost/epic-browserhost.md, Requirements 1–6
 - architecture — _bmad-output/initiative-mediastation-mvp/architecture-mediastation/architecture-mediastation.md, AD-1, AD-4, AD-10; Consistency Conventions, „Testy kodu App”
 - precedent — _bmad-output/initiative-mediastation-mvp/deferred-work.md, DW-19 (podział Orchestratora w 4.2)
 
 ## Notes
 
-- Decision: story leży w backlogu, poza epikiem 6, bo ten czeka na odbiór na UM760 (użytkownik, 2026-10-30).
+- Decision: story jest poza epikiem 6, bo tamten czekał na odbiór na UM760 (użytkownik, 2026-10-30).
 - Decision: ta story jest warunkiem wejścia w epic-netflix-dpad (użytkownik, 2026-10-30; szczegóły w Notes tej epiki).
 - Decision: budujemy ją po odbiorze epiki 6, żeby odbiór dotyczył kodu z retro, a poprawki z odbioru weszły przed podziałem (użytkownik, 2026-10-30).
 - Decision: limity 600 i 1000 linii w kryterium 3 zatwierdzone (użytkownik, 2026-10-30).
 - Weryfikacja: maszynę ustala się przed pracą (reguła „Current machine” w `AGENTS.md`). Na maszynie bez Edge lub ekranu smoke'i oznacza się jako nie dotyczy z powodem. Pełne sprawdzenie zostaje w odbiorze.
+- Decision: przeniesiona z backlogu (id 20) do epic-netflix-dpad jako wpis 2, żeby `after` egzekwował warunek wejścia (2026-10-30).

@@ -150,6 +150,7 @@ source_spec: `tickets/epic-input/epic-input-retrospective.md`, A2
 severity: medium
 reason: AD-8/AD-9 każą otwierać OSK z `Keyboard` w `app` + `web` tylko przy `textFocus{active:true}`, a InputHub sam nie bramkuje i dziś Orchestrator ignoruje każdą Action poza `Home`, więc zachowanie odpowiada tabeli tylko przypadkiem. Pierwsza story epic-osk, która podłączy `Keyboard` do OSK, musi dodać bramkę `textFocus` w Orchestratorze i test: `Keyboard` w `app` + `web` bez `textFocus` nie otwiera OSK, a z `textFocus` otwiera. Bez tego przycisk Klawiatura otworzy OSK w przeglądarce bez pola tekstowego.
 owner: epic-osk, decyzja refinementu epiki 4, 2026-10-26
+note: 2026-10-30 epic-netflix-dpad nie przekazuje `Keyboard` do strony (wpis 6) i daje Orchestratorowi `textFocus` (wpis 20); bramka zostaje w epic-osk.
 status: open
 ticket: `_bmad-output/backlog/spike-epic-osk-deferred-risks.md`
 
@@ -334,6 +335,7 @@ source_spec: `tickets/epic-home-screen/epic-home-screen-retrospective.md`, F5, A
 severity: low
 reason: Review szło per ticket; retro nie uruchomiło review diffu `fe0a400..2d7cfaa`. Odbiór na UM760 nie pokazał błędów hosta shella (0× `navigationBlocked`, `newWindowBlocked`, `webViewProcessFailed`), więc ryzyko dotyczy struktury, nie zachowania. Jedno `bmad-review` tych plików przed pierwszą story, która zmienia most albo `tokens.css`.
 owner: pierwsza story, która zmienia `ShellBridge`, `ShellOutbox`, `ShellWindow` albo `tokens.css` (plan epiki 5 ich nie zmienia, 2026-10-26)
+note: 2026-10-30 Pierwszą kandydatką jest epic-netflix-dpad, wpis 21; jego plan zapisuje, czy warunek zaszedł.
 status: open
 
 ### DW-36: `MissingHostPort` odpowiada `CommandFailed{ errorCode: unexpected }`, więc każdy OK na kafelku bez hosta daje `warn commandFailed`, nieodróżnialny od prawdziwej awarii.
@@ -492,6 +494,7 @@ origin: spec-deferred 3886f76d6600
 location: src/MediaStation.Core/Input/InputPolicy.cs
 source_spec: `tickets/epic-windows-audio/tickets/bug-jedno-nacisniecie-home-daje-pojedyncza-akcje-i-pojedyncze-sh-plan.md`
 reason: Dziennik z S10 (UM760, 2026-10-28, 14:05:00 i 14:05:21) pokazuje dwa osobne naciśnięcia, każde z jedną akcją i jednym ShowShell. Jeśli podwójny przebieg ma inne źródło (pad, HID, echo), błąd zostanie; rozstrzyga ponowny odbiór S10 na UM760.
+owner: odbiór epic-netflix-dpad na UM760 (jedno Home na `/watch`), decyzja inception 2026-10-30
 status: open
 
 ### DW-52: BrowserHost attaches CDP to the first `type: page` target in `/json/list`, not specifically the `about:blank` page it launched, so an extra Edge page target listed first (WebUI, restored tab) would
@@ -536,8 +539,8 @@ source_spec: `tickets/epic-browserhost/tickets/story-binding-po-nawigacji-i-reco
 severity: medium
 reason: Real, not caused by this change: before 6.3 a drop lost binding and script for good. Recovery would need `Page.reload` or `Runtime.evaluate`, both excluded by AD-1 and this story's Never list, or a `hello` watchdog after `cdpReconnected` that turns a silent page into `CdpLost`/Failed. Netflix is a single-page app, so main-frame navigations are rare and the window can be long. Settle as a product decision: either a post-reconnect hello watchdog (needs a page message on the new session, see the item above) or an AD-1 amendment allowing one reload after reconnect.
 decision: 2026-10-30 Cichy reload po dowodzie: po reconnekcie host porównuje `loaderId` głównej ramki; inny dokument dostaje jeden `Page.reload`, a brak `hello` lub błąd daje `CdpLost` (AD-1, AD-10; `1baa513`). Użytkownik wybrał, kod do zbudowania.
-owner: story backlogu 22, warunek wejścia w epic-netflix-dpad, decyzja użytkownika 2026-10-30
-ticket: `_bmad-output/backlog/story-strona-po-podmianie-dokumentu-w-przerwie-cdp-odzyskuje-most.md`
+owner: epic-netflix-dpad, wpis 3 (dawna story backlogu 22), warunek wejścia, decyzja użytkownika 2026-10-30
+ticket: `_bmad-output/initiative-mediastation-mvp/tickets/epic-netflix-dpad/tickets/story-strona-po-podmianie-dokumentu-w-przerwie-cdp-odzyskuje-most.md`
 status: open
 
 ### DW-57: A browser root that holds the app profile but has no browser window (for example Edge kept alive in background mode) is not adopted, so a later start fails with ProfileInUse, and Close or Restart
@@ -555,12 +558,14 @@ source_spec: `tickets/epic-browserhost/tickets/story-refactor-sweep-plan.md`
 severity: low
 reason: Pre-existing, not caused by this change. StopApp handling in DevHarnessHostPort.cs (~L141) posts ProcessExited unconditionally, and its watcher (~L432) posts its own. The dev harness is opt-in (MEDIASTATION_DEV_HARNESS=1), and the accepted epic-5 checks use it, so 6.8 left it unchanged. Fix by mirroring the BrowserHost rule: one exit report per process, with Stop posting only CommandCompleted after a watcher report.
 note: 2026-10-30 Odbiór epic-browserhost przeszedł bez harnessu (`devHarnessEnabled:0`), więc gałąź `web` harnessu nie jest już potrzebna do odbioru Netflixa; `moonlight` nadal z niej korzysta do czasu epic-moonlight-native. Przed naprawą tego wpisu rozważyć wycofanie gałęzi `web` zamiast jej poprawiania.
+owner: epic-netflix-dpad, wpis 5 (wycofanie gałęzi `web` i jedno wyjście na proces), decyzja inception 2026-10-30
 status: open
 
 ### DW-59: Verify full display frequency/bits and visual black/static absence on a host where EnumDisplaySettings is available during whole-epic UM760 acceptance.
 origin: migrated from legacy ledger ("n/a"), 2026-10-30; source plan `_bmad-output/initiative-mediastation-mvp/tickets/epic-windows-audio/tickets/bug-uruchomienie-netflixa-przez-kafelek-wywoluje-cykliczne-zaniki-obrazu-plan.md`
 location: n/a
 reason: Automated smoke on UM760 reports reliable monitor width/height but EnumDisplaySettings frequency/bits are unavailable; visual stability (no black/static flicker when launching Netflix from the tile) remains a manual whole-epic check.
+owner: odbiór epic-netflix-dpad na UM760, decyzja inception 2026-10-30; ten sam objaw co bug 23 (backlog)
 status: open
 
 ### DW-60: The startup ReportCurrent from the window-manager thread can be dropped, because the port starts before the loop is assigned to postsTo.
@@ -569,6 +574,7 @@ location: src/MediaStation.App/CompositionRoot.cs:269
 source_spec: `plan-dw-dw-orchestrator-window-result-loss.md`
 severity: medium
 reason: CompositionRoot.cs:267 posts through `postsTo?.Post`, :269 starts the thread, :288 assigns `postsTo`, so a report before that line is discarded. Five smoke runs had no startup foregroundChanged, which contradicts the AD-15 startup report. Read from the code; no test confirms the ordering. Pre-existing, not caused by DW-49. Without that report the first evaluation waits for the next real foreground change.
+owner: epic-netflix-dpad, wpis 16, decyzja inception 2026-10-30
 status: open
 
 ### DW-61: Raising the shell with SetForegroundWindow changes the foreground without a foregroundChanged for the shell.
@@ -576,6 +582,7 @@ origin: spec-deferred 706c62fba7f2
 location: src/MediaStation.App/Platform/Window/WinEventForegroundHook.cs
 source_spec: `plan-dw-dw-orchestrator-window-result-loss.md`
 reason: Seen in three smoke runs. In the final one (pid 22872) GetForegroundWindow returned the shell after the raise, and foregroundGate at 15:17:18 reported the shell as managed, yet the log has no foregroundChanged for it: the only entries are the helper form at 15:17:15 and a foreign window at 15:17:25 after the form closed. Cause not investigated; the hook code was not changed. Settled by a repeatable run comparing GetForegroundWindow with the hook's entries for each raise, including a real Alt+Tab, since only SetForegroundWindow from a script was seen. Recovery in DW-49 depends on observations, so a missed event delays it.
+owner: epic-netflix-dpad, wpis 16, decyzja inception 2026-10-30
 status: open
 
 ### DW-62: Display-state signals seen 2.7 to 9.8 s after the app started were reported as winning systemResumed, and their cause is unknown, so they may be false wakes that this fix does not stop.

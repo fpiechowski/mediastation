@@ -1,10 +1,10 @@
 ---
-id: 22
+id: 3
 type: story
 title: "Strona, której dokument podmienił się w przerwie CDP, odzyskuje most albo kafelek przechodzi w Failed"
-parent: none
-covers: []
-after: [20]
+parent: epic-netflix-dpad
+covers: [R15]
+after: [2]
 assignee: ""
 refined: true
 hitl: false
@@ -47,9 +47,9 @@ Dokument załadowany w trakcie przerwy CDP nie ma PageRuntime, a host raportuje 
    **Then** host tylko zapisuje dokument jako odniesienie, bez porównania i bez reloadu
 
 6. **Zachowanie Netflixa po reloadzie jest zmierzone** (AD-5, AD-10)
-   **Given** Netflix na `/watch`, zalogowany profil, bieżąca maszyna
-   **When** aplikacja jest w `Background` z pauzą i dostaje cichy reload
-   **Then** plan zapisuje wynik: czy odcinek wznawia się bez OK, czy pozycja zostaje oraz jak często Netflix nawiguje przy wybudzeniu
+   **Given** Netflix na `/watch`, zalogowany profil, bieżąca maszyna, okno zminimalizowane z pauzą ustawioną sondą, bo krok `pause` produktu powstaje we wpisie 17
+   **When** sonda wykonuje cichy reload
+   **Then** plan zapisuje wynik: czy odcinek wznawia się bez OK i czy pozycja zostaje; częstotliwość nawigacji przy wybudzeniu i powtórka ścieżką produktu należą do odbioru epiki
 
 ## Boundaries
 
@@ -59,6 +59,7 @@ Dokument załadowany w trakcie przerwy CDP nie ma PageRuntime, a host raportuje 
 
 ## References
 
+- parent — _bmad-output/initiative-mediastation-mvp/tickets/epic-netflix-dpad/epic-netflix-dpad.md, R15
 - architecture — _bmad-output/initiative-mediastation-mvp/architecture-mediastation/architecture-mediastation.md, AD-1 (`Page.reload` tylko po dowodzie), AD-5, AD-10 (Dokument podmieniony w trakcie przerwy CDP)
 - ledger — _bmad-output/initiative-mediastation-mvp/deferred-work.md, DW-56
 - probe — _bmad-output/initiative-mediastation-mvp/architecture-mediastation/probes/dw56-frame-tree-probe.mjs, punkt wyjścia żywego smoke'a
@@ -68,8 +69,9 @@ Dokument załadowany w trakcie przerwy CDP nie ma PageRuntime, a host raportuje 
 ## Notes
 
 - Decision: użytkownik wybrał cichy reload (wątek Winstona, 2026-10-30).
-- Decision: możliwe wznowienie odtwarzania bez OK po reloadzie to wyjątek od AD-5, zaakceptowany pod warunkiem pomiaru. Jeśli pomiar z kryterium 6 pokaże wznowienie bez OK, PO pokazuje wynik użytkownikowi, zanim oznaczy story jako `done`; wynik pomiaru nie zmienia zachowania w tej story (użytkownik, 2026-10-30).
-- Decision: story jest warunkiem wejścia w epic-netflix-dpad, obok story 20, i idzie po niej, bo dotyka tego samego kodu (użytkownik, 2026-10-30).
-- Decision: story leży w backlogu, poza epikiem 6; odbiór tej epiki nie oczekuje tego zachowania (2026-10-30).
+- Decision: możliwe wznowienie odtwarzania bez OK po reloadzie to wyjątek od AD-5, zaakceptowany pod warunkiem pomiaru. Wynik pomiaru nie zmienia zachowania w tej story (użytkownik, 2026-10-30). Bramka „PO przed `done`” jest zastąpiona: wynik idzie do planu i handoffu epiki, a użytkownik widzi go przy odbiorze (Notes epiki, 2026-10-30).
+- Decision: story jest warunkiem wejścia w epic-netflix-dpad, obok wpisu 2 (dawna story 20), i idzie po nim, bo dotyka tego samego kodu (użytkownik, 2026-10-30).
+- Decision: story jest poza epikiem 6; odbiór tamtej epiki nie oczekuje tego zachowania (2026-10-30).
 - Ryzyko wysokie: reload przerywa odtwarzanie, jeśli wykrycie się pomyli. Dodatkowe sprawdzenie poza kryteriami: żywy smoke na Edge, w którym `pushState` i udany reconnect nie dają `Page.reload`, oraz mutacja każdej gałęzi z kryteriów 1–4, która oblewa własny test.
-- Weryfikacja: maszynę ustala się przed pracą (reguła „Current machine” w `AGENTS.md`). Bez zalogowanego Netflixa lub ekranu kryterium 6 oznacza się jako nie dotyczy z powodem, a PO zbiera pomiar z użytkownikiem przed `done`.
+- Weryfikacja: maszynę ustala się przed pracą (reguła „Current machine” w `AGENTS.md`). Bez zalogowanego Netflixa lub ekranu kryterium 6 oznacza się jako nie dotyczy z powodem, a pomiar przechodzi do odbioru epiki na UM760.
+- Decision: przeniesiona z backlogu (id 22) do epic-netflix-dpad jako wpis 3, żeby `after` egzekwował warunek wejścia; zależność od story 20 to teraz `after: [2]` (2026-10-30).

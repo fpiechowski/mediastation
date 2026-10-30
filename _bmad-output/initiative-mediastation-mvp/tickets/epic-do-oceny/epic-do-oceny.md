@@ -42,3 +42,4 @@ Eliza ma powód, żeby woleć MediaStation od VIDAA: ocenia obejrzany tytuł tel
 - Decision: linię success CAP-6 „nowa karta nie kradnie fokusu” weryfikuje ta epika (2026-10-18).
 - Decision: buforowanie faktów `playback` w Orchestratorze do `StoreLoaded` (AD-12) dostarcza ta epika, nie epic-orchestrator-lifecycle; z epiki 2 bierze tylko `TimerElapsed` (inception epiki 2, 2026-10-21).
 - Waits on epic-netflix-dpad because: fakty `playback` z `title` serialu, `seriesId`, `lastInSeason`, `position`, `duration`.
+- Decision: fakt `playback` z niepoprawnym `duration` dociera do Orchestratora (kafelek potrzebuje tytułu), a bramkę „`duration` skończona i > 0” z AD-7 trzyma `RatingPolicy` tej epiki (inception epic-netflix-dpad, 2026-10-30).

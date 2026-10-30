@@ -1,0 +1,303 @@
+# Netflix by D-pad — entries w kolejności budowy. tickets.py reads it.
+# Maszyna inception: UM760 (MEDIASTATION / F7BSI / EliteMini Series).
+# Pomiar: 1 (w tle) → 24. Warunki wejścia: 2 → 3. Tracer: 6 → 7, po 3, 4 i 5; dalej jeden tor 8 → 23. 25 sweep.
+
+[[entry]]
+id = 1
+type = "spike"
+title = "Start wielogodzinnego pomiaru pauzy Netflixa"
+description = "Buduje runner pomiaru i uruchamia go w tle tak, że przeżywa koniec sesji i usunięcie worktree: jednorazowe zadanie harmonogramu, pliki poza worktree, blokada uśpienia, własna kopia profilu. Warianty idą po kolei, bo plan Netflixa ma 2 ekrany, każdy co najmniej 3–4 h; jeden z nich to ścieżka produktu, `video.pause` i `SW_SHOWMINNOACTIVE` pod `--kiosk`. Start wariantu wymaga okna na pierwszym planie, więc runner trzyma wtedy plik blokady poza worktree, a przed zamknięciem wariantu przechodzi na `/browse`, żeby nie zająć ekranu planu. Story kończy się na krótkim przebiegu dowodowym i działającym zadaniu, a wynik odczytuje wpis 24. Nie dotyka BrowserHost."
+verify = "Krótki przebieg na bieżącej maszynie zapisuje do pliku poza worktree wariant, czas, `video.paused`, `currentTime` przed i po, ekran i błąd oraz tworzy i zwalnia plik blokady; harmonogram zadań pokazuje zadanie pełnego pomiaru. Gdy kopia profilu nie odtwarza albo maszyna nie ma sesji Netflixa: nie dotyczy z powodem, a pełny pomiar przechodzi do odbioru na UM760."
+covers = ["R12"]
+after = []
+hitl = false
+risk = "high"
+references = ["spec-mediastation/spec-mediastation.md, Open Questions (pauza wielogodzinna)", "research-browser-control-for-streaming-services/digests/spike-um760.md, claim S8", "architecture-mediastation/architecture-mediastation.md, AD-1, AD-5"]
+
+[[entry]]
+id = 2
+type = "story"
+title = "BrowserHost i jego testy są podzielone na pliki tematyczne bez zmiany zachowania"
+description = "Warunek wejścia, dawna story backlogu 20: rozdziela `BrowserHost.cs` i `BrowserHostTests.cs` na pliki tematyczne, zanim ta epika rozszerzy ten kod. Treść w pliku story."
+verify = "Kryteria pliku story: te same testy pod tymi samymi nazwami, Release z 0 ostrzeżeń, żywe smoke'i z kodem 0, żaden plik kodu hosta ponad 600 linii i testów ponad 1000."
+covers = []
+after = []
+hitl = false
+risk = "medium"
+references = ["epic-browserhost/epic-browserhost-retrospective.md, F1, A2"]
+
+[[entry]]
+id = 3
+type = "story"
+title = "Strona, której dokument podmienił się w przerwie CDP, odzyskuje most albo kafelek przechodzi w Failed"
+description = "Warunek wejścia, dawna story backlogu 22, DW-56: po reconnekcie inny dokument dostaje jeden `Page.reload`, a brak `hello` albo błąd daje `CdpLost`. Bez tego D-pad może trafić na stronę bez mostu, raportowaną jako zdrowa. Treść w pliku story; wynik pomiaru kryterium 6 idzie do planu i handoffu epiki."
+verify = "Kryteria pliku story, w tym żywy smoke, w którym `pushState` i udany reconnect nie dają `Page.reload`. Bez zalogowanego Netflixa kryterium 6 ma nie dotyczy z powodem, a pomiar przechodzi do odbioru na UM760."
+covers = ["R15"]
+after = [2]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-1, AD-5, AD-10", "deferred-work.md, DW-56"]
+
+[[entry]]
+id = 4
+type = "spike"
+title = "Transport host → strona bez `Runtime.enable`"
+description = "Rozstrzyga pozycję Deferred „Transport host → page”. Sonda na prawdziwym Netflixie sprawdza `Runtime.evaluate` bez `Runtime.enable` przy oknie widocznym i zminimalizowanym oraz dostęp do `deliver` bez nowego globala na stronie. Wynik zapisuje poprawkę listy metod w AD-1, kształt i termin potwierdzenia `pause` w AD-7 i AD-14 oraz czy wiersz Deferred o porównaniu dokumentu przy adopcji zostaje."
+verify = "Plan spike'a ma pomiary obu stanów okna i `navigator.webdriver=false`; AD-1, AD-7 i AD-14 mają wynik, a wiersz Deferred jest zamknięty. Bez sesji Netflixa sonda sprawdza mechanizm na lokalnej stronie w tej samej przeglądarce, plan to nazywa, a powtórka na Netflixie przechodzi do wpisu 7. Gdy żaden wariant nie przejdzie, plan to nazywa i kieruje zmianę do `bmad-architecture`."
+covers = ["R10"]
+after = []
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-1, AD-7, AD-14, Deferred (Transport host → page)", "research-browser-control-for-streaming-services/digests/spike-um760.md, claims S6, S8"]
+
+[[entry]]
+id = 5
+type = "story"
+title = "Dev harness przestaje uruchamiać aplikacje `web` i raportuje jedno wyjście na proces"
+description = "Kafelek `web` zawsze idzie przez BrowserHost, bo przez harness strona nie ma PageRuntime i D-pad nie miałby dokąd pójść; `MEDIASTATION_DEV_HARNESS=1` zostaje tylko dla `moonlight`. `Stop` po raporcie watchera wysyła samo `CommandCompleted` (DW-58). Cel `edge` w `tools/check-home-s10.ps1` przechodzi na BrowserHost, bo to jedyny skryptowy dowód Home nad Edge; `chrome` i `tools/check-web-start.ps1` przechodzą albo znikają z zapisanym powodem."
+verify = "`dotnet test` pokrywa wybór hosta `web` z ustawioną zmienną harnessu i `Stop` po wyjściu bez drugiego `ProcessExited`. `tools/check-home-s10.ps1` z celem `edge` i `tools/check-moonlight-return.ps1` przechodzą na bieżącej maszynie albo mają nie dotyczy z powodem; zmienione skrypty mają wynik przebiegu w planie."
+covers = ["R17"]
+after = []
+hitl = false
+risk = "medium"
+references = ["deferred-work.md, DW-58 (note 2026-10-30)", "epic-windows-audio/epic-windows-audio.md, Notes (dev harness)", "spec-mediastation/spec-mediastation.md, Success signal"]
+
+[[entry]]
+id = 6
+type = "story"
+title = "Action z pilota dociera do strony transportem host → strona"
+description = "Pierwszy odcinek tracera: w `app` + `web` Orchestrator zamienia strzałki (`press` i `repeat`) oraz OK na komendę fire-and-forget do hosta, jak `SendKey`, a host dostarcza `action` transportem z wpisu 4 do logującego handlera PageRuntime. `Home`, `Back` i `Keyboard` nie idą tą drogą (bramka `Keyboard` zostaje w epic-osk, DW-17). Akcja w przerwie CDP jest odrzucona z wpisem w logu, nie buforowana. Komunikat i komenda są rekordami Core ze schematem i typami TS (AD-16). Strażnik z testów, który zakazuje literału `Runtime.evaluate` w `src`, zawęża się do jednego pliku transportu."
+verify = "`dotnet test` pokrywa gałąź Orchestratora, brak `Home`, `Back` i `Keyboard` na stronie, odrzucenie przy przerwie CDP i zawężonego strażnika; `npm test` pokrywa handler. Na bieżącej maszynie żywa strona loguje odebrany `action` przy zminimalizowanym i widocznym oknie; bez przeglądarki nie dotyczy z powodem."
+covers = ["R10"]
+after = [3, 4, 5, "3.5", "6.6"]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-1, AD-7, AD-8, AD-10, AD-16", "epic-netflix-dpad/epic-netflix-dpad.md, Constraints"]
+
+[[entry]]
+id = 7
+type = "story"
+title = "Tracer: D-pad przesuwa fokus po `/browse`, a OK otwiera kartę"
+description = "Domyka tracer: PageRuntime przekazuje `action` ServiceDriverowi `netflix`, fokus z `focus-ring-injected` przesuwa się po kartach jednego rzędu, a OK otwiera kartę. Bundle zawiera driver (`main.ts`), a Stack i AD-13 Tests zapisują środowisko DOM dla Vitesta. Pierwszy fixture `/browse` trafia do publicznego repo razem z testem, który odrzuca fixture z zabronioną treścią."
+verify = "`npm test` pokrywa runtime, driver i strażnika fixture'ów; `build-page` daje bundle z driverem. Na bieżącej maszynie z sesją Netflixa log ma przekazany `action`, a sonda pokazuje ruch fokusu i otwartą kartę; bez sesji nie dotyczy z powodem."
+covers = ["R2"]
+after = [6]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-6, AD-13 (Tests), Stack", "ux-mediastation/DESIGN.md, focus-ring-injected", "research-browser-control-for-streaming-services/digests/spike-um760.md, claim S6"]
+
+[[entry]]
+id = 8
+type = "story"
+title = "Driver rozpoznaje ekrany Netflixa na oczyszczonych fixture'ach DOM"
+description = "ServiceDriver rozpoznaje `profiles`, `browse`, `modal`, `title`, `search`, `watch`, `limit` i `error` i wysyła `screen{name, root}` po każdej zmianie; nierozpoznany ekran, np. logowanie, zgłasza się jak `error`. `PageProtocol.Parse` przestaje odrzucać wszystko poza `hello`, a host przyjmuje `screen`. Fixture'y powstają ze zrzutu sondą spike'a, oczyszczonego pod test strażnika. `limit` i `error` nie dają się wywołać bez nadzoru, więc te dwa są odtworzone ręcznie, oznaczone w pliku i sprawdzane w odbiorze."
+verify = "`npm test` ma przypadek na każdy ekran i na `root`, a strażnik przechodzi na wszystkich fixture'ach; `dotnet test` pokrywa przyjęcie, log `screen` i odrzucenie niepoprawnego kształtu. Żywy przebieg ekranów na bieżącej maszynie albo nie dotyczy z powodem."
+covers = ["R1"]
+after = [7]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-6, AD-7, AD-16", "research-browser-control-for-streaming-services/digests/spike-um760.md, claim S6 (selektory)", "../../spike/harness/commands.mjs"]
+
+[[entry]]
+id = 9
+type = "story"
+title = "Silnik fokusu: rzędy, modal, powtarzanie i kursor"
+description = "PageRuntime prowadzi fokus po rzędach i kartach z przewijaniem karuzeli, zawęża go do otwartego modalu z pierwszeństwem akcji, ignoruje surowe zdarzenia klawiszy i chowa kursor w bezruchu, a fizyczna mysz dalej działa (AD-8). Trzymana strzałka działa jak kolejne naciśnięcia, bo `action` nie ma fazy. Podświetlenie bierze promień elementu docelowego, bez skali i zmiany układu strony."
+verify = "`npm test` na fixture'ach pokrywa ruch w czterech kierunkach, granice rzędów, zakres modalu, serię strzałek, ignorowanie surowych klawiszy, ukrycie kursora i brak zmiany układu. Żywy przebieg po `/browse` na bieżącej maszynie albo nie dotyczy z powodem."
+covers = ["R2"]
+after = [8]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-6, AD-8", "ux-mediastation/DESIGN.md, focus-ring-injected", "ux-mediastation/EXPERIENCE.md, Key Flows J1, reguły fokusu w Netflixie"]
+
+[[entry]]
+id = 10
+type = "story"
+title = "Fokus dociera do nagłówka, pola wyszukiwania i wyników"
+description = "Silnik obejmuje nagłówek, ikonę i pole wyszukiwania oraz siatkę wyników, bo J3 i epic-osk od nich zaczynają. Fokus nad polem tekstowym nie wywołuje `el.focus()`: dopiero OK wchodzi w pole, żeby przejście D-padem nie otwierało OSK."
+verify = "`npm test` na fixture'ach `browse` i `search` pokrywa drogę do pola, brak `focusin` przed OK, wejście po OK i ruch po wynikach. Żywy przebieg na bieżącej maszynie albo nie dotyczy z powodem."
+covers = ["R2"]
+after = [9]
+hitl = false
+risk = "medium"
+references = ["ux-mediastation/EXPERIENCE.md, Key Flows J3", "epic-osk/epic-osk.md, Done when 1", "research-browser-control-for-streaming-services/digests/spike-um760.md, claim S6 (wyszukiwanie)"]
+
+[[entry]]
+id = 11
+type = "story"
+title = "Fokus na profilu bez wyboru oraz na głównej akcji `limit` i `error`"
+description = "Na `profiles` driver stawia fokus na ostatnio używanym profilu, a bez niego na pierwszym, i nigdy go nie wybiera, także po wybudzeniu, które wraca na ten ekran. Na `limit` i `error` fokus trafia na główną akcję ekranu, bez UI MediaStation."
+verify = "`npm test` na fixture'ach pokrywa profil z zapamiętaniem i bez, brak kliknięcia oraz główną akcję `limit` i `error`. Na bieżącej maszynie `tools/inject-power.ps1` daje odnowienie sesji, a fokus stoi na profilu; bez sesji Netflixa nie dotyczy z powodem, a prawdziwe uśpienie należy do odbioru."
+covers = ["R3"]
+after = [10]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-6, AD-10", "ux-mediastation/EXPERIENCE.md, stany Profile gate, Limit, Błąd", "research-browser-control-for-streaming-services/digests/spike-um760.md, claim S7 i S8 (wybudzenie)"]
+
+[[entry]]
+id = 12
+type = "story"
+title = "Back jak na TV: `backResult`, limit 500 ms i wyjście na Home"
+description = "Back w `app` + `web` idzie do strony. Driver stosuje regułę ekranów: `watch` cofa historię, a przy `history.length == 1` przechodzi na `/browse`, `modal` i `title` zamykają, `search` wraca na `browse`, a `browse`, `profiles`, `limit` i `error` są `root` i odpowiadają `handled:false`. Czysta funkcja `BackPolicy` w Core decyduje o wyjściu na ekran główny tylko po `handled:false` albo po ~500 ms; termin jest `TimerElapsed`, a odpowiedź ze starym `id` nic nie zmienia. Gałąź `moonlight` dokłada do niej epic-moonlight-native."
+verify = "`npm test` pokrywa regułę każdego ekranu i fallback `/browse`; `dotnet test` na `FakeTimeProvider` pokrywa `handled:true`, `handled:false`, timeout i odpowiedź ze starym `id`. Żywy przebieg Back na bieżącej maszynie albo nie dotyczy z powodem."
+covers = ["R4", "R10"]
+after = [11]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-3, AD-7, AD-14", "ux-mediastation/EXPERIENCE.md, tabela Back", "research-browser-control-for-streaming-services/digests/spike-um760.md, claim S7"]
+
+[[entry]]
+id = 13
+type = "story"
+title = "Klawisze na `/watch`: OK pauzuje i wznawia, strzałki przewijają o 10 s"
+description = "Na `watch` OK przełącza pauzę i odtwarzanie, a lewo i prawo przewijają o 10 s przez `trustedKey`, także przy trzymanej strzałce. Góra i dół nic nie robią. Host wykonuje przez CDP `Input.dispatchKeyEvent` tylko klawisze z zamkniętej listy, bo strona jest cudza; każdy inny `trustedKey` odrzuca i loguje."
+verify = "`npm test` pokrywa zachowanie klawiszy na `watch`; `dotnet test` pokrywa listę dozwolonych klawiszy i odrzucenie innego. Na bieżącej maszynie z sesją Netflixa `currentTime` zmienia się o ~10 s, a OK zmienia `video.paused`; bez sesji nie dotyczy z powodem."
+covers = ["R5"]
+after = [12]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-1, AD-7", "ux-mediastation/EXPERIENCE.md, Key Flows J2, reguły fokusu w Netflixie", "research-browser-control-for-streaming-services/digests/spike-um760.md, claim S6"]
+
+[[entry]]
+id = 14
+type = "story"
+title = "Na `/watch` OK pomija czołówkę i przechodzi do następnego odcinka"
+description = "Spec wymaga, żeby D-pad wystarczał do każdej akcji, a wieczór z serialem spotyka te dwa przyciski. Gdy Netflix pokazuje przycisk pominięcia czołówki albo następnego odcinka, driver stawia na nim fokus, a OK aktywuje go zamiast pauzy; po zniknięciu przycisku OK znów pauzuje."
+verify = "`npm test` na fixture'ach pokrywa oba przyciski, pierwszeństwo przed pauzą i powrót do pauzy. Żywy przebieg na odcinku serialu na bieżącej maszynie albo nie dotyczy z powodem, a sprawdzenie zostaje w odbiorze."
+covers = ["R5"]
+after = [13]
+hitl = false
+risk = "medium"
+references = ["spec-mediastation/spec-mediastation.md, Constraints (D-pad wystarcza do każdej akcji)", "ux-mediastation/EXPERIENCE.md, Key Flows J2"]
+
+[[entry]]
+id = 15
+type = "story"
+title = "Fakty `playback` trafiają do Orchestratora w kształcie AD-7"
+description = "Driver wysyła `playback` przy każdej zmianie `state` i co ~30 s w `playing`, z polami AD-7: przy odcinku `title` to tytuł serialu, a `seriesId` jest obecne, gdy da się je ustalić. Host odrzuca niepoprawny kształt i przekazuje fakt do Orchestratora, także z jeszcze nieznanym `duration`, bo tytuł jest potrzebny kafelkowi; bramka `duration` dla `RatingPolicy` należy do epic-do-oceny."
+verify = "`npm test` pokrywa film, odcinek, `lastInSeason`, `null` w polach opcjonalnych i rytm 30 s; `dotnet test` pokrywa przyjęcie, odrzucenie niepoprawnego kształtu i przejście faktu z `duration` równym 0. Na bieżącej maszynie z sesją Netflixa log ma fakt z prawdziwymi metadanymi filmu i odcinka; bez sesji nie dotyczy z powodem."
+covers = ["R6"]
+after = [14]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-7, AD-12, AD-16", "epic-do-oceny/epic-do-oceny.md, Notes (Waits on)"]
+
+[[entry]]
+id = 16
+type = "story"
+title = "Orchestrator widzi pierwszy plan od startu i po podniesieniu shella"
+description = "Ścieżka pauzy przy przełączeniu z zewnątrz zależy od obserwacji foreground, więc obie dziury idą przed nią. Raport startowy nie ginie przed podłączeniem pętli (DW-60). Podniesienie shella przez `SetForegroundWindow` i prawdziwy Alt+Tab dają wpis `foregroundChanged` albo plan nazywa powód, dla którego go nie ma (DW-61)."
+verify = "`dotnet test` przypina kolejność raportu startowego względem pętli. Powtarzalny przebieg na bieżącej maszynie porównuje `GetForegroundWindow` z wpisami hooka dla każdego podniesienia; przebieg z prawdziwym Alt+Tab na bieżącej maszynie albo nie dotyczy z powodem."
+covers = ["R16"]
+after = [5, 15]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-5 (Przełączenie z zewnątrz), AD-15", "deferred-work.md, DW-60, DW-61"]
+
+[[entry]]
+id = 17
+type = "story"
+title = "Każde opuszczenie Netflixa zatrzymuje odtwarzanie, a OK je wznawia"
+description = "Opuszczenie aplikacji `web` wysyła `pause` przed `mute` i `minimize` na każdej ścieżce: Home, start innej aplikacji, przełączenie z zewnątrz, Back z `handled:false` albo po terminie, adopcja żywej przeglądarki i wybudzenie, gdzie `pause` idzie po odnowieniu sesji. Brak potwierdzenia ani przerwa CDP nie blokują Home; termin z wpisu 4 jest `TimerElapsed`. Powrót zastaje odcinek na pauzie, a OK na zapauzowanym `/watch` robi `video.play()`. `resume` jest obsłużone na stronie, ale Orchestrator go nie wysyła."
+verify = "`dotnet test` ma test kolejności komend na każdą ścieżkę, zerwane CDP i timeout bez blokady Home; `npm test` pokrywa pauzę i OK na zapauzowanym `watch`. Na bieżącej maszynie z sesją Netflixa: Home, powrót, `video.paused` prawdziwe, OK wznawia; bez sesji nie dotyczy z powodem."
+covers = ["R7"]
+after = [16, "5.3"]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-5, AD-10, AD-14", "epic-windows-audio/epic-windows-audio.md, R7", "ux-mediastation/EXPERIENCE.md, tabela Back", "research-browser-control-for-streaming-services/digests/spike-um760.md, claim S8"]
+
+[[entry]]
+id = 18
+type = "story"
+title = "`page-error` przeładowuje `/watch/<id>` bez samodzielnego wznowienia"
+description = "Po `page-error`, np. D7361 po długim czasie w tle, driver przeładowuje `/watch/<id>` z zachowaną pozycją, bez UI MediaStation. Przeglądarka działa z `--autoplay-policy=no-user-gesture-required`, więc driver po przeładowaniu przywraca pauzę, bo odtwarzanie wznawia tylko OK. Wyjątek z AD-10 dotyczy wyłącznie reloadu z DW-56."
+verify = "`npm test` na fixture'ach pokrywa rozpoznanie błędu, reload na ten sam `/watch/<id>` i przywrócenie pauzy po przeładowaniu. Żywy reload na bieżącej maszynie albo nie dotyczy z powodem."
+covers = ["R8"]
+after = [17]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-1, AD-5, AD-10", "spec-mediastation/spec-mediastation.md, Constraints (odtwarzanie wznawia tylko OK)", "ux-mediastation/EXPERIENCE.md, stan `page-error`", "research-browser-control-for-streaming-services/digests/spike-um760.md, claim S8"]
+
+[[entry]]
+id = 19
+type = "story"
+title = "`prepareClose` przechodzi na `/browse` przed zamknięciem"
+description = "Zamknięcie i restart aplikacji `web` wysyłają `prepareClose`, a driver przechodzi na bezpieczną stronę `/browse` i odpowiada `closeReady`, żeby zamknięcie na `/watch` nie trzymało ekranu planu przez 1–2 min. Termin ~3 s liczy Orchestrator jako `TimerElapsed` (AD-14) i po nim albo przy przerwie CDP wysyła zamknięcie mimo to; story wyrównuje zapis w AD-7."
+verify = "`dotnet test` pokrywa `closeReady`, timeout 3 s na `FakeTimeProvider` i przerwę CDP; `npm test` pokrywa przejście drivera. Żywe zamknięcie z `/watch` na bieżącej maszynie albo nie dotyczy z powodem."
+covers = ["R9"]
+after = [18]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-7, AD-10, AD-14"]
+
+[[entry]]
+id = 20
+type = "story"
+title = "Strona zgłasza `textFocus` i przyjmuje `osk{active}`"
+description = "PageRuntime wysyła `textFocus{active}` na podstawie `focusin` i `focusout` pola tekstowego, Orchestrator zapamiętuje go dla aplikacji aktywnej, a nieaktywną ignoruje. Przy `osk{active:true}` pole dostaje styl `input-active`, a PageRuntime nie rysuje własnego fokusu; przy `active:false` fokus przechodzi na wyniki. Samo otwieranie OSK i bramka `Keyboard` należą do epic-osk (DW-17)."
+verify = "`npm test` pokrywa zdarzenia pola na fixture `search`, oba stany `osk` i przejście na wyniki; `dotnet test` pokrywa ignorowanie `textFocus` z aplikacji nieaktywnej. Wpisany tekst nie występuje w logu ani w komunikacie."
+covers = ["R13"]
+after = [19]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-7, AD-9", "epic-osk/epic-osk.md, Notes (Waits on)", "ux-mediastation/DESIGN.md, input-active", "ux-mediastation/EXPERIENCE.md, tabela Back (OSK)"]
+
+[[entry]]
+id = 21
+type = "story"
+title = "Kafelek w tle pokazuje tytuł wstrzymanej treści"
+description = "Snapshot dostaje pole tytułu z ostatniego faktu `playback`, a linia stanu `Background` kafelka web ma postać „W tle · <tytuł>, wstrzymane”. Bez tytułu zostaje linia z epic-home-screen. Jeśli zmiana dotknie `ShellBridge`, `ShellOutbox`, `ShellWindow` albo `tokens.css`, przed nią idzie jedno `bmad-review` tych plików (DW-35)."
+verify = "`dotnet test` pokrywa pole w snapshocie i kontrakt (AD-16); `npm test` w `web/shell` pokrywa linię z tytułem i bez niego. Plan zapisuje, czy warunek DW-35 zaszedł."
+covers = ["R14"]
+after = [20]
+hitl = false
+risk = "low"
+references = ["ux-mediastation/DESIGN.md, Stany kafelka", "architecture-mediastation/architecture-mediastation.md, AD-16", "deferred-work.md, DW-35"]
+
+[[entry]]
+id = 22
+type = "story"
+title = "Tryb `--smoke` uruchamia BrowserHost z regułą `appId` i raportem"
+description = "`StartDecision` przestaje odrzucać tryb Smoke: bez instancji głównej (mutex, AD-2) uruchamia prawdziwego BrowserHost i driver i kończy raportem z kodem 0 albo różnym od 0. `appId` z CLI podlega tej samej regule co w configu (F2 retro epic-foundation-contracts). Osobne kody wyjścia zostają w epic-deploy-resilience. Przebieg po stronie Netflixa dokłada wpis 23."
+verify = "`dotnet test` pokrywa decyzję startu, odrzucenie `--smoke \" \"` i `--smoke \"a b\"` oraz raport; `--smoke` z żywą instancją główną nie startuje. Start do `hello` na bieżącej maszynie albo nie dotyczy z powodem."
+covers = ["R11"]
+after = [21]
+hitl = false
+risk = "medium"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-2, AD-13 (Smoke)", "epic-foundation-contracts/epic-foundation-contracts-retrospective.md, F2", "epic-deploy-resilience/epic-deploy-resilience.md, Notes"]
+
+[[entry]]
+id = 23
+type = "story"
+title = "`--smoke netflix` przechodzi profil, odtwarzanie, pauzę i Back"
+description = "Smoke działa jak pilot: stawia fokus i wysyła `action{ok}` na podświetlonym profilu, bo reguła „nie wybieraj profilu” dotyczy produktu, nie testu. Odtwarza pierwszą kartę z `/browse`, bez tytułu zapisanego w repo. Wysokość obrazu i key system dostaje przez dodatkowy, wstecznie zgodny komunikat strony, dopisany do AD-7, bo `playback` ich nie niesie. Sprawdza ≥ 1080p bez błędu DRM, pauzę i regułę Back oraz loguje key system przy każdym przebiegu."
+verify = "`dotnet test` i `npm test` pokrywają przepływ i komunikat na fake'ach. `--smoke netflix` kończy się kodem 0 na UM760 z zalogowanym profilem; na innej maszynie albo bez sesji nie dotyczy z powodem, a przebieg należy do odbioru."
+covers = ["R11"]
+after = [22]
+hitl = false
+risk = "high"
+references = ["architecture-mediastation/architecture-mediastation.md, AD-1, AD-6, AD-7, AD-13 (Smoke, Hotfix drivera)", "spec-mediastation/spec-mediastation.md, CAP-8 success 2", "research-browser-control-for-streaming-services/digests/spike-um760.md, claims S3–S6", "../../spike/harness/commands.mjs"]
+
+[[entry]]
+id = 24
+type = "story"
+title = "Wynik pomiaru pauzy i fixture'y nowych ekranów błędu"
+description = "Odczytuje wynik pomiaru z wpisu 1, zapisuje go przy pytaniu otwartym epiki i usuwa zadanie harmonogramu. Nowe ekrany błędu dostają oczyszczone fixture'y i rozpoznanie w driverze. Wynik wymagający polityki w Core idzie jako change do `bmad-architecture` (Done when 4); wynik zgodny z AD-5 zamyka pytanie także w spec i architekturze."
+verify = "Plan ma tabelę wariantów z wynikiem, a `npm test` przechodzi z nowymi fixture'ami. Pomiar niedokończony albo nieudany: nie dotyczy z powodem, a pełny pomiar przechodzi do odbioru na UM760."
+covers = ["R12"]
+after = [1, 23]
+hitl = false
+risk = "medium"
+references = ["spec-mediastation/spec-mediastation.md, Open Questions (pauza wielogodzinna)", "architecture-mediastation/architecture-mediastation.md, AD-5, AD-10"]
+
+[[entry]]
+id = 25
+type = "story"
+title = "Refactor sweep"
+description = "Cleanup po wpisach 2–24, wyłącznie z odroczonych pozycji i findings review, z zamkniętą listą ID ustaloną na początku pracy. Scope wypchnięty z innej story staje się nowym wpisem."
+verify = "Każda pozycja listy ma dowód wykonania albo uzasadnienie odrzucenia; `dotnet test`, `dotnet build` i `npm test` przechodzą bez zmiany zachowania."
+covers = []
+after = [2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+hitl = false
+risk = "medium"
+references = ["epic-netflix-dpad/epic-netflix-dpad.md, Notes", "deferred-work.md, wpisy z `source_spec` tej epiki"]
