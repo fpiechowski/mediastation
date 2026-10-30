@@ -7,14 +7,5 @@
     "key": "2",
     "label": "Verify with physical remote first",
     "resolution": ""
-  },
-  "DW-4": {
-    "answered_at": "2026-10-28",
-    "bundle_name": "",
-    "effect": "keep-open",
-    "intent": "",
-    "key": "3",
-    "label": "Decide with epic-browserhost",
-    "resolution": ""
   }
 }
