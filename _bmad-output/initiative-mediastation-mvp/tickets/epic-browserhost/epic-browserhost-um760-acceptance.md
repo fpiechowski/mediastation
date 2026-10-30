@@ -270,6 +270,7 @@ Sesja: 2026-10-30, HEAD b041c5d, build 1.0.0+b041c5d, UM760 (MEDIASTATION, F7BSI
 | S5 | pass (2026-10-30, HEAD b041c5d) root R=16736, port 9222 tylko 127.0.0.1 | exit 0<br>F1: --kiosk, --remote-debugging-port=9222, bez --remote-allow-origins, --start-fullscreen, --start-maximized, --app=; listeners 127.0.0.1 |
 | S6 | pass (2026-10-30, HEAD b041c5d) | window since 2026-10-30T13:30:08.218Z until 2026-10-30T13:30:20.230Z; `msg=pageHello,data.appId=netflix,data.webdriver=false:>=1` want >=1, got 1; `msg=pageMessageRejected:0` want 0, got 0; forbid error,warn: 0 (allowed: msg=appIconMissing, 0)<br>`{"ts":"2026-10-30T13:30:17.865Z","level":"info","src":"browser","msg":"pageHello","data":{"appId":"netflix","service":"netflix","driverVersion":"0.0.0","webdriver":false}}` |
 | S7 | fail (2026-10-30, HEAD b041c5d) | exit 1; run log C:\Users\UYTKOW~1\AppData\Local\Temp\fp-s7.log |
+| S7 (rerun 1) | fail (2026-10-30, HEAD 539061b) powtórka; pierwszy wiersz to błąd narzędzia przed resetem, do zerwania wtedy nie doszło | exit 1; run log C:\Users\UYTKOW~1\AppData\Local\Temp\fp-s7b.log<br>`VERDICT FAIL` |
 | S8 | | |
 | S9 | | |
 | S10 | | |

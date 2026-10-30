@@ -79,6 +79,7 @@ namespace BrowserCdpReset {
 
 $MIB_TCP_STATE_DELETE_TCB = 12
 $ERROR_NOT_FOUND = 1168
+$ERROR_MR_MID_NOT_FOUND = 317
 $utf8 = New-Object System.Text.UTF8Encoding $false
 
 function Note { param([string]$Message) Write-Host ('{0} {1}' -f [DateTimeOffset]::UtcNow.ToString('HH:mm:ss.fff'), $Message) }
@@ -301,7 +302,8 @@ Remove-Item -LiteralPath $resultPath -Force
 Note ("SetTcpEntry DELETE_TCB: host row {0}, peer row {1}, elevated {2}" -f $reset.hostCode, $reset.peerCode, $reset.elevated)
 Add-Jsonl -Record ([ordered]@{ utc = [DateTimeOffset]::UtcNow.ToString('o'); stage = 'reset'; result = $reset })
 if ($reset.hostCode -ne 0) { Problem "SetTcpEntry on MediaStation's row returned $($reset.hostCode)." }
-if ($reset.peerCode -ne 0 -and $reset.peerCode -ne $ERROR_NOT_FOUND) { Problem "SetTcpEntry on the browser's row returned $($reset.peerCode)." }
+# With the host's row deleted, the reset has already taken the browser's: SetTcpEntry answers 1168 or 317 for the missing row.
+if ($reset.hostCode -eq 0 -and $reset.peerCode -notin @(0, $ERROR_NOT_FOUND, $ERROR_MR_MID_NOT_FOUND)) { Problem "SetTcpEntry on the browser's row returned $($reset.peerCode)." }
 if (@(Get-OwnedConnections -OwnerPid $appPid -RemotePort $Port | Where-Object { $_.LocalPort -eq $localPort }).Count -ne 0) { Problem "The connection from port $localPort is still established after the reset." }
 
 if ($problems.Count -eq 0) {
