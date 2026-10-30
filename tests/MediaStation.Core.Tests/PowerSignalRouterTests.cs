@@ -6,8 +6,8 @@ using Microsoft.Extensions.Time.Testing;
 namespace MediaStation.Core.Tests;
 
 /// <summary>
-/// Decyzja adaptera power wydzielona z shimu Win32: okno echa rejestracji <c>GUID_CONSOLE_DISPLAY_STATE</c>
-/// i mapowanie trzech źródeł na <see cref="PowerSignalReporter"/>. Fixture'y payloadu są zapisane literałami
+/// Decyzja adaptera power wydzielona z shimu Win32: echo rejestracji <c>GUID_CONSOLE_DISPLAY_STATE</c>
+/// (w oknie i po nim) i mapowanie trzech źródeł na <see cref="PowerSignalReporter"/>. Fixture'y payloadu są zapisane literałami
 /// (offsety 16/20 i bajty GUID Win32), tak jak w <see cref="DisplayStateNotificationTests"/>.
 /// </summary>
 public class PowerSignalRouterTests
@@ -51,8 +51,7 @@ public class PowerSignalRouterTests
     public void Display_state_after_registration_logs_and_posts_one_resume()
     {
         var (router, log, posted, _) = Create();
-        router.BeginRegistration();
-        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+        Registered(router);
 
         router.OnDisplayStateChanged(Payload(ConsoleDisplayStateBytes, DataLengthDword, data0: 1), ConsoleDisplayState);
 
@@ -111,8 +110,7 @@ public class PowerSignalRouterTests
     public void Display_off_or_dimmed_after_registration_is_ignored(byte data0)
     {
         var (router, log, posted, _) = Create();
-        router.BeginRegistration();
-        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+        Registered(router);
 
         router.OnDisplayStateChanged(Payload(ConsoleDisplayStateBytes, DataLengthDword, data0), ConsoleDisplayState);
 
@@ -124,8 +122,7 @@ public class PowerSignalRouterTests
     public void Other_power_setting_guid_after_registration_is_ignored()
     {
         var (router, log, posted, _) = Create();
-        router.BeginRegistration();
-        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+        Registered(router);
 
         router.OnDisplayStateChanged(Payload(OtherSettingBytes, DataLengthDword, data0: 1), ConsoleDisplayState);
 
@@ -137,8 +134,7 @@ public class PowerSignalRouterTests
     public void Zero_data_length_after_registration_is_ignored()
     {
         var (router, log, posted, _) = Create();
-        router.BeginRegistration();
-        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+        Registered(router);
 
         router.OnDisplayStateChanged(Payload(ConsoleDisplayStateBytes, DataLengthZero, data0: 1), ConsoleDisplayState);
 
@@ -150,8 +146,7 @@ public class PowerSignalRouterTests
     public void Data_length_other_than_a_dword_after_registration_is_ignored()
     {
         var (router, log, posted, _) = Create();
-        router.BeginRegistration();
-        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+        Registered(router);
 
         router.OnDisplayStateChanged(Payload(ConsoleDisplayStateBytes, DataLengthOne, data0: 1), ConsoleDisplayState);
 
@@ -163,8 +158,7 @@ public class PowerSignalRouterTests
     public void Payload_shorter_than_claimed_data_after_registration_is_ignored()
     {
         var (router, log, posted, _) = Create();
-        router.BeginRegistration();
-        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+        Registered(router);
         var full = Payload(ConsoleDisplayStateBytes, DataLengthDword, data0: 1);
 
         router.OnDisplayStateChanged(full.AsSpan(0, 20), ConsoleDisplayState);
@@ -207,6 +201,244 @@ public class PowerSignalRouterTests
         Assert.Equal(true, entry.Data!["powerModeChanged"]);
     }
 
+    [Fact]
+    public void Late_echo_inside_the_wait_is_consumed()
+    {
+        var (router, log, posted, time) = Create();
+        RegisteredAwaitingEcho(router);
+        time.Advance(TimeSpan.FromSeconds(1));
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        Assert.Equal(["powerSignalsRegistered"], log.Messages());
+        Assert.Empty(posted);
+    }
+
+    [Theory]
+    [InlineData(0)] // off
+    [InlineData(2)] // dimmed
+    public void Late_echo_off_or_dimmed_is_consumed_and_the_next_on_wins(byte data0)
+    {
+        var (router, log, posted, _) = Create();
+        RegisteredAwaitingEcho(router);
+
+        router.OnDisplayStateChanged(Payload(ConsoleDisplayStateBytes, DataLengthDword, data0), ConsoleDisplayState);
+        Assert.Equal(["powerSignalsRegistered"], log.Messages());
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        AssertOneDisplayResume(log, posted);
+    }
+
+    [Fact]
+    public void Echo_inside_the_window_means_the_next_on_wins_with_no_wait()
+    {
+        var (router, log, posted, _) = Create();
+        router.BeginRegistration();
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        AssertOneDisplayResume(log, posted);
+    }
+
+    [Theory]
+    [InlineData(0)] // off
+    [InlineData(2)] // dimmed
+    public void Off_or_dimmed_echo_inside_the_window_means_the_next_on_wins_with_no_wait(byte data0)
+    {
+        var (router, log, posted, _) = Create();
+        router.BeginRegistration();
+        router.OnDisplayStateChanged(Payload(ConsoleDisplayStateBytes, DataLengthDword, data0), ConsoleDisplayState);
+        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        AssertOneDisplayResume(log, posted);
+    }
+
+    [Fact]
+    public void Echo_wait_counts_from_complete_registration()
+    {
+        var (router, log, posted, time) = Create();
+        router.BeginRegistration();
+        time.Advance(PowerSignalRouter.EchoWait - TimeSpan.FromTicks(1));
+        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+        time.Advance(TimeSpan.FromSeconds(1));
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        Assert.Equal(["powerSignalsRegistered"], log.Messages());
+        Assert.Empty(posted);
+    }
+
+    [Fact]
+    public void Repeat_inside_the_window_is_dropped_too()
+    {
+        var (router, log, posted, _) = Create();
+        router.BeginRegistration();
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+
+        Assert.Equal(["powerSignalsRegistered"], log.Messages());
+        Assert.Empty(posted);
+    }
+
+    [Fact]
+    public void Wake_right_after_a_late_echo_wins()
+    {
+        var (router, log, posted, _) = Create();
+        RegisteredAwaitingEcho(router);
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        AssertOneDisplayResume(log, posted);
+    }
+
+    [Fact]
+    public void Without_echo_on_just_under_the_wait_is_treated_as_the_echo()
+    {
+        var (router, log, posted, time) = Create();
+        RegisteredAwaitingEcho(router);
+        time.Advance(PowerSignalRouter.EchoWait - TimeSpan.FromTicks(1));
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        Assert.Equal(["powerSignalsRegistered"], log.Messages());
+        Assert.Empty(posted);
+    }
+
+    [Fact]
+    public void Without_echo_on_at_exactly_the_wait_wins()
+    {
+        var (router, log, posted, time) = Create();
+        RegisteredAwaitingEcho(router);
+        time.Advance(PowerSignalRouter.EchoWait);
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        AssertOneDisplayResume(log, posted);
+    }
+
+    [Fact]
+    public void Echo_wait_is_five_seconds()
+    {
+        // Literał: granica wynika z uzasadnienia w planie DW-50, więc przypadkowa zmiana stałej ma być widoczna.
+        Assert.Equal(TimeSpan.FromSeconds(5), PowerSignalRouter.EchoWait);
+    }
+
+    [Fact]
+    public void Failed_registration_expects_no_echo()
+    {
+        var (router, log, posted, _) = Create();
+        router.BeginRegistration();
+        router.CompleteRegistration(displayState: false, windowHook: true, powerModeChanged: true);
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        AssertOneDisplayResume(log, posted);
+    }
+
+    [Fact]
+    public void Malformed_or_foreign_notification_during_the_wait_does_not_consume_the_echo()
+    {
+        var (router, log, posted, _) = Create();
+        RegisteredAwaitingEcho(router);
+
+        router.OnDisplayStateChanged(Payload(OtherSettingBytes, DataLengthDword, data0: 1), ConsoleDisplayState);
+        router.OnDisplayStateChanged(Payload(ConsoleDisplayStateBytes, DataLengthOne, data0: 1), ConsoleDisplayState);
+        router.OnDisplayStateChanged(On().AsSpan(0, 23), ConsoleDisplayState);
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        Assert.Equal(["powerSignalsRegistered"], log.Messages());
+        Assert.Empty(posted);
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        AssertOneDisplayResume(log, posted);
+    }
+
+    [Fact]
+    public void Malformed_or_foreign_notification_inside_the_window_is_not_the_echo()
+    {
+        var (router, log, posted, _) = Create();
+        router.BeginRegistration();
+        router.OnDisplayStateChanged(Payload(OtherSettingBytes, DataLengthDword, data0: 1), ConsoleDisplayState);
+        router.OnDisplayStateChanged(Payload(ConsoleDisplayStateBytes, DataLengthOne, data0: 1), ConsoleDisplayState);
+        router.OnDisplayStateChanged(On().AsSpan(0, 23), ConsoleDisplayState);
+        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        Assert.Equal(["powerSignalsRegistered"], log.Messages());
+        Assert.Empty(posted);
+    }
+
+    [Fact]
+    public void Resume_automatic_during_the_wait_reports_and_does_not_consume_the_echo()
+    {
+        var (router, log, posted, time) = Create();
+        RegisteredAwaitingEcho(router);
+
+        router.OnResumeAutomatic();
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        Assert.Equal(["powerSignalsRegistered", "powerSignal", "systemResumed"], log.Messages());
+        Assert.Equal(WakeSignalGate.ResumeAutomaticSource, log.Entries[1].Data!["source"]);
+        var resumed = Assert.IsType<SystemResumed>(Assert.Single(posted));
+        Assert.Equal(WakeSignalGate.ResumeAutomaticSource, resumed.Source);
+
+        // Po echu i po oknie bramki kolejne „on” jest już zwykłym wybudzeniem.
+        time.Advance(WakeSignalGate.Window);
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        Assert.Equal(WakeSignalGate.DisplayStateSource, log.Entries[^1].Data!["source"]);
+        Assert.Equal(2, posted.Count);
+    }
+
+    [Fact]
+    public void Power_mode_resume_during_the_wait_only_logs_and_does_not_consume_the_echo()
+    {
+        var (router, log, posted, _) = Create();
+        RegisteredAwaitingEcho(router);
+
+        router.OnPowerModeResumed();
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+
+        Assert.Equal(["powerSignalsRegistered", "powerSignal"], log.Messages());
+        Assert.Equal(PowerSignalRouter.PowerModeChangedSource, log.Entries[1].Data!["source"]);
+        Assert.Empty(posted);
+    }
+
+    /// <summary>Udana rejestracja bez echa: router czeka na echo.</summary>
+    private static void RegisteredAwaitingEcho(PowerSignalRouter router)
+    {
+        router.BeginRegistration();
+        router.CompleteRegistration(displayState: true, windowHook: true, powerModeChanged: true);
+    }
+
+    /// <summary>Udana rejestracja ze zużytym echem: kolejne notyfikacje idą już ścieżką po oknie.</summary>
+    private static void Registered(PowerSignalRouter router)
+    {
+        RegisteredAwaitingEcho(router);
+        router.OnDisplayStateChanged(On(), ConsoleDisplayState);
+    }
+
+    private static void AssertOneDisplayResume(RecordingLog log, List<IOrchestratorMessage> posted)
+    {
+        Assert.Equal(["powerSignalsRegistered", "powerSignal", "systemResumed"], log.Messages());
+        Assert.Equal(WakeSignalGate.DisplayStateSource, log.Entries[1].Data!["source"]);
+        Assert.Equal(WakeSignalGate.DisplayStateSource, log.Entries[2].Data!["source"]);
+        var resumed = Assert.IsType<SystemResumed>(Assert.Single(posted));
+        Assert.Equal(WakeSignalGate.DisplayStateSource, resumed.Source);
+    }
+
+    private static byte[] On() => Payload(ConsoleDisplayStateBytes, DataLengthDword, data0: 1);
+
     private static byte[] Payload(byte[] setting, byte[] dataLength, byte data0)
     {
         var payload = new byte[PayloadLength];
@@ -222,6 +454,6 @@ public class PowerSignalRouterTests
         var posted = new List<IOrchestratorMessage>();
         var time = new FakeTimeProvider(T0);
         var reporter = new PowerSignalReporter(log, new WakeSignalGate(time), posted.Add);
-        return (new PowerSignalRouter(reporter), log, posted, time);
+        return (new PowerSignalRouter(reporter, time), log, posted, time);
     }
 }
