@@ -45,4 +45,4 @@ adapters:
   codex-cli:
     sandbox: workspace-write   # read-only | workspace-write | danger-full-access
   opencode:
-    auto: false                # true: auto-approve permissions that are not explicitly denied
+    auto: true                # true: auto-approve permissions that are not explicitly denied
