@@ -6,7 +6,7 @@ parent: none
 covers: []
 after: []
 assignee: ""
-refined: false
+refined: true
 hitl: false
 risk: low
 ---
@@ -48,5 +48,5 @@ Dziewięć funkcji (`Wait-For`, `Stop-Profile`, `Set-Front`, `Send-Key`, `Save-E
 ## Notes
 
 - Decision: story leży w backlogu, poza epikiem 6, bo ten czeka na odbiór na UM760 (użytkownik, 2026-10-30).
-- Assumption: budujemy ją po odbiorze epiki 6, bo odbiór korzysta z tych skryptów. Nie jest warunkiem wejścia w epic-netflix-dpad.
+- Decision: budujemy ją po odbiorze epiki 6, bo odbiór korzysta z tych skryptów (użytkownik, 2026-10-30). Nie jest warunkiem wejścia w epic-netflix-dpad.
 - Weryfikacja: maszynę ustala się przed pracą (reguła „Current machine” w `AGENTS.md`). Na maszynie bez Edge lub ekranu smoke'i oznacza się jako nie dotyczy z powodem, a autotest macierzy działa wszędzie.

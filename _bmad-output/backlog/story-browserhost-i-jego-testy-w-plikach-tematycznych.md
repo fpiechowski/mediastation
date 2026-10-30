@@ -6,7 +6,7 @@ parent: none
 covers: []
 after: []
 assignee: ""
-refined: false
+refined: true
 hitl: false
 risk: medium
 ---
@@ -58,6 +58,6 @@ risk: medium
 
 - Decision: story leży w backlogu, poza epikiem 6, bo ten czeka na odbiór na UM760 (użytkownik, 2026-10-30).
 - Decision: ta story jest warunkiem wejścia w epic-netflix-dpad (użytkownik, 2026-10-30; szczegóły w Notes tej epiki).
-- Assumption: budujemy ją po odbiorze epiki 6, żeby odbiór dotyczył kodu z retro, a poprawki z odbioru weszły przed podziałem.
-- Assumption: limity 600 i 1000 linii to propozycja PO, żeby kryterium 3 dało się sprawdzić; retro nie podaje liczb.
+- Decision: budujemy ją po odbiorze epiki 6, żeby odbiór dotyczył kodu z retro, a poprawki z odbioru weszły przed podziałem (użytkownik, 2026-10-30).
+- Decision: limity 600 i 1000 linii w kryterium 3 zatwierdzone (użytkownik, 2026-10-30).
 - Weryfikacja: maszynę ustala się przed pracą (reguła „Current machine” w `AGENTS.md`). Na maszynie bez Edge lub ekranu smoke'i oznacza się jako nie dotyczy z powodem. Pełne sprawdzenie zostaje w odbiorze.
