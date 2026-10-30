@@ -52,7 +52,7 @@ export const initialFocusState: FocusState = {
   menu: null,
 };
 
-/** Cel `focusRequest.target` oznaczający pierwszy kafelek (FocusRequest.DefaultTarget w Core). */
+/** Cel `focusRequest.target` oznaczający fokus startowy (FocusRequest.DefaultTarget w Core). */
 const DEFAULT_TARGET = 'default';
 
 /** Ustawia fokus na kafelku: strefa `tiles`, zakładka kafelka i pamięć tej zakładki. */
@@ -67,7 +67,8 @@ function focusTile(state: FocusState, tile: AppTile): FocusState {
 }
 
 /**
- * Stosuje `focusRequest` ze snapshotu raz na `seq`: `default` → pierwszy kafelek Video, `<appId>` → ten kafelek
+ * Stosuje `focusRequest` ze snapshotu raz na `seq`: `default` → pierwszy kafelek Video, a bez kafelków Video pierwszy
+ * kafelek pierwszej niepustej zakładki (inaczej ekran nie ma fokusu i OK nic nie uruchamia), `<appId>` → ten kafelek
  * i jego zakładka. Nieznany `appId` zostawia fokus bez zmian (a `seq` i tak jest zużyty).
  */
 export function applyFocusRequest(state: FocusState, snapshot: ShellSnapshot): FocusState {
@@ -76,7 +77,7 @@ export function applyFocusRequest(state: FocusState, snapshot: ShellSnapshot): F
 
   const target =
     request.target === DEFAULT_TARGET
-      ? tilesOf(snapshot.apps, 'video')[0]
+      ? CATEGORIES.flatMap((category) => tilesOf(snapshot.apps, category))[0]
       : snapshot.apps.find((app) => app.appId === request.target);
 
   // Nowy `seq` najpierw zamyka menu, potem stosuje fokus.

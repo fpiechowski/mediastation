@@ -461,7 +461,9 @@ origin: spec-deferred dd29815a18e8
 location: tools/check-home-s10.ps1:New-RestoreAppsJson
 source_spec: `tickets/epic-windows-audio/tickets/bug-moonlight-po-home-i-powrocie-stoi-na-uruchamianie-input-stre-plan.md`
 reason: Seen on UM760 2026-10-27 with the generated one-tile apps.json (category `game`): `action ok` logged, no start for 40 s; the same tile in `video` starts at once. Could be shell default focus with a lone `game` row; check with a `game`-only config and OK from a fresh start. Unverified.
-status: open
+status: done 2026-10-30
+resolution: resolved by sweep bundle dw-dw-game-only-tile-ok-start
+resolution-undo: cdfdef54a008eed2734279d35bd0903b4adc5e0af9d3e5f51680bf6b484088d7 2026-10-30 7374617475733a206f70656e
 ticket: `_bmad-output/backlog/bug-game-only-tile-ok-start.md`
 
 ### DW-49: A window command whose result is lost keeps evaluation blocked until the next transitionId.
@@ -581,4 +583,12 @@ origin: spec-deferred 3341b9a704f6
 location: src/MediaStation.App/Platform/System/PowerSignalRouter.cs
 source_spec: `plan-dw-dw-power-echo-not-wake.md`
 reason: Across 511 logged starts on UM760, 4 had such a signal: 2026-10-26 13:29:28 (+9.76 s), 19:36:21 (+2.70 s), 20:18:36 (+7.26 s) and 2026-10-27 09:45:06 (+3.30 s). Each produced a systemResumed and a new snapshot. The log does not record the display state or any preceding off, so a real display-on cannot be told apart from a repeated on. When the echo lands inside the registration window, as in the 3 measured starts, such a signal still reports. Settled by logging Data[0] for each display-state notification over a few starts, including starts where the screen flickers, and checking whether an off precedes each on.
+status: open
+
+### DW-63: With no tiles at all, the start screen still has no visible focus, and a new test pins that state.
+origin: spec-deferred 1d1eac62976f
+location: web/shell/src/focus.ts:81
+source_spec: `plan-dw-dw-game-only-tile-ok-start.md`
+severity: low
+reason: `{ "apps": [] }` passes config validation. `applyFocusRequest` then leaves zone `tiles` with `focusedAppId: null`, while EXPERIENCE.md and DESIGN.md say focus stays on the tab of an empty state. It predates this change and OK has nothing to start, so only the visible focus is missing; Up still reaches the tabs. The fix would be to set zone `tabs` when there is no tile.
 status: open

@@ -146,7 +146,7 @@ Szczegóły:
 |---|---|---|
 | Zimny start / wybudzenie | Home | Zakładka Video, fokus na pierwszym kafelku (Netflix). Stan nietrwały (AD-10) |
 | Restart po crashu MediaStation | Home | Żywe aplikacje adoptowane jako Background; fokus jak przy zimnym starcie |
-| Nowsza wersja dostępna | Home | Przycisk aktualizacji w nagłówku; fokus startowy bez zmian (pierwszy kafelek Video) — przycisk nie kradnie fokusu. Ilustracja: [`mockups/key-home-update.html`](mockups/key-home-update.html) |
+| Nowsza wersja dostępna | Home | Przycisk aktualizacji w nagłówku; fokus startowy bez zmian — przycisk nie kradnie fokusu. Ilustracja: [`mockups/key-home-update.html`](mockups/key-home-update.html) |
 | Aktualizacja w toku / nieudana | Home | Copy z Voice and Tone; po restarcie nowej wersji przycisk znika |
 | Rollback nowej wersji (AD-17) | Home | Bez przycisku; w miejscu linii statusu aktualizacji komunikat z Voice and Tone. Nie fokusowalny, nie kradnie fokusu. Znika po kolejnym restarcie MediaStation albo gdy pojawi się nowsza wersja (wtedy wraca przycisk) |
 | Powrót na Home (klawisz Home / Back) | Home | Fokus na ostatnim kafelku; nowa karta „Do oceny” widoczna (peek), ale nie przejmuje fokusu |
@@ -168,7 +168,7 @@ Szczegóły:
 **Model fokusu**
 - Jeden fokus, nawigacja przestrzenna D-padem (Góra/Dół/Lewo/Prawo); `phase: repeat` przewija wiersze.
 - Pamięć fokusu per zakładka i per wiersz, oparta na kluczach (`id` aplikacji, klucz tytułu w kolejce), nie na indeksach (AD-16).
-- Powrót na Home → ostatni kafelek. Zimny start/wybudzenie → pierwszy kafelek Video. Awaria na pierwszym planie → kafelek Failed. Alt+Tab na ekran główny → fokus tam, gdzie był w shellu, bez nowego `focusRequest`.
+- Powrót na Home → ostatni kafelek. Zimny start/wybudzenie → pierwszy kafelek Video, a bez kafelków Video pierwszy kafelek pierwszej niepustej zakładki (kolejność Video, Audio, Game; DW-48). Awaria na pierwszym planie → kafelek Failed. Alt+Tab na ekran główny → fokus tam, gdzie był w shellu, bez nowego `focusRequest`.
 - Góra z rzędu zakładek → przycisk aktualizacji, gdy jest widoczny; inaczej nic.
 - W Netflixie: w modalu akcje mają pierwszeństwo przed geometrią, fokus zawężony do dialogu; na `/watch` klawisze przepuszczane (OK pauza, ←/→ ±10 s).
 - Przejście fokusu ok. 150 ms ease-out.
@@ -316,7 +316,7 @@ Odrzucone (forge): Filmweb na TV, ocena z pilota, karta tylko dla profilu Elizy,
 | OK na kafelku Failed | Shell otwiera AppMenu z fokusem na „Uruchom ponownie”; stan otwartego AppMenu trzyma Shell jako efemeryczny stan nawigacji, bez Intentu `OpenAppMenu`. Pozycje menu → Intents `RestartApp` i `CloseApp`. Home w trybie `shell` dociera do Shell jako Action i zamyka nakładkę | AD-8, AD-10, AD-16 |
 | Foreground → Failed | Orchestrator sam pokazuje Home, fokus na kafelku Failed przez `focusRequest{appId, seq}` (R7) | AD-10, AD-15, AD-16 |
 | Przełączenie z zewnątrz (Alt+Tab) | Na shell: aplikacja z pierwszego planu przechodzi w tło jak po Home, tryb `shell`, fokus shella bez zmian (bez `focusRequest`). Na okno aplikacji w Background: aktywacja jak po OK na kafelku, bez autowznowienia. Obce okno: bez zmiany trybu, stanu i dźwięku; działa tylko Home z pilota. OSK zamykana przed przełączeniem na shell albo aplikację (U2/DW-44, 2026-10-27) | AD-5, AD-8, AD-15 |
-| Fokus startowy | Zimny start, restart, wybudzenie → `focusRequest{default, seq}` (Video, pierwszy kafelek); UI stosuje każde nowe `seq` raz (R7, L31) | AD-10, AD-16 |
+| Fokus startowy | Zimny start, restart, wybudzenie → `focusRequest{default, seq}` (Video, pierwszy kafelek; bez kafelków Video pierwszy kafelek pierwszej niepustej zakładki); UI stosuje każde nowe `seq` raz (R7, L31) | AD-10, AD-16 |
 | Zerwane CDP | Bez UI; D-pad niebuforowany; po `cdpReconnectTimeout` (30 s) → Failed (R8) | AD-7, AD-10, AD-11 |
 | Profil Netflixa | ServiceDriver/PageRuntime rozpoznaje `profiles` i fokusuje ostatnio używany profil, ale go nie wybiera (R9) | AD-7, AD-10 |
 | Fokus w trybie `osk` | Host ogłasza stronie `osk{active}`; PageRuntime przełącza ring pola na `input-active`; jedyny fokus na klawiszu OSK (R1) | AD-7, AD-9 |
@@ -329,7 +329,7 @@ Odrzucone (forge): Filmweb na TV, ocena z pilota, karta tylko dla profilu Elizy,
 | Moonlight | `back=key:Escape`, `pointer` dozwolony; Home jedynym wyjściem | AD-8, `apps.json` |
 | Plex / natywne | `back=home`, `pointer` dozwolony | AD-8, `apps.json` |
 | UX ekranu `limit` (i `error`) | Ekran Netflixa as-is; PageRuntime fokus na głównej akcji | AD-7 |
-| Fokus po wybudzeniu | Video, pierwszy kafelek (zgodne z nietrwałym stanem AD-10) | AD-10, AD-16 |
+| Fokus po wybudzeniu | Video, pierwszy kafelek, a bez kafelków Video pierwszy kafelek pierwszej niepustej zakładki (zgodne z nietrwałym stanem AD-10) | AD-10, AD-16 |
 
 ## Rozstrzygnięcia R/A
 

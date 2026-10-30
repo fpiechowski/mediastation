@@ -12,12 +12,17 @@
                  forwards the request and exits with code 0 after ~120 ms, the 5.14 failure); an injected OK must adopt
                  it (`appWindowAttached adopted=true`, same rootPid, no extra process).
     The verdict is the application log: no `warn`/`error` except `appIconMissing` and `devHarnessEnabled`.
+    -Category game checks a config with no Video tile: the start focus must reach that tile, or OK starts nothing (DW-48).
 
 .EXAMPLE
     powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-web-start.ps1
+
+.EXAMPLE
+    powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-web-start.ps1 -Category game
 #>
 param(
     [string]$AppId = 'netflix',
+    [ValidateSet('video', 'audio', 'game', IgnoreCase = $false)][string]$Category = 'video',
     [ValidateRange(3, 20)][int]$Cycles = 3,
     [string]$MediaStation = '',
     [string]$LogsDir = (Join-Path $env:LOCALAPPDATA 'MediaStation\logs'),
@@ -290,7 +295,7 @@ if (-not (Test-Path -LiteralPath $MediaStation)) { throw "MediaStation.exe not f
 if (@(Get-Process -Name 'MediaStation' -ErrorAction SilentlyContinue).Count -gt 0) { throw 'MediaStation is already running; close it and retry.' }
 if (Test-Path -LiteralPath $backupPath) { Move-Item -LiteralPath $backupPath -Destination $appsPath -Force }
 
-$tile = [ordered]@{ type = 'web'; id = $AppId; category = 'video'; title = 'Web'; icon = 'web.png'; service = 'netflix'; browser = 'edge'; cdpPort = 9222 }
+$tile = [ordered]@{ type = 'web'; id = $AppId; category = $Category; title = 'Web'; icon = 'web.png'; service = 'netflix'; browser = 'edge'; cdpPort = 9222 }
 try {
     Copy-Item -LiteralPath $appsPath -Destination $backupPath -Force
     Set-Content -LiteralPath $appsPath -Value (@{ apps = @($tile) } | ConvertTo-Json -Depth 5) -Encoding UTF8
@@ -313,4 +318,4 @@ if ($problems.Count -gt 0) {
 }
 
 Write-Host ''
-Write-Host 'PASS: web tile starts the browser on a clean profile and adopts a running one; Home/OK keep the same root.' -ForegroundColor Green
+Write-Host ("PASS: web tile in category '{0}' starts the browser on a clean profile and adopts a running one; Home/OK keep the same root." -f $Category) -ForegroundColor Green
