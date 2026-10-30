@@ -23,7 +23,8 @@ source_spec: `epic-orchestrator-lifecycle/story-failed-wejscie-wyjscie-przez-app
 severity: medium
 reason: `ProcessExited` carries only `appId`. After `CommandCompleted{StopApp}` the stop correlation is consumed, the Orchestrator moves to `Starting` and sends `StartApp`, and a second exit fact from the host (exit watcher next to the command confirmation) is now treated as a failure of the new start. Settled by host story 2.9 guaranteeing that `ProcessExited` refers to the current process (pid in the Event, or dedupe by `rootPid`), plus a loop test with two facts for one stop.
 owner: epic-browserhost (pierwszy prawdziwy host raportujący `ProcessExited`), decyzja refinementu epiki 4, 2026-10-26
-status: open
+status: done 2026-10-30
+resolution: story 6.8 (`3cf71e4`): BrowserHost zgłasza `ProcessExited` najwyżej raz na proces; testy `Stop_after_the_watcher_reported_the_exit_posts_only_completion`, `Stop_of_a_new_session_after_a_reported_exit_reports_its_exit_again`, `Restart_handled_before_the_watchers_exit_reaches_the_orchestrator_brings_a_new_root_to_the_foreground`, `Stop_during_the_watchers_exit_post_completes_only_after_that_exit` przechodzą (UM760, 2026-10-30). Ten sam wzorzec w dev harnessie: DW-58. Zamknięte przez PO.
 
 ### DW-4: Spóźniony AppWindowAttached po timeoucie Starting jest ignorowany, a Hwnd zdjęte w Failed, więc okno, które pojawi się po terminie, może zostać na wierzchu nad shellem bez kompensującego
 origin: spec-deferred 794dc1866536
@@ -32,7 +33,8 @@ source_spec: `epic-orchestrator-lifecycle/story-transitionid-i-home-w-trakcie-st
 severity: medium
 reason: Guard `app.State != AppLifecycleState.Starting` w `OnAppWindowAttached` i `app.Hwnd = null` w `EnterFailed` pochodzą ze story 5 i nie zmieniły się w tej story; zmiana domyka kompensację tylko dla attachu w Starting. Skutek potwierdzony sondą: Home w Starting → TimerElapsed → AppWindowAttached daje brak komend i brak snapshotu, a kolejny Home nic nie robi. Rozwiązanie wymaga decyzji, czy Failed zachowuje Hwnd i minimalizuje spóźnione okno, czy zostawia to hostowi — to osobna story.
 owner: epic-browserhost (pierwszy prawdziwy host z `AppWindowAttached`), decyzja refinementu epiki 4, 2026-10-26
-status: open
+status: done 2026-10-30
+resolution: story 6.8 (`3cf71e4`): spóźnione okno po timeoucie `Starting` dostaje jednorazową kompensację w Orchestratorze (mute → minimize → `ShowShell`, gdy nie ma innej aktywnej aplikacji), kafelek zostaje `Failed`; testy `Late_window_*` i `Window_after_the_orchestrators_start_timeout_is_hidden_and_restart_relaunches` przechodzą (UM760, 2026-10-30). Żywy przebieg nie dotyczy: przy domyślnych czasach okno pojawia się po ok. 0,5 s. Zamknięte przez PO.
 decision: 2026-10-28 Decide with epic-browserhost
 decision: 2026-10-27 Decide with epic-browserhost
 
@@ -366,7 +368,8 @@ location: architecture-mediastation.md AD-13 (Aktualizacja przeglądarki)
 source_spec: `tickets/epic-browserhost/tickets/spike-tryb-okna-przegladarki-i-zrodo-wersji-poza-cdp-plan.md`
 severity: low
 reason: Last Version zapisuje przeglądarka przy starcie, a zdarzenie loguje BrowserHost. Do rozstrzygnięcia w story BrowserHost (np. log from/to przed launchem albo własny zapis ostatnio zalogowanej wersji).
-status: open
+status: done 2026-10-30
+resolution: story 6.4 (`6319f01`): `browserVersion`/`browserVersionChanged` idą do logu przed `appLaunch`; testy `Version_change_is_logged_before_launch_even_when_cdp_then_never_answers`, `Changed_version_is_logged_before_app_launch_and_confirmed_by_get_version`, `Same_version_logs_only_browser_version_before_app_launch` przechodzą (UM760, 2026-10-30); sweep 6.8, Sweep ledger. Zamknięte przez PO.
 
 ### DW-40: Kiosk nie był sprawdzony przy kilku monitorach, po zmianie rozdzielczości lub wyłączeniu TV, ani z nakładką OSK nad oknem.
 origin: spec-deferred 645cbb60e6a4
@@ -489,14 +492,16 @@ origin: spec-deferred 10fcb18751ca
 location: src/MediaStation.App/Hosts/Browser/CdpTargets.cs (PageWebSocketUrl)
 source_spec: `tickets/epic-browserhost/tickets/story-tracer-browserhost-edge-kiosk-cdp-i-hello-plan.md`
 reason: maybe-false. Three smoke runs on UM760 (Edge 156, fresh kiosk profile) picked the right target. Settle by dumping `/json/list` right after a kiosk start across several runs (also with a profile that had other tabs) and checking whether any other `page` target precedes the launched one; if so, prefer the target whose url is `about:blank`.
-status: open
+status: done 2026-10-30
+resolution: false: sonda 6.8 (UM760, Edge 156.0.4314.50, argumenty startu produktu; profile świeże oraz z 3 kartami po kill i po zamknięciu): każdy start kiosk ma dokładnie jeden target `page`, `about:blank`, od razu i po 2–4 s. Bez zmiany kodu. Wynik sond w planie 6.8, Implementation Notes. Zamknięte przez PO.
 
 ### DW-53: Stop kills the browser tree without waiting for the root to exit, so a restart (StopApp → CommandCompleted → StartApp) can launch a new Edge on the same profile and CDP port while the old one still
 origin: spec-deferred 14ed2dbb8caf
 location: src/MediaStation.App/Hosts/Browser/BrowserHost.cs (StopSessionAsync)
 source_spec: `tickets/epic-browserhost/tickets/story-tracer-browserhost-edge-kiosk-cdp-i-hello-plan.md`
 reason: maybe-false. `StopSessionAsync` waits up to 3 s for a graceful close, then `Process.Kill(entireProcessTree)` without awaiting exit, and `StopCoreAsync` posts `ProcessExited` + `CommandCompleted` at once. Settle with a restart run on UM760 where the graceful close does not finish (J4, story 6.7): look for `launcherExited` (handoff) or a CDP connect to the old instance; if seen, await the root's exit (bounded) after `KillTree`.
-status: open
+status: done 2026-10-30
+resolution: story 6.4 (`6319f01`): `StopSessionAsync` czeka do 5 s na wyjście roota po `KillTree`; testy `Stop_waits_for_the_root_to_exit_after_killing_the_tree`, `Restart_checks_profile_and_port_only_after_the_old_root_has_exited` przechodzą (UM760, 2026-10-30); restart smoke P2/P5 w 6.8: stary root zniknął, bez `launcherExited`. Zamknięte przez PO.
 
 ### DW-54: AD-7 says a page envelope with another major `v` is logged and marks the tile with an error state; BrowserHost only logs `pageMessageRejected`.
 origin: spec-deferred 22a4615c8f9f
@@ -504,13 +509,16 @@ location: src/MediaStation.App/Hosts/Browser/BrowserHost.cs (OnBindingCalled)
 source_spec: `tickets/epic-browserhost/tickets/story-tracer-browserhost-edge-kiosk-cdp-i-hello-plan.md`
 severity: low
 reason: `OnBindingCalled` logs and returns; no Event reaches the Orchestrator. Envelope versioning belongs to story 6.6 (envelope v1 with `id`, version tests), which should add the tile error path.
-status: open
+status: done 2026-10-30
+resolution: story 6.6 (`040fcaf`): inna główna wersja koperty daje `PageVersionRejected` → `Failed`; testy `Other_major_version_twice_logs_twice_and_posts_page_version_rejected_once`, `Other_major_version_after_stop_posts_nothing`, `Ignored_page_version_rejected_logs_handled_with_a_null_state` przechodzą (UM760, 2026-10-30); restart smoke 6.8 `foreground>failed:PageVersionRejected`. Zamknięte przez PO.
 
 ### DW-55: A successful reconnect is never shown to give the page a working bridge: the document already loaded keeps its old PageRuntime, and no real-browser run proves it can call the binding re-added by the
 origin: spec-deferred 21f1d00f83ed
 location: src/MediaStation.App/Hosts/Browser/BrowserHost.cs (TryReconnectOnceAsync, InstallAsync)
 source_spec: `tickets/epic-browserhost/tickets/story-binding-po-nawigacji-i-reconnect-cdp-plan.md`
 reason: maybe-false. Unit tests cover the recovery path only on FakeTransport (the quick-recovery test pushes a `hello` the real page would not send), and the live smoke reaches only the give-up path because dropping the socket of a live target needs elevation. Settle with an elevated run on UM760 that resets the host's CDP TCP connection (SetTcpEntry DELETE_TCB) while Netflix is open: expect `cdpReconnected`, then trigger a page message from the existing document (or a main-frame navigation) and look for `pageHello` / a `Runtime.bindingCalled` on the new session.
+owner: odbiór całej epiki epic-browserhost na UM760 (`fp-acceptance`), decyzja PO 2026-10-30
+note: 2026-10-30 PO nie zamyka wpisu mimo werdyktu „resolved” w sweepie 6.8. Dowód 6.8 (adopt smoke: `renewSession` → `cdpReconnected` → F5 → `pageHello`) wymienia kanał dobrowolnie, a warunek wpisu to podniesiony reset gniazda żywego targetu (`SetTcpEntry DELETE_TCB`) przy otwartym Netflixie. Takiego przebiegu nie ma ani w planach, ani w `tools/` (retro epiki, F6). Zamknąć po tym sprawdzeniu w odbiorze.
 status: open
 
 ### DW-56: A main-frame navigation during a CDP outage leaves the new document without PageRuntime: the init script died with the old session, and reconnect neither reloads nor evaluates, so the bridge stays
@@ -526,7 +534,8 @@ origin: spec-deferred ed39a55fa93c
 location: src/MediaStation.App/Hosts/Browser/BrowserHost.cs (ProbeCoreAsync)
 source_spec: `tickets/epic-browserhost/tickets/story-probeexisting-i-renewsession-po-restarcie-oraz-wybudzeniu-plan.md`
 reason: maybe-false. The probe logs `probeExisting {noWindow}` and registers nothing (BrowserHost.ProbeCoreAsync), and the 6.4 preflight then refuses every start while the lockfile is held. This existed before 6.5 (the 6.4 start path had no adoption at all). Whether a kiosk Edge on its own user-data-dir ever stays running without a window is not proven. To settle it on UM760: close the kiosk window by hand (Alt+F4) and check for a surviving msedge.exe root with --user-data-dir=<profile> and no --type=. If one survives, adopt it without a window (register the session, no AppWindowAttached) so Stop can kill the tree.
-status: open
+status: done 2026-10-30
+resolution: false: sonda 6.8 (UM760, Edge 156.0.4314.50): `CloseMainWindow` (WM_CLOSE, jak Alt+F4) na kiosku, 3 przebiegi; po 6 s nie ma roota ani procesu z tym profilem, więc root bez okna nie występuje. Bez zmiany kodu. Wynik sondy w planie 6.8, Implementation Notes. Zamknięte przez PO.
 
 ### DW-58: DevHarnessHostPort still posts ProcessExited on every Stop even after its exit watcher already reported the exit, so a dev-harness restart can still hit the DW-3 outcome (a second ProcessExited
 origin: spec-deferred c29dc10e02e7
