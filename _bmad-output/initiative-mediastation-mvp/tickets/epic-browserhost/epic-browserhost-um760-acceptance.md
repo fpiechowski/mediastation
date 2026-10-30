@@ -4,7 +4,7 @@ type: acceptance-plan
 machine: UM760
 base_head: 73ff58f
 created: 2026-10-30
-status: planned
+status: in-progress
 ---
 
 # Odbiór epiki 6 (epic-browserhost) na UM760: plan i scenariusz
@@ -77,8 +77,8 @@ Wspólne: okno logu każdego wiersza zaczyna się od `A mark` tuż przed czynno�
 | # | Scenariusz | Actor | Oczekiwane | Assertion | Kind | Done when |
 |---|------------|-------|------------|-----------|------|-----------|
 | S1 | Pełny automatyczny przebieg BrowserHost na świeżym buildzie | agent | 5 faz, 11/11 wierszy macierzy, izolacja zachowana | `powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-browserhost-e2e.ps1`, exit 0; `report.jsonl` z `summary` `pass` | pass/fail | 1, 2, 3, 4, 5 (mechanizm) |
-| S2 | Świeży build startuje bez harnessu, ekran główny gotowy | agent | Wersja z HEAD, BrowserHost włączony, harness wyłączony, Netflix nie działa | `A launch --exe src\MediaStation.App\bin\Release\net10.0-windows\win-x64\publish\MediaStation.exe --ready "msg=snapshotPublished" LOGS`, `A focus --pid <pid>`; `A check --since <mark> --expect "msg=start,data.version~=HEADSHA:1" --expect "msg=browserHostEnabled:1" --expect "msg=devHarnessEnabled:0" --expect "msg=probeExisting,data.appId=netflix,data.outcome=notRunning:1" --expect "msg=snapshotPublished,data.rev=1:1" FORBID LOGS`; `A foreground --pid <pid>` zgodny | pass/fail | start |
-| S3 | OK na kafelku uruchamia Netflixa przez BrowserHost | user-hardware | Odczyt wersji przed startem, start z `--kiosk`, okno, CDP, `hello` z `webdriver=false` | `A wait --since <mark> --for "msg=pageHello,data.appId=netflix" ... LOGS`; `A check --since <mark> --until <until> --expect "msg=browserVersion,data.appId=netflix:1" --expect "msg=appLaunch,data.appId=netflix,data.args~=--kiosk:1" --expect "msg=appWindowAttached,data.appId=netflix:1" --expect "msg=cdpConnected,data.appId=netflix,data.adopted=false:1" --expect "msg=pageHello,data.appId=netflix,data.service=netflix,data.webdriver=false:>=1" --ordered FORBID LOGS` | pass/fail | 1, 3 |
+| S2 | Świeży build startuje bez harnessu, ekran główny gotowy | agent | Wersja z HEAD, BrowserHost włączony, harness wyłączony, Netflix nie działa | `A launch --exe src\MediaStation.App\bin\Release\net10.0-windows\win-x64\publish\MediaStation.exe --ready "msg=snapshotPublished" LOGS`, `A focus --pid <pid>`; `A check --since <mark> --expect "msg=start,data.version~=b041c5d:1" --expect "msg=browserHostEnabled:1" --expect "msg=devHarnessEnabled:0" --expect "msg=probeExisting,data.appId=netflix,data.outcome=notRunning:1" --expect "msg=snapshotPublished,data.rev=1:1" FORBID LOGS`; `A foreground --pid <pid>` zgodny | pass/fail | start |
+| S3 | OK na kafelku uruchamia Netflixa przez BrowserHost | user-hardware | Odczyt wersji przed startem, start z `--kiosk`, okno, CDP, `hello` z `webdriver=false` | `A wait --since <mark> --for "msg=pageHello,data.appId=netflix" ... LOGS`; `A check --since <mark> --until <until> --expect "msg=browserVersion,data.appId=netflix:1" --expect "msg=appLaunch,data.appId=netflix,data.args~=--kiosk:1" --expect "msg=appWindowAttached,data.appId=netflix:1" --expect "msg=cdpConnected,data.appId=netflix:1" --expect "msg=cdpConnected,data.adopted=true:0" --expect "msg=pageHello,data.appId=netflix,data.service=netflix,data.webdriver=false:>=1" --ordered FORBID LOGS` | pass/fail | 1, 3 |
 | S4 | Netflix na całym ekranie, bez paska i ramek | observation | Serwis zalogowany, cały ekran, brak paska adresu | werdykt użytkownika | observation | 1 |
 | S5 | Proces przeglądarki ma flagi AD-1, a port słucha tylko na loopbacku | agent | Jeden root profilu `netflix`, `--kiosk`, port 9222 tylko na 127.0.0.1, bez zakazanych flag i bez drugiej flagi trybu okna | `F1 -AppId netflix -Port 9222`, exit 0; root zapisany w dowodzie jako `R` | pass/fail | 1 |
 | S6 | Nawigacja głównej ramki: F5 przywraca most | user-hardware | Nowy `pageHello` po F5, bez odrzuconych komunikatów | `A wait --since <mark> --for "msg=pageHello,data.appId=netflix" ... LOGS`; `A check --since <mark> --until <until> --expect "msg=pageHello,data.appId=netflix,data.webdriver=false:>=1" --expect "msg=pageMessageRejected:0" FORBID LOGS` | pass/fail | 2 |
@@ -143,6 +143,7 @@ Wspólne: okno logu każdego wiersza zaczyna się od `A mark` tuż przed czynno�
 ## Uwagi
 
 - **`HEADSHA`.** `fill` porównuje SPEC-i z zamrożoną asercją, więc P0.1 wpisuje skrócony HEAD w S2 przed pierwszym uruchomieniem. W tym checkoucie pracują inne wątki, więc HEAD może się przesunąć; po publishu liczy się ten z P0.1, a `base_head` zostaje z dnia przygotowania.
+- **S3, poprawka asercji (2026-10-30, po wyniku, za zgodą użytkownika).** Pierwotna asercja wymagała `data.adopted=false`, a `cdpConnected` zapisuje `adopted` tylko przy przejęciu (BrowserHost.cs). Pierwszy wiersz S3 zostaje jako `fail`; powtórka ocenia to samo okno logu poprawioną asercją.
 - **DW-55, wywołanie bindingu.** PageRuntime nie ma dziś własnego komunikatu po `hello` (plan 6.8), więc skrypt woła z załadowanego dokumentu `window.__msBridge`, tę samą funkcję, której używa most. Robi to osobnym, krótkim połączeniem CDP i `Runtime.evaluate`, bez `Runtime.enable`, tylko w tej próbie, nie w produkcie. `driverVersion` = `dw55-probe` odróżnia tę kopertę od prawdziwego `hello`.
 - **DW-55, wynik dla rejestru.** S7, S8 i S10 zaliczone oznaczają warunek spełniony i wpis do zamknięcia przez Sofię. Każda inna kombinacja zostawia wpis otwarty z obserwowanym wynikiem. Rejestru nie zmienia ten odbiór.
 - **DW-55, odmowa.** Pytanie Windows odrzucone albo przeterminowane (2 minuty) to exit 2 skryptu, czyli brak werdyktu: pytamy użytkownika i powtarzamy. Bez `-Elevate` `SetTcpEntry` zwraca 317 i gniazdo przeżywa (sprawdzone 2026-10-30).
@@ -255,14 +256,18 @@ S4, S9, S15, S23, S28, S36, S38 i S40 są obserwacjami: werdykt należy do użyt
 
 ## Wyniki
 
+Sesja: 2026-10-30, HEAD b041c5d, build 1.0.0+b041c5d, UM760 (MEDIASTATION, F7BSI, EliteMini Series), ekran DELL P2415Q 3840x2160, bez TV i bez drugiego monitora; rozmowa widoczna na telefonie użytkownika.
+
 | # | Wynik | Dowód |
 |---|-------|-------|
-| P0 | | |
-| S1 | | |
-| S2 | | |
-| S3 | | |
+| P0 | pass (2026-10-30, HEAD b041c5d) | UM760 zidentyfikowany; publish exit 0, 1.0.0+b041c5d; e2e -SelfTest exit 0; cdp-reset -SelfTest -Elevate exit 0 (SetTcpEntry 0, ConnectionReset); dongle VID_1915&PID_1025 obecny; DELL P2415Q, jeden ekran, F4 -Test 0; głos pl-PL; bez MediaStation, porty 9222/9223/9237 wolne, brak restore-bak, apps.json netflix/chrome-test/moonlight-pc w config\; fragmenty F1-F4 w %TEMP%\fp-f |
+| S1 | fail (2026-10-30, HEAD b041c5d) raport browserhost-e2e-20261030-131308 | exit 1; run log C:\Users\UYTKOW~1\AppData\Local\Temp\fp-s1.log<br>`R-navigation       fail     pageHello x1, expected at least 2; no reload measurement with a non-empty newPageHello`<br>`R-no-sw-hide       fail     tracer after-home is not iconic and visible (iconic=False visible=True); no iconic measurement in tracer`<br>`FAIL: 5 phase(s), 9 pass / 2 fail / 0 skipped` |
+| S1 (rerun 1) | pass (2026-10-30, HEAD b041c5d) powtórka na prośbę użytkownika: podczas pierwszego przebiegu klikał; raport browserhost-e2e-20261030-131808 | exit 0; run log C:\Users\UYTKOW~1\AppData\Local\Temp\fp-s1b.log<br>`R-navigation       pass`<br>`R-no-sw-hide       pass`<br>`PASS: 5 phase(s), 11 pass / 0 fail / 0 skipped` |
+| S2 | pass (2026-10-30, HEAD b041c5d) | window since 2026-10-30T13:21:01.962Z until 2026-10-30T13:21:10.564Z; `msg=start,data.version~=b041c5d:1` want 1, got 1; `msg=browserHostEnabled:1` want 1, got 1; `msg=devHarnessEnabled:0` want 0, got 0; `msg=probeExisting,data.appId=netflix,data.outcome=notRunning:1` want 1, got 1; `msg=snapshotPublished,data.rev=1:1` want 1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing, 3)<br>`{"ts":"2026-10-30T13:21:02.318Z","level":"info","src":"app","msg":"start","data":{"version":"1.0.0+b041c5d47cfb6e86e9a6e26fa23683b0560c033d","pid":22432,"args":[]}}` |
+| S3 | fail (2026-10-30, HEAD b041c5d) | window since 2026-10-30T13:22:04.988Z until 2026-10-30T13:22:18.380Z; `msg=browserVersion,data.appId=netflix:1` want 1, got 1; `msg=appLaunch,data.appId=netflix,data.args~=--kiosk:1` want 1, got 1; `msg=appWindowAttached,data.appId=netflix:1` want 1, got 1; `msg=cdpConnected,data.appId=netflix,data.adopted=false:1` want 1, got 0; `msg=pageHello,data.appId=netflix,data.service=netflix,data.webdriver=false:>=1` want >=1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing, 0); order ok<br>`{"ts":"2026-10-30T13:22:13.184Z","level":"info","src":"browser","msg":"browserVersion","data":{"appId":"netflix","version":"156.0.4314.50","previous":"156.0.4314.50"}}` |
+| S3 (rerun 1) | pass (2026-10-30, HEAD b041c5d) poprawiona asercja, to samo okno logu, zgoda użytkownika: ok | window since 2026-10-30T13:22:04.988Z until 2026-10-30T13:22:18.380Z; `msg=browserVersion,data.appId=netflix:1` want 1, got 1; `msg=appLaunch,data.appId=netflix,data.args~=--kiosk:1` want 1, got 1; `msg=appWindowAttached,data.appId=netflix:1` want 1, got 1; `msg=cdpConnected,data.appId=netflix:1` want 1, got 1; `msg=cdpConnected,data.adopted=true:0` want 0, got 0; `msg=pageHello,data.appId=netflix,data.service=netflix,data.webdriver=false:>=1` want >=1, got 1; forbid error,warn: 0 (allowed: msg=appIconMissing, 0); order ok<br>`{"ts":"2026-10-30T13:22:13.184Z","level":"info","src":"browser","msg":"browserVersion","data":{"appId":"netflix","version":"156.0.4314.50","previous":"156.0.4314.50"}}` |
 | S4 | | |
-| S5 | | |
+| S5 | pass (2026-10-30, HEAD b041c5d) root R=16736, port 9222 tylko 127.0.0.1 | exit 0<br>F1: --kiosk, --remote-debugging-port=9222, bez --remote-allow-origins, --start-fullscreen, --start-maximized, --app=; listeners 127.0.0.1 |
 | S6 | | |
 | S7 | | |
 | S8 | | |
